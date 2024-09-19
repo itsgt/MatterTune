@@ -7,13 +7,10 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-nshtrainer = "*"
-nshrunner = "*"
-nshconfig = "*"
-nshutils = "*"
 numpy = "*"
 torch = "*"
 typing-extensions = "*"
+pytorch_lightning = "*"
 
 [build-system]
 requires = ["poetry-core"]
