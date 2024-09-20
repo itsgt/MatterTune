@@ -1,0 +1,89 @@
+{
+  "$defs": {
+    "ESCNConfig": {
+      "properties": {
+        "name": {
+          "const": "escn",
+          "default": "escn",
+          "enum": [
+            "escn"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "d_model": {
+          "title": "D Model",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "d_model"
+      ],
+      "title": "ESCNConfig",
+      "type": "object"
+    },
+    "GemNetOCConfig": {
+      "properties": {
+        "name": {
+          "const": "gemnet_oc",
+          "default": "gemnet_oc",
+          "enum": [
+            "gemnet_oc"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "d_model": {
+          "title": "D Model",
+          "type": "integer"
+        },
+        "num_triplets": {
+          "title": "Num Triplets",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "d_model",
+        "num_triplets"
+      ],
+      "title": "GemNetOCConfig",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "model": {
+      "description": "Model to use",
+      "discriminator": {
+        "mapping": {
+          "escn": "#/$defs/ESCNConfig",
+          "gemnet_oc": "#/$defs/GemNetOCConfig"
+        },
+        "propertyName": "name"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/GemNetOCConfig"
+        },
+        {
+          "$ref": "#/$defs/ESCNConfig"
+        }
+      ],
+      "title": "Model"
+    },
+    "x": {
+      "title": "X",
+      "type": "integer"
+    },
+    "y": {
+      "default": 1.0,
+      "title": "Y",
+      "type": "number"
+    }
+  },
+  "required": [
+    "model",
+    "x"
+  ],
+  "title": "Config",
+  "type": "object"
+}

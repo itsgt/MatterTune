@@ -1,0 +1,9 @@
+{
+    "$schema": "file:///workspaces/MatterTune/config.json.schema",
+    "x": 1,
+    "model": {
+        "name": "gemnet_oc",
+        "d_model": 128,
+        "num_triplets": 32
+    }
+}
