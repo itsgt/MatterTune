@@ -3,12 +3,12 @@ from typing_extensions import override
 import torch
 import torch.nn as nn
 from einops import rearrange
-from .base import OutputHeadBaseConfig
-from ..modules.loss import LossConfig, MAELossConfig
-from .layers.mlp import MLP
-from .utils.scatter_polyfill import scatter
-from ..protocol import TData, TBatch
-from ..finetune_model import BackBoneBaseOutput
+from mattertune.protocol import TBatch, OutputHeadBaseConfig
+from mattertune.finetune.loss import LossConfig, MAELossConfig
+from mattertune.output_heads.layers.mlp import MLP
+from mattertune.output_heads.layers.activation import get_activation_cls
+from mattertune.output_heads.goc_style.heads.utils.scatter_polyfill import scatter
+from mattertune.output_heads.goc_style.backbone_module import GOCBackBoneOutput
 
 
 class DirectScalerOutputHeadConfig(OutputHeadBaseConfig):
@@ -16,24 +16,25 @@ class DirectScalerOutputHeadConfig(OutputHeadBaseConfig):
     Configuration of the DirectScalerOutputHead
     """
     ## Paramerters heritated from OutputHeadBaseConfig:
-    head_name: str = "DirectScalerOutputHead"
-    """The name of the output head"""
+    pred_type: Literal["scalar", "vector", "tensor", "classification"] = "scalar"
+    """The prediction type of the output head"""
     target_name: str = "direct_scaler"
     """The name of the target output by this head"""
     loss_coefficient: float = 1.0
     """The coefficient of the loss function"""
+    ## New parameters:
+    hidden_dim: int
+    """The input hidden dim of output head"""
     reduction: Literal["mean", "sum", "none"] = "sum"
-    """
-    The reduction method
-    For example, the total_energy is the sum of the energy of each atom
-    """
+    """The reduction method. For example, the total_energy is the sum of the energy of each atom"""
     num_layers: int = 5
     """Number of layers in the output layer."""
     output_init: Literal["HeOrthogonal", "zeros", "grid", "loggrid"] = "HeOrthogonal"
     """Initialization method for the output layer."""
-    ## New parameters:
     loss: LossConfig = MAELossConfig()
     """The loss configuration for the target."""
+    activation: str
+    """Activation function to use for the output layer"""
 
     @override
     def is_classification(self) -> bool:
@@ -41,21 +42,19 @@ class DirectScalerOutputHeadConfig(OutputHeadBaseConfig):
 
     def construct_output_head(
         self,
-        hidden_dim: int|None,
-        activation_cls: type[nn.Module],
     ) -> nn.Module:
         """
         Construct the output head and return it.
         """
-        if hidden_dim is None:
+        if self.hidden_dim is None:
             raise ValueError("hidden_dim must be provided for DirectScalerOutputHead")
         return DirectScalerOutputHead(
             self,
-            hidden_dim=hidden_dim,
-            activation_cls=activation_cls,
+            hidden_dim=self.hidden_dim,
+            activation_cls=get_activation_cls(self.activation),
         )
         
-class DirectScalerOutputHead(nn.Module, Generic[TBatch, BackBoneBaseOutput]):
+class DirectScalerOutputHead(nn.Module, Generic[TBatch]):
     """
     The output head of the direct graph scaler.
     """
@@ -82,10 +81,10 @@ class DirectScalerOutputHead(nn.Module, Generic[TBatch, BackBoneBaseOutput]):
         self, 
         *,
         batch_data: TBatch,
-        backbone_output: BackBoneBaseOutput,
+        backbone_output: GOCBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
-        node_features = backbone_output.node_hidden_features ## [num_nodes_in_batch, hidden_dim]
+        node_features = backbone_output["node_hidden_features"] ## [num_nodes_in_batch, hidden_dim]
         batch_idx = batch_data.batch
         num_graphs = int(torch.max(batch_idx).item() + 1)
         predicted_scaler = self.out_mlp(node_features) ## [num_nodes_in_batch, 1]
@@ -111,12 +110,17 @@ class DirectEnergyOutputHeadConfig(OutputHeadBaseConfig):
     Configuration of the DirectScalerOutputHead
     """
     ## Paramerters heritated from OutputHeadBaseConfig:
-    head_name: str = "DirectScalerOutputHead"
-    """The name of the output head"""
+    pred_type: Literal["scalar", "vector", "tensor", "classification"] = "scalar"
+    """The prediction type of the output head"""
     target_name: str = "direct_scaler"
     """The name of the target output by this head"""
     loss_coefficient: float = 1.0
     """The coefficient of the loss function"""
+    ## New parameters:
+    hidden_dim: int
+    """The input hidden dim of output head"""
+    loss: LossConfig = MAELossConfig()
+    """The loss configuration for the target."""
     reduction: Literal["mean", "sum", "none"] = "sum"
     """
     The reduction method
@@ -126,9 +130,8 @@ class DirectEnergyOutputHeadConfig(OutputHeadBaseConfig):
     """Number of layers in the output layer."""
     output_init: Literal["HeOrthogonal", "zeros", "grid", "loggrid"] = "HeOrthogonal"
     """Initialization method for the output layer."""
-    ## New parameters:
-    loss: LossConfig = MAELossConfig()
-    """The loss configuration for the target."""
+    activation: str
+    """Activation function to use for the output layer"""
 
     @override
     def is_classification(self) -> bool:
@@ -136,22 +139,20 @@ class DirectEnergyOutputHeadConfig(OutputHeadBaseConfig):
 
     def construct_output_head(
         self,
-        hidden_dim: int|None,
-        activation_cls: type[nn.Module],
     ) -> nn.Module:
         """
         Construct the output head and return it.
         """
         assert self.reduction != "none", "The reduction can't be none for DirectEnergyOutputHead, choose 'mean' or 'sum'"
-        if hidden_dim is None:
+        if self.hidden_dim is None:
             raise ValueError("hidden_dim must be provided for DirectScalerOutputHead")
         return DirectEnergyOutputHead(
             self,
-            hidden_dim=hidden_dim,
-            activation_cls=activation_cls,
+            hidden_dim=self.hidden_dim,
+            activation_cls=get_activation_cls(self.activation),
         )
         
-class DirectEnergyOutputHead(nn.Module, Generic[TBatch, BackBoneBaseOutput]):
+class DirectEnergyOutputHead(nn.Module, Generic[TBatch]):
     """
     The output head of the direct graph scaler.
     """
@@ -178,10 +179,10 @@ class DirectEnergyOutputHead(nn.Module, Generic[TBatch, BackBoneBaseOutput]):
         self, 
         *,
         batch_data: TBatch,
-        backbone_output: BackBoneBaseOutput,
+        backbone_output: GOCBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
-        energy_features = backbone_output.energy_features ## [num_nodes_in_batch, hidden_dim]
+        energy_features = backbone_output["energy_features"] ## [num_nodes_in_batch, hidden_dim]
         batch_idx = batch_data.batch
         num_graphs = int(torch.max(batch_idx).item() + 1)
         predicted_scaler = self.out_mlp(energy_features) ## [num_nodes_in_batch, 1]

@@ -212,7 +212,7 @@ class ForceStressScaler(nn.Module):
                 self.update()
         else:
             forces, stress = self.calc_forces(energy, pos, displacement, cell)
-
+        
         return forces, stress
 
     def update(self):

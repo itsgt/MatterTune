@@ -292,7 +292,7 @@ class MulticlassClassificationMetrics(_BaseMetrics):
         return metrics
 
 
-MetricConfig: TypeAlias = Annotated[
+MetricsConfig: TypeAlias = Annotated[
     ScalarRegressionMetricsConfig
     | VectorRegressionMetricsConfig
     | BinaryClassificationMetricsConfig

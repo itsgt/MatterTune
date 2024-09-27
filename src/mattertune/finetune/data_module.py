@@ -1,5 +1,5 @@
-from typing import Any, TypeAlias, Generic, List, Optional
-from .protocol import TData, TBatch
+from typing import Any, TypeAlias, Generic
+from ..protocol import TData, TBatch
 from abc import abstractmethod
 import random
 from torch.utils.data import DataLoader, Dataset
@@ -25,9 +25,9 @@ class MatterTuneBaseDataModule(
     """
     The base class for MatterTune data modules.
     Three methods must be implemented for using this class:
-    - load_raw()
-    - process_raw()
-    - collate_fn()
+    - load_raw(): load structured data from dir or file
+    - process_raw(): process raw data into TData 
+    - collate_fn(): collate a list of TData into a TBatch
     """
     def __init__(
         self,
@@ -159,3 +159,6 @@ class MatterTuneBaseDataModule(
             shuffle=False,
             collate_fn=self.collate_fn,
         )
+        
+        
+## TODO: Load data and predict

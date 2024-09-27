@@ -3,12 +3,11 @@ from typing_extensions import override
 import contextlib
 import torch
 import torch.nn as nn
-from ..protocol import TBatch
-from ..finetune_model import BackBoneBaseOutput
-from .base import OutputHeadBaseConfig
-from ..modules.loss import LossConfig, L2MAELossConfig
-from .utils.force_scaler import ForceScaler
-from .utils.tensor_grad import enable_grad
+from mattertune.protocol import TBatch, OutputHeadBaseConfig
+from mattertune.finetune.loss import LossConfig, L2MAELossConfig
+from mattertune.output_heads.goc_style.heads.utils.force_scaler import ForceScaler
+from mattertune.output_heads.goc_style.heads.utils.tensor_grad import enable_grad
+from mattertune.output_heads.goc_style.backbone_module import GOCBackBoneOutput
 
 
 class GradientForceOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
@@ -17,15 +16,15 @@ class GradientForceOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
     Compute force from the gradient of the energy with respect to the position
     """
     ## Paramerters heritated from OutputHeadBaseConfig:
-    head_name: str = "GradientForceOutputHead"
-    """The name of the output head"""
+    pred_type: Literal["scalar", "vector", "tensor", "classification"] = "vector"
+    """The prediction type of the output head"""
     target_name: str = "gradient_forces"
     """The name of the target output by this head"""
     loss_coefficient: float = 1.0
     """The coefficient of the loss function"""
+    ## New parameters:
     output_init: Literal["HeOrthogonal", "zeros", "grid", "loggrid"] = "HeOrthogonal"
     """Initialization method for the output layer."""
-    ## New parameters:
     loss: LossConfig = L2MAELossConfig()
     """The loss configuration for the target."""
     energy_target_name: str
@@ -37,8 +36,6 @@ class GradientForceOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
     @override
     def construct_output_head(
         self,
-        hidden_dim: int|None,
-        activation_cls: type[nn.Module],
     ) -> nn.Module:
         return GradientForceOutputHead(self)
     
@@ -57,7 +54,7 @@ class GradientForceOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
         return False
     
     
-class GradientForceOutputHead(nn.Module, Generic[TBatch, BackBoneBaseOutput]):
+class GradientForceOutputHead(nn.Module, Generic[TBatch]):
     """
     Compute force from the gradient of the energy with respect to the position
     """
@@ -72,7 +69,7 @@ class GradientForceOutputHead(nn.Module, Generic[TBatch, BackBoneBaseOutput]):
         self,
         *,
         batch_data: TBatch,
-        backbone_output: BackBoneBaseOutput,
+        backbone_output: GOCBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
         energy = output_head_results[self.head_config.energy_target_name]

@@ -4,12 +4,11 @@ import contextlib
 import torch
 import torch.nn as nn
 from einops import rearrange
-from .base import OutputHeadBaseConfig
-from ..modules.loss import LossConfig, MAELossConfig
-from .utils.tensor_grad import enable_grad
-from .utils.force_scaler import ForceStressScaler
-from ..protocol import TData, TBatch
-from ..finetune_model import BackBoneBaseOutput
+from mattertune.protocol import TBatch, OutputHeadBaseConfig
+from mattertune.finetune.loss import LossConfig, MAELossConfig
+from mattertune.output_heads.goc_style.heads.utils.force_scaler import ForceStressScaler
+from mattertune.output_heads.goc_style.heads.utils.tensor_grad import enable_grad
+from mattertune.output_heads.goc_style.backbone_module import GOCBackBoneOutput
 
 
 class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
@@ -63,8 +62,8 @@ class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
     """
     
     ## Paramerters heritated from OutputHeadBaseConfig:
-    head_name: str = "GradientStressOutputHead"
-    """The name of the output head"""
+    pred_type: Literal["scalar", "vector", "tensor", "classification"] = "tensor"
+    """The prediction type of the output head"""
     target_name: str = "gradient_stress"
     """The name of the target output by this head"""
     ## New parameters:
@@ -81,8 +80,6 @@ class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
     @override
     def construct_output_head(
         self,
-        hidden_dim: int | None,
-        activation_cls: type[nn.Module],
     ):
         return GradientStressOutputHead(self)
 
@@ -125,7 +122,7 @@ class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
         return False
     
 
-class GradientStressOutputHead(nn.Module, Generic[TBatch, BackBoneBaseOutput]):
+class GradientStressOutputHead(nn.Module, Generic[TBatch]):
     """
     The output head of the gradient stress target.
     """
@@ -146,7 +143,7 @@ class GradientStressOutputHead(nn.Module, Generic[TBatch, BackBoneBaseOutput]):
         self, 
         *,
         batch_data: TBatch,
-        backbone_output: BackBoneBaseOutput,
+        backbone_output: GOCBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
 

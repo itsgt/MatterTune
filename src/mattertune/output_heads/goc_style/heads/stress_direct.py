@@ -2,11 +2,10 @@ from typing import Literal, Generic
 from typing_extensions import override, assert_never
 import torch
 import torch.nn as nn
-from .base import OutputHeadBaseConfig
-from ..modules.loss import LossConfig, MAELossConfig
-from .layers.rank2block import Rank2DecompositionEdgeBlock
-from ..protocol import TData, TBatch
-from ..finetune_model import BackBoneBaseOutput
+from mattertune.protocol import TBatch, OutputHeadBaseConfig
+from mattertune.finetune.loss import LossConfig, MAELossConfig
+from mattertune.output_heads.goc_style.heads.utils.rank2block import Rank2DecompositionEdgeBlock
+from mattertune.output_heads.goc_style.backbone_module import GOCBackBoneOutput
 
 
 class DirectStressOutputHeadConfig(OutputHeadBaseConfig):
@@ -15,17 +14,19 @@ class DirectStressOutputHeadConfig(OutputHeadBaseConfig):
     Compute stress directly without using gradients
     """
     ## Paramerters heritated from OutputHeadBaseConfig:
-    head_name: str = "DirectStressOutputHead"
-    """The name of the output head"""
+    pred_type: Literal["scalar", "vector", "tensor", "classification"] = "tensor"
+    """The prediction type of the output head"""
     target_name: str = "direct_stress"
     """The name of the target output by this head"""
-    reduction: Literal["mean", "sum", "none"] = "sum"
+    ## New parameters:
+    hidden_dim: int
+    """The input hidden dim of output head"""
+    reduction: Literal["mean", "sum"] = "sum"
     """The reduction method"""
     loss_coefficient: float = 1.0
     """The coefficient of the loss function"""
     num_layers: int = 2
     """Number of layers in the output layer."""
-    ## New parameters:
     loss: LossConfig = MAELossConfig()
     """The loss function to use for the target"""
     
@@ -40,25 +41,21 @@ class DirectStressOutputHeadConfig(OutputHeadBaseConfig):
                 return True
             case "mean":
                 return False
-            case "none":
-                raise ValueError("for stress, reduction cannot be none")
             case _:
                 assert_never(self.reduction)
     
     @override
     def construct_output_head(
         self,
-        hidden_dim: int|None,
-        activation_cls: type[nn.Module],
     ):
-        if hidden_dim is None:
+        if self.hidden_dim is None:
             raise ValueError("hidden_dim must be provided for DirectStressOutputHead")
         return DirectStressOutputHead(
             self,
-            hidden_dim=hidden_dim,
+            hidden_dim=self.hidden_dim,
         )
 
-class DirectStressOutputHead(nn.Module, Generic[TBatch, BackBoneBaseOutput]):
+class DirectStressOutputHead(nn.Module, Generic[TBatch]):
     @override
     def __init__(
         self,
@@ -82,12 +79,12 @@ class DirectStressOutputHead(nn.Module, Generic[TBatch, BackBoneBaseOutput]):
         self, 
         *,
         batch_data: TBatch,
-        backbone_output: BackBoneBaseOutput,
+        backbone_output: GOCBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
-        force_features = backbone_output.force_features
-        edge_vectors = backbone_output.edge_vectors
-        edge_index_dst = backbone_output.edge_index_dst
+        force_features = backbone_output["force_features"]
+        edge_vectors = backbone_output["edge_vectors"]
+        edge_index_dst = backbone_output["edge_index_dst"]
         batch_idx = batch_data.batch
         batch_size = int(torch.max(batch_idx).item() + 1)
         stress = self.block(
