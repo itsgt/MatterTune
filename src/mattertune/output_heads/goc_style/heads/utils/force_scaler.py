@@ -187,7 +187,7 @@ class ForceStressScaler(nn.Module):
                     #     found_nans_or_infs
                     # )
                     # ^ (world_size, 1)
-                    found_nans_or_infs = bool(found_nans_or_infs.any().item())
+                    found_nans_or_infs = bool(found_nans_or_infs.any().detach().cpu().item())
 
                 if found_nans_or_infs:
                     self.finite_force_stress_results = 0

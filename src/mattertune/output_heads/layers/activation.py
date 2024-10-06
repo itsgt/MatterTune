@@ -15,6 +15,7 @@ def get_activation_cls(activation: str) -> type[nn.Module]:
     """
     Get the activation class from the activation name
     """
+    activation = activation.lower()
     if activation == "relu":
         return nn.ReLU
     elif activation == "silu" or activation == "swish":

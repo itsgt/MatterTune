@@ -8,41 +8,41 @@ import torch.nn.functional as F
 from torch_scatter import scatter
 from torchtyping import TensorType
 from typing_extensions import assert_never, override
-from pydantic import Field
+from pydantic import Field, BaseModel
+from typing import Generic
+from mattertune.protocol import TBatch
+
 
 Reduction: TypeAlias = Literal["mean", "sum", "none"]
 
-
-class LossConfigBase(ABC):
-    dynamic_loss_coefficient: str | None = None
-    """The name of the dynamic loss coefficient to use for the target"""
-
-    y_mult_coeff: float | None = None
-
+class LossConfigBase(BaseModel, ABC, Generic[TBatch]):
+    y_mult_coeff: float = 1.0
+    
     def pre_compute(
-        self, y_pred: torch.Tensor, y_true: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        if self.y_mult_coeff is not None:
-            y_pred = y_pred * self.y_mult_coeff
-            y_true = y_true * self.y_mult_coeff
-
+        self,
+        y_pred: torch.Tensor,
+        y_true: torch.Tensor,
+    ):
+        y_pred = y_pred * self.y_mult_coeff
+        y_true = y_true * self.y_mult_coeff
         return y_pred, y_true
-
+    
     def compute(
         self,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
+        batch: TBatch,
         reduction: Reduction = "mean",
     ) -> torch.Tensor:
         y_pred, y_true = self.pre_compute(y_pred, y_true)
-        loss = self.compute_impl(y_pred, y_true, reduction)
-        return loss
-
+        return self.compute_impl(y_pred, y_true, batch, reduction)
+    
     @abstractmethod
     def compute_impl(
         self,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
+        batch: TBatch,
         reduction: Reduction = "mean",
     ) -> torch.Tensor: ...
 
@@ -61,8 +61,7 @@ class LossConfigBase(ABC):
             case _:
                 assert_never(reduction)
 
-
-class MAELossConfig(LossConfigBase):
+class MAELossConfig(LossConfigBase, Generic[TBatch]):
     name: Literal["mae"] = "mae"
 
     divide_by_natoms: bool = False
@@ -73,6 +72,7 @@ class MAELossConfig(LossConfigBase):
         self,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
+        batch: TBatch,
         reduction: Reduction = "mean",
         natoms: torch.Tensor | None = None,
     ) -> torch.Tensor:
@@ -86,7 +86,7 @@ class MAELossConfig(LossConfigBase):
         return loss
 
 
-class MSELossConfig(LossConfigBase):
+class MSELossConfig(LossConfigBase, Generic[TBatch]):
     name: Literal["mse"] = "mse"
 
     @override
@@ -94,6 +94,7 @@ class MSELossConfig(LossConfigBase):
         self,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
+        batch: TBatch,
         reduction: Reduction = "mean",
     ) -> torch.Tensor:
         loss = F.mse_loss(y_pred, y_true, reduction="none")
@@ -101,7 +102,7 @@ class MSELossConfig(LossConfigBase):
         return loss
 
 
-class HuberLossConfig(LossConfigBase):
+class HuberLossConfig(LossConfigBase, Generic[TBatch]):
     name: Literal["huber"] = "huber"
 
     delta: float
@@ -111,6 +112,7 @@ class HuberLossConfig(LossConfigBase):
         self,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
+        batch: TBatch,
         reduction: Reduction = "mean",
     ) -> torch.Tensor:
         loss = F.huber_loss(y_pred, y_true, delta=self.delta, reduction="none")
@@ -118,7 +120,7 @@ class HuberLossConfig(LossConfigBase):
         return loss
 
 
-class MACEHuberLossConfig(LossConfigBase):
+class MACEHuberLossConfig(LossConfigBase, Generic[TBatch]):
     name: Literal["mace_huber"] = "mace_huber"
 
     delta: float
@@ -128,6 +130,7 @@ class MACEHuberLossConfig(LossConfigBase):
         self,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
+        batch: TBatch,
         reduction: Reduction = "mean",
     ) -> torch.Tensor:
         # Define the multiplication factors for each condition
@@ -185,7 +188,7 @@ def _apply_focal_loss_per_atom(
     return focal_loss
 
 
-class MACEHuberForceFocalLossConfig(LossConfigBase):
+class MACEHuberForceFocalLossConfig(LossConfigBase, Generic[TBatch]):
     name: Literal["mace_huber_force_focal"] = "mace_huber_force_focal"
 
     delta: float  # Huber loss delta
@@ -203,8 +206,8 @@ class MACEHuberForceFocalLossConfig(LossConfigBase):
         self,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
+        batch: TBatch,
         reduction: Reduction = "mean",
-        atomic_numbers: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # Define the multiplication factors for each condition
         factors = self.delta * np.array([1.0, 0.7, 0.4, 0.1])
@@ -234,8 +237,9 @@ class MACEHuberForceFocalLossConfig(LossConfigBase):
         loss = se.mean(dim=-1)
 
         # Compute frequency factor for each sample based on its atom type
-        if atomic_numbers is None:
+        if not hasattr(batch, "atomic_numbers"):
             raise ValueError("atomic_numbers is required")
+        atomic_numbers = batch.atomic_numbers
         loss = _apply_focal_loss_per_atom(
             loss=loss,
             freq_ratios=self.freq_ratios.to(loss.device),
@@ -248,7 +252,7 @@ class MACEHuberForceFocalLossConfig(LossConfigBase):
         return loss
 
 
-class MACEHuberEnergyLossConfig(LossConfigBase):
+class MACEHuberEnergyLossConfig(LossConfigBase, Generic[TBatch]):
     name: Literal["mace_huber_energy"] = "mace_huber_energy"
 
     delta: float
@@ -258,15 +262,15 @@ class MACEHuberEnergyLossConfig(LossConfigBase):
         self,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
+        batch: TBatch,
         reduction: Reduction = "mean",
-        natoms: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if natoms is None:
+        if not hasattr(batch, "num_atoms"):
             raise ValueError("natoms is required")
-
+        num_atoms = batch.num_atoms.reshape(-1, 1)
         # First, divide the energy by the number of atoms
-        y_pred = y_pred / natoms
-        y_true = y_true / natoms
+        y_pred = y_pred / num_atoms
+        y_true = y_true / num_atoms
 
         # Compute the loss
         loss = F.huber_loss(y_pred, y_true, reduction="none", delta=self.delta)
@@ -306,7 +310,7 @@ def _apply_focal_loss_per_graph(
     return focal_loss
 
 
-class MACEHuberEnergyFocalLossConfig(LossConfigBase):
+class MACEHuberEnergyFocalLossConfig(LossConfigBase, Generic[TBatch]):
     name: Literal["mace_huber_energy_focal"] = "mace_huber_energy_focal"
 
     delta: float  # Huber loss delta
@@ -324,24 +328,25 @@ class MACEHuberEnergyFocalLossConfig(LossConfigBase):
         self,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
+        batch: TBatch,
         reduction: Reduction = "mean",
-        natoms: torch.Tensor | None = None,
-        atomic_numbers: torch.Tensor | None = None, # An int tensor with "natoms" (number of atoms) dimension
-        batch: torch.Tensor | None = None, # An int tensor with "natoms" dimension
     ) -> torch.Tensor:
-        if natoms is None:
+        if not hasattr(batch, "num_atoms"):
             raise ValueError("natoms is required")
-        if atomic_numbers is None:
+        num_atoms = batch.num_atoms.reshape(-1, 1)
+        if not hasattr(batch, "atomic_numbers"):
             raise ValueError("atomic_numbers is required")
-        if batch is None:
+        atomic_numbers = batch.atomic_numbers
+        if not hasattr(batch, "batch"):
             raise ValueError("batch is required")
+        batch = batch.batch
         assert y_pred.shape == y_true.shape, f"y_pred and y_true should have the same shape, but here gets {y_pred.shape} and {y_true.shape}"
-        assert y_pred.shape[0] == natoms.shape[0], f"y_pred and natoms should have the same batch size, but here gets {y_pred.shape[0]} and {natoms.shape[0]}"
+        assert y_pred.shape[0] == num_atoms.shape[0], f"y_pred and natoms should have the same batch size, but here gets {y_pred.shape[0]} and {num_atoms.shape[0]}"
         assert torch.is_floating_point(y_pred), f"y_pred should be in float but here gets {y_pred.dtype}"
         assert torch.is_floating_point(y_true), f"y_true should be in float but here gets {y_true.dtype}"
         # First, divide the energy by the number of atoms
-        y_pred = y_pred / natoms
-        y_true = y_true / natoms
+        y_pred = y_pred / num_atoms
+        y_true = y_true / num_atoms
 
         # Compute the loss
         loss = F.huber_loss(y_pred, y_true, reduction="none", delta=self.delta)
@@ -363,7 +368,7 @@ class MACEHuberEnergyFocalLossConfig(LossConfigBase):
         return loss
 
 
-class HuberStressFocalLossConfig(LossConfigBase):
+class HuberStressFocalLossConfig(LossConfigBase, Generic[TBatch]):
     name: Literal["huber_stress_focal"] = "huber_stress_focal"
 
     delta: float  # Huber loss delta
@@ -381,15 +386,15 @@ class HuberStressFocalLossConfig(LossConfigBase):
         self,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
+        batch: TBatch,
         reduction: Reduction = "mean",
-        atomic_numbers: torch.Tensor | None = None,
-        batch: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if atomic_numbers is None:
+        if not hasattr(batch, "atomic_numbers"):
             raise ValueError("atomic_numbers is required")
-        if batch is None:
+        atomic_numbers = batch.atomic_numbers
+        if not hasattr(batch, "batch"):
             raise ValueError("batch is required")
-        
+        batch = batch.batch
         # Compute the loss
         loss = F.huber_loss(y_pred, y_true, reduction="none", delta=self.delta)
         assert loss.shape == (y_pred.shape[0], 3, 3), f"loss should be in shape ({y_pred.shape[0]}, 3, 3), but here gets {loss.shape}"
@@ -416,8 +421,8 @@ class HuberStressFocalLossConfig(LossConfigBase):
         return loss
 
 
-class L2MAELossConfig(LossConfigBase):
-    name: Literal["l2mae"] = "l2mae"
+class L2MAELossConfig(LossConfigBase, Generic[TBatch]):
+    name: Literal["l2_mae"] = "l2_mae"
 
     p: int | float = 2
 
@@ -426,6 +431,7 @@ class L2MAELossConfig(LossConfigBase):
         self,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
+        batch: TBatch,
         reduction: Reduction = "mean",
     ) -> torch.Tensor:
         loss = F.pairwise_distance(y_pred, y_true, p=self.p)

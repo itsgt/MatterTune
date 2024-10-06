@@ -2,12 +2,13 @@ from typing import Literal, Generic
 from typing_extensions import override
 import torch
 import torch.nn as nn
-from mattertune.protocol import TBatch, OutputHeadBaseConfig
+from mattertune.protocol import TBatch
+from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.finetune.loss import LossConfig, L2MAELossConfig
 from mattertune.output_heads.layers.mlp import MLP
 from mattertune.output_heads.layers.activation import get_activation_cls
 from mattertune.output_heads.goc_style.heads.utils.scatter_polyfill import scatter
-from mattertune.output_heads.goc_style.backbone_module import GOCBackBoneOutput
+from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
 
 
 class DirectForceOutputHeadConfig(OutputHeadBaseConfig):
@@ -79,7 +80,7 @@ class DirectForceOutputHead(nn.Module, Generic[TBatch]):
         self,
         *,
         batch_data: TBatch,
-        backbone_output: GOCBackBoneOutput,
+        backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ):
         force_feature:torch.Tensor = backbone_output["force_features"]

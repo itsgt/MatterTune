@@ -4,11 +4,12 @@ import contextlib
 import torch
 import torch.nn as nn
 from einops import rearrange
-from mattertune.protocol import TBatch, OutputHeadBaseConfig
+from mattertune.protocol import TBatch
+from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.finetune.loss import LossConfig, MAELossConfig
 from mattertune.output_heads.goc_style.heads.utils.force_scaler import ForceStressScaler
 from mattertune.output_heads.goc_style.heads.utils.tensor_grad import enable_grad
-from mattertune.output_heads.goc_style.backbone_module import GOCBackBoneOutput
+from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
 
 
 class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
@@ -86,6 +87,11 @@ class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
     @override
     @contextlib.contextmanager
     def model_forward_context(self, data: TBatch):
+        if not hasattr(data, "cell_displacement"):
+            raise ValueError(
+                "cell_displacement must be provided for GradientStressOutputHead, Can be all zeros"
+            )
+        
         with contextlib.ExitStack() as stack:
             enable_grad(stack)
 
@@ -93,11 +99,10 @@ class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
                 data.pos.requires_grad_(True)
 
             # 初始化 displacement 属性
-            if data.cell_displacement is None:
-                data.cell_displacement = torch.zeros(
-                    (len(data), 3, 3), dtype=data.pos.dtype, device=data.pos.device
-                )
-                data.cell_displacement.requires_grad_(True)
+            data.cell_displacement = torch.zeros(
+                (len(data), 3, 3), dtype=data.pos.dtype, device=data.pos.device
+            )
+            data.cell_displacement.requires_grad_(True)
 
             symmetric_displacement = 0.5 * (
                 data.cell_displacement + data.cell_displacement.transpose(-1, -2)
@@ -143,7 +148,7 @@ class GradientStressOutputHead(nn.Module, Generic[TBatch]):
         self, 
         *,
         batch_data: TBatch,
-        backbone_output: GOCBackBoneOutput,
+        backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
 

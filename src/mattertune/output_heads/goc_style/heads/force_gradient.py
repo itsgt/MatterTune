@@ -3,11 +3,12 @@ from typing_extensions import override
 import contextlib
 import torch
 import torch.nn as nn
-from mattertune.protocol import TBatch, OutputHeadBaseConfig
+from mattertune.protocol import TBatch
+from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.finetune.loss import LossConfig, L2MAELossConfig
 from mattertune.output_heads.goc_style.heads.utils.force_scaler import ForceScaler
 from mattertune.output_heads.goc_style.heads.utils.tensor_grad import enable_grad
-from mattertune.output_heads.goc_style.backbone_module import GOCBackBoneOutput
+from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
 
 
 class GradientForceOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
@@ -69,14 +70,13 @@ class GradientForceOutputHead(nn.Module, Generic[TBatch]):
         self,
         *,
         batch_data: TBatch,
-        backbone_output: GOCBackBoneOutput,
+        backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
         energy = output_head_results[self.head_config.energy_target_name]
         natoms_in_batch = batch_data.pos.shape[0]
         assert energy.requires_grad, f"Energy tensor {self.head_config.energy_target_name} does not require grad"
         assert batch_data.pos.requires_grad, "Position tensor does not require grad"
-        assert energy.shape[0] == batch_data.pos.shape[0], f"Mismatched shapes: energy.shape[0]={energy.shape[0]} mismatch pos.shape[0]={batch_data.pos.shape[0]}. Check your <energy head> and <energy_target_name>"
         forces = self.force_scaler.calc_forces(
             energy,
             batch_data.pos,

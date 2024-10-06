@@ -2,10 +2,11 @@ from typing import Literal, Generic
 from typing_extensions import override, assert_never
 import torch
 import torch.nn as nn
-from mattertune.protocol import TBatch, OutputHeadBaseConfig
+from mattertune.protocol import TBatch
+from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.finetune.loss import LossConfig, MAELossConfig
 from mattertune.output_heads.goc_style.heads.utils.rank2block import Rank2DecompositionEdgeBlock
-from mattertune.output_heads.goc_style.backbone_module import GOCBackBoneOutput
+from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
 
 
 class DirectStressOutputHeadConfig(OutputHeadBaseConfig):
@@ -79,14 +80,14 @@ class DirectStressOutputHead(nn.Module, Generic[TBatch]):
         self, 
         *,
         batch_data: TBatch,
-        backbone_output: GOCBackBoneOutput,
+        backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
         force_features = backbone_output["force_features"]
         edge_vectors = backbone_output["edge_vectors"]
         edge_index_dst = backbone_output["edge_index_dst"]
         batch_idx = batch_data.batch
-        batch_size = int(torch.max(batch_idx).item() + 1)
+        batch_size = int(torch.max(batch_idx).detach().cpu().item() + 1)
         stress = self.block(
             force_features,
             edge_vectors,

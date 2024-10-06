@@ -1,42 +1,105 @@
-from typing import Any, TypeAlias, Generic
-from ..protocol import TData, TBatch
-from abc import abstractmethod
-import random
-from torch.utils.data import DataLoader, Dataset
+from abc import ABC, abstractmethod
+from mattertune.protocol import TBatch, TData
+from typing import Generic, TypeAlias, Annotated, Literal
+from torch.utils.data import Dataset, DataLoader, DistributedSampler
 import pytorch_lightning as pl
+from pydantic import Field, BaseModel
+import jaxtyping as jt
+import numpy as np
+from typing_extensions import final, override
 
-RawData: TypeAlias = Any
 
-class ListDataset(Dataset, Generic[TData]):
-    def __init__(self, data_list: list[TData]):
-        self.data_list = data_list
+class BaseReferenceConfig(BaseModel, ABC):
+    @abstractmethod
+    def compute_references(
+        self,
+        compositions: jt.Int[np.ndarray, "dataset_size n_atomic_numbers"],
+        energies: jt.Float[np.ndarray, "dataset_size"],
+    ) -> jt.Float[np.ndarray, "n_atomic_numbers"]: ...
 
+
+@final
+class LinearReferenceConfig(BaseReferenceConfig):
+    name: Literal["linear_reference"] = "linear_reference"
+
+    @override
+    def compute_references(self, compositions, energies):
+        from sklearn.linear_model import LinearRegression
+
+        c = compositions
+        y = energies
+        num_chem_species = c.shape[1]
+
+        # tweak to fine tune training from many-element to small element
+        zero_indices = np.all(c == 0, axis=0)
+        c_reduced = c[:, ~zero_indices]
+        full_coeff = np.zeros(num_chem_species)
+        coef_reduced = LinearRegression(fit_intercept=False).fit(c_reduced, y).coef_
+        full_coeff[~zero_indices] = coef_reduced
+
+        return full_coeff
+
+
+@final
+class RidgeReferenceConfig(BaseReferenceConfig):
+    name: Literal["ridge_reference"] = "ridge_reference"
+
+    alpha: float
+
+    @override
+    def compute_references(self, compositions, energies):
+        from sklearn.linear_model import Ridge
+
+        c = compositions
+        y = energies
+        num_chem_species = c.shape[1]
+
+        # tweak to fine tune training from many-element to small element
+        zero_indices = np.all(c == 0, axis=0)
+        c_reduced = c[:, ~zero_indices]
+        full_coeff = np.zeros(num_chem_species)
+        coef_reduced = (
+            Ridge(alpha=self.alpha, fit_intercept=False).fit(c_reduced, y).coef_
+        )
+        full_coeff[~zero_indices] = coef_reduced
+
+        return full_coeff
+
+
+ReferenceConfig: TypeAlias = Annotated[
+    LinearReferenceConfig | RidgeReferenceConfig,
+    Field(discriminator="name"),
+]
+
+
+class MatterTuneDatasetBase(Dataset, ABC):
+    """
+    Base class for MatterTune dataset
+    """
+    @abstractmethod
     def __len__(self) -> int:
-        return len(self.data_list)
+        pass
 
-    def __getitem__(self, idx: int) -> TData:
-        return self.data_list[idx]
-
-
-class MatterTuneBaseDataModule(
-    pl.LightningDataModule,
-    Generic[TData, TBatch],
-):
+    @abstractmethod
+    def __getitem__(self, idx):
+        pass
+    
+    
+    
+class MatterTuneDataModuleBase(pl.LightningDataModule, Generic[TData, TBatch]):
     """
     The base class for MatterTune data modules.
-    Three methods must be implemented for using this class:
-    - load_raw(): load structured data from dir or file
-    - process_raw(): process raw data into TData 
-    - collate_fn(): collate a list of TData into a TBatch
     """
     def __init__(
         self,
         batch_size: int,
         num_workers: int = 0,
-        val_split: float = 0.2,
+        val_split: float = 0.1,
         test_split: float = 0.1,
         shuffle: bool = True,
-        **kwargs: Any,  # Additional parameters can be added as needed
+        ignore_data_errors: bool = True,
+        *args,
+        **kwargs,
     ):
         super().__init__()
         self.batch_size = batch_size
@@ -44,121 +107,51 @@ class MatterTuneBaseDataModule(
         self.val_split = val_split
         self.test_split = test_split
         self.shuffle = shuffle
-        self.kwargs = kwargs
-
-        # Initialize placeholders for datasets
-        self.raw_data: list[RawData]|None = None
-        self.data: list[TData]|None = None
-        self.train_data: ListDataset|None = None
-        self.val_data: ListDataset|None = None
-        self.test_data: ListDataset|None = None
+        self.ignore_data_errors = ignore_data_errors
 
     @abstractmethod
-    def load_raw(self, **kwargs: Any) -> list[RawData]:
+    def setup(self, stage: str) -> None:
         """
-        Load raw data from somewhere.
-        """
-        pass
-
-    @abstractmethod
-    def process_raw(self, raw_data_list: list[RawData], **kwargs: Any) -> list[TData]:
-        """
-        Process raw data into TData.
-        """
-        pass
-
-    @abstractmethod
-    def collate_fn(self, data_list: list[TData]) -> TBatch:
-        """
-        Collate a list of TData into a TBatch.
+        Setup train, validation, and test datasets
+        Split the data into train, validation, and test datasets
         """
         pass
     
     @abstractmethod
-    def prepare_data(self) -> None:
+    def collate_fn(self, data_list: list[TData]) -> TBatch:
         """
-        This method is called only from a single process in distributed settings.
-        Use it to download data and do any data preparation that should be done only once.
+        Collate function for the DataLoader
         """
-        # Load and process data here if needed
-        # # Example: Download dataset if not already present
-        # if not os.path.exists(self.data_dir):
-        #     download_dataset(self.data_dir)
-
-        # # Example: Extract data if not already done
-        # if not os.path.exists(self.extracted_data_dir):
-        #     extract_dataset(self.data_dir, self.extracted_data_dir)
-
-        # # Optionally, perform any heavy, shared preprocessing and save the results
-        # if not os.path.exists(self.preprocessed_data_file):
-        #     raw_data = self.load_raw(**self.kwargs)
-        #     preprocessed_data = self.shared_preprocessing(raw_data)
-        #     save_preprocessed_data(preprocessed_data, self.preprocessed_data_file)
+        pass
+    
+    def _create_dataloader(self, dataset, shuffle: bool) -> DataLoader:
+        sampler = DistributedSampler(dataset) if self.trainer and self.trainer.num_devices > 1 else None
+        return DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=(sampler is None) and shuffle,
+            num_workers=self.num_workers,
+            sampler=sampler,
+            collate_fn=self.collate_fn,
+        )
+    
+    @abstractmethod
+    def train_dataloader(self) -> DataLoader:
+        """
+        DataLoader for training dataset
+        """
+        pass
+    
+    @abstractmethod
+    def val_dataloader(self) -> DataLoader:
+        """
+        DataLoader for validation dataset
+        """
         pass
 
-    def setup(self, stage: str|None = None) -> None:
-        """
-        Split the data into train, validation, and test datasets.
-        This method is called on every GPU in distributed settings.
-        """
-        if self.raw_data is None:
-            self.raw_data = self.load_raw(**self.kwargs)
-        
-        if self.data is None:
-            self.data = self.process_raw(self.raw_data, **self.kwargs)
-
-        if self.train_data is None or self.val_data is None or self.test_data is None:
-            # Implement default splitting
-            total_size = len(self.data)
-            indices = list(range(total_size))
-            if self.shuffle:
-                random.shuffle(indices)
-
-            test_size = int(total_size * self.test_split)
-            val_size = int(total_size * self.val_split)
-            train_size = total_size - val_size - test_size
-
-            train_indices = indices[:train_size]
-            val_indices = indices[train_size:train_size + val_size]
-            test_indices = indices[train_size + val_size:]
-
-            # Create datasets using ListDataset
-            self.train_data = ListDataset([self.data[i] for i in train_indices])
-            self.val_data = ListDataset([self.data[i] for i in val_indices])
-            self.test_data = ListDataset([self.data[i] for i in test_indices])
-
-    def train_dataloader(self) -> DataLoader:
-        if self.train_data is None:
-            raise ValueError("train_data is not set.")
-        return DataLoader(
-            self.train_data,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=self.shuffle,
-            collate_fn=self.collate_fn,
-        )
-
-    def val_dataloader(self) -> DataLoader:
-        if self.val_data is None:
-            raise ValueError("val_data is not set.")
-        return DataLoader(
-            self.val_data,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=False,
-            collate_fn=self.collate_fn,
-        )
-
+    @abstractmethod
     def test_dataloader(self) -> DataLoader:
-        if self.test_data is None:
-            raise ValueError("test_data is not set.")
-        return DataLoader(
-            self.test_data,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=False,
-            collate_fn=self.collate_fn,
-        )
-        
-        
-## TODO: Load data and predict
+        """
+        DataLoader for test dataset
+        """
+        pass

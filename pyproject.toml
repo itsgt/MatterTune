@@ -11,6 +11,9 @@ numpy = "*"
 torch = "*"
 typing-extensions = "*"
 pytorch_lightning = "*"
+pydantic = "*"
+jaxtyping = "*"
+
 
 [build-system]
 requires = ["poetry-core"]

@@ -1,6 +1,6 @@
-from typing import Literal
+from typing import Literal, TypeAlias, Annotated
 from collections.abc import Iterable
-from pydantic import BaseModel, PositiveFloat, NonNegativeFloat
+from pydantic import BaseModel, PositiveFloat, NonNegativeFloat, Field
 from abc import ABC, abstractmethod
 import torch
 
@@ -36,6 +36,7 @@ class AdamConfig(OptimizerBaseConfig):
             lr=self.lr,
             eps=self.eps,
             betas=self.betas,
+            weight_decay=self.weight_decay,
             amsgrad=self.amsgrad,
         )
         
@@ -48,6 +49,8 @@ class AdamWConfig(OptimizerBaseConfig):
     """Betas."""
     weight_decay: NonNegativeFloat = 0.01
     """Weight decay."""
+    amsgrad: bool = False
+    """Whether to use AMSGrad variant of Adam."""
     
     def construct_optimizer(
         self,
@@ -59,6 +62,7 @@ class AdamWConfig(OptimizerBaseConfig):
             eps=self.eps,
             betas=self.betas,
             weight_decay=self.weight_decay,
+            amsgrad=self.amsgrad,
         )
         
         
@@ -85,29 +89,9 @@ class SGDConfig(OptimizerBaseConfig):
         )
         
         
-        
-## TODO: Consider a more generic approach to handle optimizers
-class GeneralOptimizerConfig(OptimizerBaseConfig):
-    optimizer_class: type
-    optimizer_params: dict
-
-    def construct_optimizer(
-        self,
-        parameters: Iterable[torch.nn.Parameter],
-    ):
-        return self.optimizer_class(
-            parameters,
-            **self.optimizer_params,
-        )
-
-# optimizer_config = GeneralOptimizerConfig(
-#     lr=0.001,
-#     optimizer_class=torch.optim.Adam,
-#     optimizer_params={
-#         'lr': 0.001,
-#         'betas': (0.9, 0.999),
-#         'eps': 1e-8,
-#         'weight_decay': 0.0,
-#     }
-# )
-
+OptimizerConfig: TypeAlias = Annotated[
+    AdamConfig | AdamWConfig | SGDConfig,
+    Field(
+        discriminator="name",
+    ),
+]

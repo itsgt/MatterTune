@@ -6,7 +6,7 @@ import torch.nn as nn
 from mattertune.protocol import TBatch, BackBoneBaseOutput
 
 
-class GOCBackBoneOutput(TypedDict):
+class GOCStyleBackBoneOutput(TypedDict):
     edeg_index_src: jt.Int[torch.Tensor, "num_edges_in_batch"]
     edge_index_dst: jt.Int[torch.Tensor, "num_edges_in_batch"]
     edge_vectors: jt.Float[torch.Tensor, "num_edges_in_batch 3"]
@@ -16,11 +16,3 @@ class GOCBackBoneOutput(TypedDict):
     energy_features: jt.Float[torch.Tensor, "num_nodes_in_batch energy_feature_dim"]
     force_features: jt.Float[torch.Tensor, "num_edges_in_batch force_feature_dim"]
     ## TODO: global features
-    
-
-class GOCBackBoneModule(Generic[TBatch], nn.Module, ABC):
-    def __init__(self, **kwargs) -> None:
-        super(GOCBackBoneModule, self).__init__(**kwargs)
-    
-    @abstractmethod
-    def forward(self, batch_data: TBatch) -> GOCBackBoneOutput: ...

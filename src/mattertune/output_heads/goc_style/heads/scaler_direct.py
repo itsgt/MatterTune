@@ -3,12 +3,13 @@ from typing_extensions import override
 import torch
 import torch.nn as nn
 from einops import rearrange
-from mattertune.protocol import TBatch, OutputHeadBaseConfig
+from mattertune.protocol import TBatch
+from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.finetune.loss import LossConfig, MAELossConfig
 from mattertune.output_heads.layers.mlp import MLP
 from mattertune.output_heads.layers.activation import get_activation_cls
 from mattertune.output_heads.goc_style.heads.utils.scatter_polyfill import scatter
-from mattertune.output_heads.goc_style.backbone_module import GOCBackBoneOutput
+from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
 
 
 class DirectScalerOutputHeadConfig(OutputHeadBaseConfig):
@@ -81,12 +82,12 @@ class DirectScalerOutputHead(nn.Module, Generic[TBatch]):
         self, 
         *,
         batch_data: TBatch,
-        backbone_output: GOCBackBoneOutput,
+        backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
         node_features = backbone_output["node_hidden_features"] ## [num_nodes_in_batch, hidden_dim]
         batch_idx = batch_data.batch
-        num_graphs = int(torch.max(batch_idx).item() + 1)
+        num_graphs = int(torch.max(batch_idx).detach().cpu().item() + 1)
         predicted_scaler = self.out_mlp(node_features) ## [num_nodes_in_batch, 1]
         if self.head_config.reduction == "none":
             predicted_scaler = rearrange(predicted_scaler, "n 1 -> n")
@@ -179,12 +180,12 @@ class DirectEnergyOutputHead(nn.Module, Generic[TBatch]):
         self, 
         *,
         batch_data: TBatch,
-        backbone_output: GOCBackBoneOutput,
+        backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
         energy_features = backbone_output["energy_features"] ## [num_nodes_in_batch, hidden_dim]
         batch_idx = batch_data.batch
-        num_graphs = int(torch.max(batch_idx).item() + 1)
+        num_graphs = int(torch.max(batch_idx).detach().cpu() + 1)
         predicted_scaler = self.out_mlp(energy_features) ## [num_nodes_in_batch, 1]
         scaler = scatter(
             predicted_scaler,
