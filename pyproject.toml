@@ -13,6 +13,10 @@ typing-extensions = "*"
 pytorch_lightning = "*"
 pydantic = "*"
 jaxtyping = "*"
+torch_scatter = "*"
+ase = "*"
+pymatgen = "*"
+torchmetrics = "*"
 
 
 [build-system]

@@ -132,7 +132,7 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TBatch, TFinetuneModuleConf
     def forward(
         self,
         batch: TBatch,
-    ):
+    ) -> dict[str, torch.Tensor]:
         
         with ExitStack() as stack:
             # Enter all the necessary contexts for output heads.

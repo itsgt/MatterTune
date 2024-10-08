@@ -129,7 +129,7 @@ def main(args_dict: dict):
     finetune_model = FinetuneModuleBase(finetune_config)
     
     ## Train Model
-    # csv_logger = CSVLogger(save_dir='./lightning_logs/', name='csv_logs')
+    csv_logger = CSVLogger(save_dir='./lightning_logs/', name='csv_logs')
     wandb_logger = WandbLogger(project=finetune_config.project, name=finetune_config.run_name)
     trainer = Trainer(
         max_epochs=1000,
@@ -139,9 +139,12 @@ def main(args_dict: dict):
         accelerator='gpu',  
         strategy='ddp', 
         precision="bf16-mixed",
-        logger=[wandb_logger],
+        logger=[wandb_logger, csv_logger],
     )
     trainer.fit(finetune_model, datamodule=data_module)
+    
+    ## bfgs = BatchBFGS([atoms1, atoms2], calc)
+    ## bfgs.run(step=100, fmax=0.01)
     
 
 if __name__ == "__main__":
