@@ -21,6 +21,7 @@ class JMPDataset(MatterTuneDatasetBase):
         training: bool = True,
         references: dict[str, ReferenceConfig] = {},
     ):
+        super().__init__()
         self.xyz_path = xyz_path
         self.indices = indices
         self.ignore_data_errors = ignore_data_errors
@@ -110,6 +111,7 @@ class JMPDataModule(MatterTuneDataModuleBase):
         self.xyz_path = xyz_path
         self.references = references
 
+    @override
     def setup(self, stage: str|None = None) -> None:
         # Set random seed to ensure consistency across different GPUs
         torch.manual_seed(42)
@@ -161,7 +163,7 @@ class JMPDataModule(MatterTuneDataModuleBase):
 
     @override
     def train_dataloader(self):
-        return self._create_dataloader(self.train_dataset, shuffle=True)
+        return self._create_dataloader(self.train_dataset, shuffle=self.shuffle)
 
     @override
     def val_dataloader(self):

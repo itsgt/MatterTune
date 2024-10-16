@@ -146,6 +146,7 @@ class ForceStressScaler(nn.Module):
             [pos, displacement],
             grad_outputs=torch.ones_like(energy),
             create_graph=True,
+            allow_unused=True,
         )
         forces_scaled = -1 * grad[0]
         assert forces_scaled.shape[1] == 3 and forces_scaled.shape[0] == pos.shape[0], f"forces_scaled.shape: {forces_scaled.shape}, pos.shape: {pos.shape}"

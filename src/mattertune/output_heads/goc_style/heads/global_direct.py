@@ -29,7 +29,7 @@ class GlobalScalerOutputHeadConfig(OutputHeadBaseConfig):
     ## New parameters:
     hidden_dim: int
     """The input hidden dim of output head"""
-    reduction: Literal["mean", "sum"] = "sum"
+    reduction: Literal["mean", "sum"] = "mean"
     """The reduction method for the output"""
     loss: LossConfig = MAELossConfig()
     """The loss function to use for the target"""
@@ -72,7 +72,7 @@ class GlobalBinaryClassificationOutputHeadConfig(OutputHeadBaseConfig):
     loss_coefficient: float = 1.0
     """The coefficient of the loss function"""
     ## New parameters:
-    reduction: Literal["mean", "sum"] = "sum"
+    reduction: Literal["mean", "sum"] = "mean"
     """The reduction method for the output"""
     pos_weight: float | None = None
     """The positive weight for the target"""
@@ -121,7 +121,7 @@ class GlobalMultiClassificationOutputHeadConfig(OutputHeadBaseConfig, Generic[TB
     loss_coefficient: float = 1.0
     """The coefficient of the loss function"""
     ## New parameters:
-    reduction: Literal["mean", "sum"] = "sum"
+    reduction: Literal["mean", "sum"] = "mean"
     """The reduction method for the output"""
     num_classes: int
     """Number of classes in the classification"""
@@ -134,7 +134,7 @@ class GlobalMultiClassificationOutputHeadConfig(OutputHeadBaseConfig, Generic[TB
     output_init: Literal["HeOrthogonal", "zeros", "grid", "loggrid"] = "HeOrthogonal"
     """Initialization method for the output layer."""
     activation: str
-
+    """Activation function to use for the output layer"""
     
     @override
     def is_classification(self) -> bool:
@@ -196,14 +196,14 @@ class GlobalScalerOutputHead(nn.Module, Generic[TBatch]):
         batch_idx = batch_data.batch
         num_graphs = int(torch.max(batch_idx).detach().cpu().item() + 1)
         node_features = backbone_output["node_hidden_features"]
-        predicted_scaler = self.out_mlp(node_features)
-        scaler = scatter(
-            predicted_scaler,
+        node_features = scatter(
+            node_features,
             batch_idx,
             dim=0,
             dim_size=num_graphs,
             reduce=self.head_config.reduction,
         )
+        scaler = self.out_mlp(node_features)
         assert scaler.shape == (num_graphs, 1), f"scaler.shape={scaler.shape} != [num_graphs, 1]"
         scaler = rearrange(scaler, "b 1 -> b")
         output_head_results[self.head_config.target_name] = scaler

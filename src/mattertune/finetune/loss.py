@@ -6,7 +6,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch_scatter import scatter
-from torchtyping import TensorType
 from typing_extensions import assert_never, override
 from pydantic import Field, BaseModel
 from typing import Generic

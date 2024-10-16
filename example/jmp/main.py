@@ -25,7 +25,7 @@ from pytorch_lightning.loggers import CSVLogger, WandbLogger
 import torch
 import argparse
 
-torch.set_float32_matmul_precision('medium')
+# torch.set_float32_matmul_precision('medium')
 
 
 def main(args_dict: dict):
@@ -137,7 +137,7 @@ def main(args_dict: dict):
         gradient_clip_algorithm="value",
         gradient_clip_val=1.0,
         accelerator='gpu',  
-        strategy='ddp', 
+        strategy='ddp', ## reduction of gradient for force gradient?
         precision="bf16-mixed",
         logger=[wandb_logger, csv_logger],
     )

@@ -99,8 +99,9 @@ class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
                 data.pos.requires_grad_(True)
 
             # 初始化 displacement 属性
+            num_graphs = int(torch.max(data.batch).item() + 1)
             data.cell_displacement = torch.zeros(
-                (len(data), 3, 3), dtype=data.pos.dtype, device=data.pos.device
+                (num_graphs, 3, 3), dtype=data.pos.dtype, device=data.pos.device
             )
             data.cell_displacement.requires_grad_(True)
 
@@ -183,7 +184,8 @@ class GradientStressOutputHead(nn.Module, Generic[TBatch]):
 
             volume = torch.linalg.det(batch_data.cell).abs()
             # tc.tassert(tc.Float[torch.Tensor, "bsz"], volume)
-            assert volume.shape == (len(batch_data),), f"volume.shape={volume.shape} != {(len(batch_data),)}"
+            num_graphs = int(torch.max(batch_data.batch).item() + 1)
+            assert volume.shape == (num_graphs,), f"volume.shape={volume.shape} != {(num_graphs,)}"
             assert torch.is_floating_point(volume), f"volume.dtype={volume.dtype}, expected floating point"
             stress = virial / rearrange(volume, "b -> b 1 1")
 

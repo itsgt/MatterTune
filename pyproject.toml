@@ -17,6 +17,9 @@ torch_scatter = "*"
 ase = "*"
 pymatgen = "*"
 torchmetrics = "*"
+einops = "*"
+e3nn = "*"
+wandb = "*"
 
 
 [build-system]

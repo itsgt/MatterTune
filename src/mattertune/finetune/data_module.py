@@ -72,7 +72,7 @@ ReferenceConfig: TypeAlias = Annotated[
 ]
 
 
-class MatterTuneDatasetBase(Dataset, ABC):
+class MatterTuneDatasetBase(Dataset, ABC, Generic[TData]):
     """
     Base class for MatterTune dataset
     """
@@ -81,7 +81,7 @@ class MatterTuneDatasetBase(Dataset, ABC):
         pass
 
     @abstractmethod
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> TData:
         pass
     
     

@@ -7,7 +7,6 @@ from pydantic import BaseModel
 from typing import Generic
 from mattertune.protocol import TBatch, BackBoneBaseConfig
 from mattertune.output_heads.base import OutputHeadBaseConfig
-from mattertune.finetune.utils import generate_random_id
 from mattertune.finetune.metrics import MetricsModuleConfig, MetricsModule
 from mattertune.finetune.optimizer import OptimizerConfig
 from mattertune.finetune.lr_scheduler import LRSchedulerConfig
