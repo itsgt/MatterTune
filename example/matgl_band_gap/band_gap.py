@@ -45,7 +45,7 @@ def main(args_dict:dict):
             material_id = material.material_id
             band_gap = material.band_gap
             structure = mpr.get_structure_by_material_id(material_id)
-            if structure is not None and band_gap>0.0:
+            if structure is not None and band_gap is not None and band_gap > 0.0:
                 structures.append(structure)
                 band_gaps.append(band_gap)
         print(f"{len(structures)} structures with band gaps > 0.0 loaded from MP.")
@@ -130,7 +130,7 @@ def main(args_dict:dict):
         gradient_clip_algorithm="value",
         gradient_clip_val=1.0,
         accelerator='gpu',  
-        strategy='ddp_find_unused_parameters_true',
+        strategy='ddp',
         precision="bf16-mixed",
         logger=[wandb_logger, csv_logger],
     )

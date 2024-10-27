@@ -133,6 +133,7 @@ class MatterTuneDataModuleBase(pl.LightningDataModule, Generic[TData, TBatch]):
             num_workers=self.num_workers,
             sampler=sampler,
             collate_fn=self.collate_fn,
+            pin_memory=True,
         )
     
     @abstractmethod

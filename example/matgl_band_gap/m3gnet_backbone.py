@@ -27,7 +27,10 @@ class M3GNetBackbone(BackBoneBaseModule, M3GNet):
     ):
         path = Path(path)
         fpaths = _get_file_paths(path, **kwargs)
-        return cls.load(fpaths, **kwargs)
+        backbone = cls.load(fpaths, **kwargs)
+        backbone.final_layer.requires_grad_(False)
+        
+        return backbone
         
     
     @override

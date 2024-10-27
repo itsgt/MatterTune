@@ -43,7 +43,7 @@ def main(args_dict: dict):
     
     ## Build FineTune Model
     backbone = JMPBackboneConfig(
-        ckpt_path="/nethome/lkong88/workspace/jmp-peft/checkpoints/jmp-s.pt",
+        ckpt_path="/net/csefiles/coc-fung-cluster/lingyu/checkpoints/jmp-s.pt",
         type="jmp_s",
         freeze = True,
         cutoffs=Cutoffs.from_constant(12.0),
@@ -63,24 +63,12 @@ def main(args_dict: dict):
             loss = loss.MACEHuberEnergyLossConfig(delta=0.01),
             loss_coefficient = 1.0,
         ),
-        # DirectForceOutputHeadConfig(
-        #     target_name="force",
-        #     hidden_dim=512,
-        #     activation="SiLU",
-        # ),
         GradientForceOutputHeadConfig(
             target_name="force",
             energy_target_name="energy",
             loss = loss.MACEHuberLossConfig(delta=0.01),
             loss_coefficient = 10.0,
         ),
-        # GradientStressOutputHeadConfig(
-        #     target_name="stress",
-        #     energy_target_name="energy",
-        #     forces = True,
-        #     loss = loss.HuberLossConfig(delta=0.01),
-        #     loss_coefficient = 0.1,
-        # )
     ]
     metrics_module = MetricsModuleConfig(
         metrics = [
@@ -94,11 +82,6 @@ def main(args_dict: dict):
                 metric_calculator=MAEMetric(),
                 normalize_by_num_atoms=False,
             ),
-            # MetricConfig(
-            #     target_name="stress",
-            #     metric_module=MAEMetric(),
-            #     normalize_by_num_atoms=False,
-            # ),
         ],
         primary_metric = MetricConfig(
                 target_name="force",
@@ -107,7 +90,7 @@ def main(args_dict: dict):
             ),
     )
     optimizer = AdamWConfig(
-        lr=8e-5,
+        lr=1e-3,
         weight_decay=0.01,
         amsgrad=False,
         betas=(0.9, 0.95),
@@ -124,7 +107,7 @@ def main(args_dict: dict):
         metrics_module=metrics_module,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
-        early_stopping_patience=None,
+        early_stopping_patience=200,
     )
     finetune_model = FinetuneModuleBase(finetune_config)
     
@@ -132,7 +115,7 @@ def main(args_dict: dict):
     csv_logger = CSVLogger(save_dir='./lightning_logs/', name='csv_logs')
     wandb_logger = WandbLogger(project=finetune_config.project, name=finetune_config.run_name)
     trainer = Trainer(
-        max_epochs=1000,
+        max_epochs=2000,
         devices = [1,2,3],
         gradient_clip_algorithm="value",
         gradient_clip_val=1.0,

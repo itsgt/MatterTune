@@ -4,6 +4,7 @@ Add some customizations to make it compatible with MatterTune
 """
 
 
+from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from typing_extensions import override
 from typing import TypedDict
 import torch
@@ -111,8 +112,8 @@ class MatglDataset(MatterTuneDatasetBase):
         super().__init__()
         self.include_line_graph = include_line_graph
         self.converter = converter
-        self.structures = structures or []
-        self.labels = labels or {}
+        self.structures = structures
+        self.labels = labels
         self.threebody_cutoff = threebody_cutoff
         self.directed_line_graph = directed_line_graph
         self.graph_labels = graph_labels
@@ -199,10 +200,12 @@ class MatglDataModule(MatterTuneDataModuleBase):
     def __init__(
         self,
         batch_size: int,
-        structures: list[Structure],
-        labels: dict[str, list],
-        threebody_cutoff: float,
         converter: GraphConverter,
+        structures: list[Structure] = [],
+        labels: dict[str, list] = {},
+        test_structures: list[Structure] = [],
+        test_labels: dict[str, list] = {},
+        threebody_cutoff: float = 4.0,
         include_line_graph: bool = False,
         directed_line_graph: bool = False,
         graph_labels: list[int | float] | None = None,
@@ -220,37 +223,51 @@ class MatglDataModule(MatterTuneDataModuleBase):
             shuffle=shuffle,
             ignore_data_errors=ignore_data_errors,
         )
-        self.structures = structures
-        self.labels = labels
         self.threebody_cutoff = threebody_cutoff
         self.converter = converter
         self.include_line_graph = include_line_graph
         self.directed_line_graph = directed_line_graph
         self.graph_labels = graph_labels
         
+        if len(test_structures) == 0:
+            ## Split data into train, val, and test
+            total_size = len(structures)
+            indices = list(range(total_size))
+            if self.shuffle:
+                random.shuffle(indices)
+
+            train_end = int(total_size * (1 - self.val_split - self.test_split))
+            val_end = int(total_size * (1 - self.test_split))
+
+            self.train_structures = [structures[i] for i in indices[:train_end]]
+            self.val_structures = [structures[i] for i in indices[train_end:val_end]]
+            self.test_structures = [structures[i] for i in indices[val_end:]]
+            
+            self.train_labels = {k: [v[i] for i in indices[:train_end]] for k, v in labels.items()}
+            self.val_labels = {k: [v[i] for i in indices[train_end:val_end]] for k, v in labels.items()}
+            self.test_labels = {k: [v[i] for i in indices[val_end:]] for k, v in labels.items()}
+        
+        else:
+            total_size = len(structures)
+            indices = list(range(total_size))
+            if self.shuffle:
+                random.shuffle(indices)
+
+            train_end = int(total_size * (1 - self.val_split))
+
+            self.train_structures = [structures[i] for i in indices[:train_end]]
+            self.val_structures = [structures[i] for i in indices[train_end:]]
+            self.test_structures = test_structures
+            
+            self.train_labels = {k: [v[i] for i in indices[:train_end]] for k, v in labels.items()}
+            self.val_labels = {k: [v[i] for i in indices[train_end:]] for k, v in labels.items()}
+            self.test_labels = test_labels
+        
     @override
     def setup(self, stage: str|None = None) -> None:
-        torch.manual_seed(42)
-        random.seed(42)
-        total_size = len(self.structures)
-        indices = list(range(total_size))
-        if self.shuffle:
-            random.shuffle(indices)
-
-        train_end = int(total_size * (1 - self.val_split - self.test_split))
-        val_end = int(total_size * (1 - self.test_split))
-
-        train_structures = [self.structures[i] for i in indices[:train_end]]
-        val_structures = [self.structures[i] for i in indices[train_end:val_end]]
-        test_structures = [self.structures[i] for i in indices[val_end:]]
-        
-        train_labels = {k: [v[i] for i in indices[:train_end]] for k, v in self.labels.items()}
-        val_labels = {k: [v[i] for i in indices[train_end:val_end]] for k, v in self.labels.items()}
-        test_labels = {k: [v[i] for i in indices[val_end:]] for k, v in self.labels.items()}
-        
         self.train_dataset = MatglDataset(
-            structures=train_structures,
-            labels=train_labels,
+            structures=self.train_structures,
+            labels=self.train_labels,
             threebody_cutoff=self.threebody_cutoff,
             converter=self.converter,
             include_line_graph=self.include_line_graph,
@@ -258,8 +275,8 @@ class MatglDataModule(MatterTuneDataModuleBase):
             graph_labels=self.graph_labels,
         )
         self.val_dataset = MatglDataset(
-            structures=val_structures,
-            labels=val_labels,
+            structures=self.val_structures,
+            labels=self.val_labels,
             threebody_cutoff=self.threebody_cutoff,
             converter=self.converter,
             include_line_graph=self.include_line_graph,
@@ -267,8 +284,8 @@ class MatglDataModule(MatterTuneDataModuleBase):
             graph_labels=self.graph_labels,
         )
         self.test_dataset = MatglDataset(
-            structures=test_structures,
-            labels=test_labels,
+            structures=self.test_structures,
+            labels=self.test_labels,
             threebody_cutoff=self.threebody_cutoff,
             converter=self.converter,
             include_line_graph=self.include_line_graph,
@@ -319,3 +336,16 @@ class MatglDataModule(MatterTuneDataModuleBase):
     @override
     def test_dataloader(self):
         return self._create_dataloader(self.test_dataset, shuffle=False)
+    
+    def get_predict_dataloader(self, structures: list[Structure]):
+        dataset = MatglDataset(
+            structures=structures,
+            labels={},
+            threebody_cutoff=self.threebody_cutoff,
+            converter=self.converter,
+            include_line_graph=self.include_line_graph,
+            directed_line_graph=self.directed_line_graph,
+            graph_labels=self.graph_labels,
+        )
+        return self._create_dataloader(dataset, shuffle=False)
+        

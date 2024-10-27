@@ -15,6 +15,7 @@ from pytorch_lightning.utilities.types import OptimizerLRSchedulerConfig
 from contextlib import ExitStack
 from typing_extensions import TypeVar, override, cast, Sequence
 import pytorch_lightning as pl
+from torch.utils.data import DataLoader
 
 
 class EarlyStoppingModule:
@@ -304,3 +305,54 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TBatch, TFinetuneModuleConf
                 self.output_heads[output_head_config.target_name].train()
                 for param in self.output_heads[output_head_config.target_name].parameters():
                     param.requires_grad = True
+
+    def predict(self, dataloader: DataLoader) -> dict[str, torch.Tensor]:
+        """
+        Run forward prediction on a given dataloader, with support for multi-GPU and accelerated predictions.
+
+        Args:
+            dataloader (DataLoader): The dataloader containing data for prediction.
+
+        Returns:
+            dict[str, torch.Tensor]: A dictionary where each key is an output head name, and the value is a concatenated tensor of predictions.
+        """
+        device = self.device  # Get the current device (supports multi-GPU setups)
+        all_predictions = {target_name: [] for target_name in self.output_heads.keys()}
+
+        for batch in dataloader:
+            batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}  # Move batch to appropriate device
+            output_head_results = self(batch)
+            for target_name, prediction in output_head_results.items():
+                all_predictions[target_name].append(prediction.cpu())
+
+        # Concatenate predictions for each output head
+        concatenated_predictions = {
+            target_name: torch.cat(predictions, dim=0)
+            for target_name, predictions in all_predictions.items()
+        }
+        return concatenated_predictions
+
+    def predict_distributed(self, dataloader: DataLoader) -> dict[str, torch.Tensor]:
+        """
+        Run forward prediction on a given dataloader with multi-GPU support using PyTorch Lightning's distributed prediction capabilities.
+
+        Args:
+            dataloader (DataLoader): The dataloader containing data for prediction.
+
+        Returns:
+            dict[str, torch.Tensor]: A dictionary where each key is an output head name, and the value is a concatenated tensor of predictions.
+        """
+        outputs = self.trainer.predict(self, dataloaders=dataloader)
+        all_predictions = {target_name: [] for target_name in self.output_heads.keys()}
+
+        # Collect predictions from all devices
+        for output in outputs:
+            for target_name, prediction in output.items():
+                all_predictions[target_name].append(prediction.cpu())
+
+        # Ensure predictions from all GPUs are combined correctly
+        concatenated_predictions = {
+            target_name: torch.cat([pred for pred_list in all_predictions[target_name] for pred in pred_list], dim=0).to(torch.float32)
+            for target_name in all_predictions.keys()
+        }
+        return concatenated_predictions
