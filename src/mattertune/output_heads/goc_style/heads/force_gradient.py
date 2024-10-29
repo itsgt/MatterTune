@@ -3,15 +3,15 @@ from typing_extensions import override
 import contextlib
 import torch
 import torch.nn as nn
-from mattertune.protocol import TBatch
+from mattertune.data_structures import TMatterTuneBatch
 from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.finetune.loss import LossConfig, L2MAELossConfig
 from mattertune.output_heads.goc_style.heads.utils.force_scaler import ForceScaler
 from mattertune.output_heads.goc_style.heads.utils.tensor_grad import enable_grad
-from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
+from mattertune.output_heads.goc_style.backbone_output import GOCStyleBackBoneOutput
 
 
-class GradientForceOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
+class GradientForceOutputHeadConfig(OutputHeadBaseConfig, Generic[TMatterTuneBatch]):
     """
     Configuration of the GradientForceOutputHead
     Compute force from the gradient of the energy with respect to the position
@@ -42,12 +42,12 @@ class GradientForceOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
     
     @override
     @contextlib.contextmanager
-    def model_forward_context(self, data: TBatch):
+    def model_forward_context(self, data: TMatterTuneBatch):
         with contextlib.ExitStack() as stack:
             enable_grad(stack)
 
-            if not data.pos.requires_grad:
-                data.pos.requires_grad_(True)
+            if not data.positions.requires_grad:
+                data.positions.requires_grad = True
             yield
 
     @override
@@ -55,7 +55,7 @@ class GradientForceOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
         return False
     
     
-class GradientForceOutputHead(nn.Module, Generic[TBatch]):
+class GradientForceOutputHead(nn.Module, Generic[TMatterTuneBatch]):
     """
     Compute force from the gradient of the energy with respect to the position
     """
@@ -69,17 +69,17 @@ class GradientForceOutputHead(nn.Module, Generic[TBatch]):
     def forward(
         self,
         *,
-        batch_data: TBatch,
+        batch_data: TMatterTuneBatch,
         backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
         energy = output_head_results[self.head_config.energy_target_name]
-        natoms_in_batch = batch_data.pos.shape[0]
+        natoms_in_batch = batch_data.positions.shape[0]
         assert energy.requires_grad, f"Energy tensor {self.head_config.energy_target_name} does not require grad"
-        assert batch_data.pos.requires_grad, "Position tensor does not require grad"
+        assert batch_data.positions.requires_grad, "Position tensor does not require grad"
         forces = self.force_scaler.calc_forces(
             energy,
-            batch_data.pos,
+            batch_data.positions,
         )
         assert forces.shape == (natoms_in_batch, 3), f"forces.shape={forces.shape} != [num_nodes_in_batch, 3]"
         output_head_results[self.head_config.target_name] = forces

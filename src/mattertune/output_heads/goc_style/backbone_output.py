@@ -3,7 +3,6 @@ from typing import TypedDict, Generic
 import jaxtyping as jt
 import torch
 import torch.nn as nn
-from mattertune.protocol import TBatch, BackBoneBaseOutput
 
 
 class GOCStyleBackBoneOutput(TypedDict):
@@ -15,4 +14,3 @@ class GOCStyleBackBoneOutput(TypedDict):
     edge_hidden_features: jt.Float[torch.Tensor, "num_edges_in_batch edge_hidden_dim"]
     energy_features: jt.Float[torch.Tensor, "num_nodes_in_batch energy_feature_dim"]
     force_features: jt.Float[torch.Tensor, "num_edges_in_batch force_feature_dim"]
-    ## TODO: global features

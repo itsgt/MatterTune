@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Generic, Literal, TypeAlias, Annotated
 from pydantic import BaseModel, Field
-from mattertune.protocol import TBatch
+from mattertune.data_structures import TMatterTuneBatch
 import torch
 import torch.nn as nn
 import torchmetrics
@@ -15,7 +15,7 @@ class _BaseMetrics(nn.Module, ABC):
     ) -> torch.Tensor: ...
     
 class MAEMetric(_BaseMetrics):
-    name : Literal["MAE"] = "MAE"
+    name: Literal["MAE"] = "MAE"
     def forward(
         self,
         pred: torch.Tensor,
@@ -82,7 +82,7 @@ class PrecisionMetric(_BaseMetrics):
             return torchmetrics.functional.precision(pred, target, task="multiclass", num_classes=self.num_classes)
 
 class RecallMetric(_BaseMetrics):
-    name: Literal["Recall"] = "Recall"
+    name:Literal["Recall"] = "Recall"
     def __init__(
         self,
        num_classes: int,
@@ -139,6 +139,12 @@ class MetricConfig(BaseModel):
     normalize_by_num_atoms: bool = False
     """Whether to normalize the metric by the number of atoms."""
     
+    def get_metric_name(self):
+        name = f"{self.target_name}-{self.metric_calculator.name}"
+        if self.normalize_by_num_atoms:
+            name += "-peratom"
+        return name
+    
 
 class MetricsModuleConfig(BaseModel):
     """
@@ -155,7 +161,7 @@ class MetricsModuleConfig(BaseModel):
         return MetricsModule(self)
     
     
-class MetricsModule(Generic[TBatch]):
+class MetricsModule(Generic[TMatterTuneBatch]):
     """
     Module to calculate metrics.
     """
@@ -168,37 +174,33 @@ class MetricsModule(Generic[TBatch]):
         ## check if primary metric is in metrics, if not, add it
         exist_check = False
         for metric in self.metrics:
-            if metric.target_name == self.primary_metric.target_name and \
-                metric.metric_calculator.name == self.primary_metric.metric_calculator.name and \
-                metric.normalize_by_num_atoms == self.primary_metric.normalize_by_num_atoms:
-                exist_check = True
+            if metric.get_metric_name() == self.primary_metric.get_metric_name():
                 break
         if not exist_check:
             self.metrics.append(self.primary_metric)
+            
+    def get_primary_metric_name(self):
+        return self.primary_metric.get_metric_name()
     
     def compute(
         self,
-        batch: TBatch,
+        batch: TMatterTuneBatch,
         output_head_results: dict[str, torch.Tensor],
     ) -> dict[str, float]:
         """
         Compute the metrics.
         """
+        batch_labels: dict[str, torch.Tensor] = batch.labels
         metric_results = {}
         for metric in self.metrics:
             pred = output_head_results[metric.target_name]
-            if not hasattr(batch, metric.target_name):
-                raise ValueError(f"Batch does not have the target {metric.target_name}.")
-            target = getattr(batch, metric.target_name)
-            assert isinstance(target, torch.Tensor), "Target must be a tensor."
-            assert pred.shape == target.shape, "Prediction and target shapes must match."
+            target = batch_labels[metric.target_name]
+            assert pred.shape == target.shape, f"Prediction and target shapes must match. For {metric.target_name}, got {pred.shape} and {target.shape}"
             if metric.normalize_by_num_atoms:
                 num_atoms = batch.num_atoms.reshape(-1, 1)
                 assert num_atoms.shape[0] == pred.shape[0], "Number of atoms must match the batch size"
                 pred = pred / num_atoms
                 target = target / num_atoms
-            metric_name = f"{metric.target_name}-{metric.metric_calculator.name}"
-            if metric.normalize_by_num_atoms:
-                metric_name += "-peratom"
+            metric_name = metric.get_metric_name()
             metric_results[metric_name] = metric.metric_calculator(pred, target).detach().cpu().item()
         return metric_results

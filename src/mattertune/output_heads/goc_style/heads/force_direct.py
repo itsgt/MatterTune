@@ -2,13 +2,13 @@ from typing import Literal, Generic
 from typing_extensions import override
 import torch
 import torch.nn as nn
-from mattertune.protocol import TBatch
+from mattertune.data_structures import TMatterTuneBatch
 from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.finetune.loss import LossConfig, L2MAELossConfig
 from mattertune.output_heads.layers.mlp import MLP
 from mattertune.output_heads.layers.activation import get_activation_cls
 from mattertune.output_heads.goc_style.heads.utils.scatter_polyfill import scatter
-from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
+from mattertune.output_heads.goc_style.backbone_output import GOCStyleBackBoneOutput
 
 
 class DirectForceOutputHeadConfig(OutputHeadBaseConfig):
@@ -53,7 +53,7 @@ class DirectForceOutputHeadConfig(OutputHeadBaseConfig):
             get_activation_cls(self.activation),
         )
         
-class DirectForceOutputHead(nn.Module, Generic[TBatch]):
+class DirectForceOutputHead(nn.Module, Generic[TMatterTuneBatch]):
     """
     Compute force components directly from the backbone output's edge features
     Without using gradients
@@ -79,14 +79,14 @@ class DirectForceOutputHead(nn.Module, Generic[TBatch]):
     def forward(
         self,
         *,
-        batch_data: TBatch,
+        batch_data: TMatterTuneBatch,
         backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ):
         force_feature:torch.Tensor = backbone_output["force_features"]
         edge_vectors:torch.Tensor = backbone_output["edge_vectors"]
         edge_index_dst:torch.Tensor = backbone_output["edge_index_dst"]
-        natoms_in_batch = batch_data.pos.shape[0]
+        natoms_in_batch = batch_data.positions.shape[0]
         forces_scale = self.out_mlp(force_feature)
         forces = forces_scale * edge_vectors
         forces = scatter(

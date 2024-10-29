@@ -12,7 +12,7 @@ from matgl.utils.cutoff import polynomial_cutoff
 from matgl.utils.io import _get_file_paths
 from typing_extensions import override
 import dgl
-from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
+from mattertune.output_heads.goc_style.backbone_output import GOCStyleBackBoneOutput
 from mattertune.protocol import BackBoneBaseConfig, BackBoneBaseModule
 from efs_data_module import BatchTypedDict
 

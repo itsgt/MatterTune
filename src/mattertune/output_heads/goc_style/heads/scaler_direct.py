@@ -3,13 +3,13 @@ from typing_extensions import override
 import torch
 import torch.nn as nn
 from einops import rearrange
-from mattertune.protocol import TBatch
+from mattertune.data_structures import TMatterTuneBatch
 from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.finetune.loss import LossConfig, MAELossConfig
 from mattertune.output_heads.layers.mlp import MLP
 from mattertune.output_heads.layers.activation import get_activation_cls
 from mattertune.output_heads.goc_style.heads.utils.scatter_polyfill import scatter
-from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
+from mattertune.output_heads.goc_style.backbone_output import GOCStyleBackBoneOutput
 
 
 class DirectScalerOutputHeadConfig(OutputHeadBaseConfig):
@@ -55,7 +55,7 @@ class DirectScalerOutputHeadConfig(OutputHeadBaseConfig):
             activation_cls=get_activation_cls(self.activation),
         )
         
-class DirectScalerOutputHead(nn.Module, Generic[TBatch]):
+class DirectScalerOutputHead(nn.Module, Generic[TMatterTuneBatch]):
     """
     The output head of the direct graph scaler.
     """
@@ -81,7 +81,7 @@ class DirectScalerOutputHead(nn.Module, Generic[TBatch]):
     def forward(
         self, 
         *,
-        batch_data: TBatch,
+        batch_data: TMatterTuneBatch,
         backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
@@ -153,7 +153,7 @@ class DirectEnergyOutputHeadConfig(OutputHeadBaseConfig):
             activation_cls=get_activation_cls(self.activation),
         )
         
-class DirectEnergyOutputHead(nn.Module, Generic[TBatch]):
+class DirectEnergyOutputHead(nn.Module, Generic[TMatterTuneBatch]):
     """
     The output head of the direct graph scaler.
     """
@@ -179,7 +179,7 @@ class DirectEnergyOutputHead(nn.Module, Generic[TBatch]):
     def forward(
         self, 
         *,
-        batch_data: TBatch,
+        batch_data: TMatterTuneBatch,
         backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:

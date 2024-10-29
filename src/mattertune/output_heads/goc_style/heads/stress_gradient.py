@@ -4,15 +4,15 @@ import contextlib
 import torch
 import torch.nn as nn
 from einops import rearrange
-from mattertune.protocol import TBatch
+from mattertune.data_structures import TMatterTuneBatch
 from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.finetune.loss import LossConfig, MAELossConfig
 from mattertune.output_heads.goc_style.heads.utils.force_scaler import ForceStressScaler
 from mattertune.output_heads.goc_style.heads.utils.tensor_grad import enable_grad
-from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
+from mattertune.output_heads.goc_style.backbone_output import GOCStyleBackBoneOutput
 
 
-class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
+class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TMatterTuneBatch]):
     r"""
     Description of this layer:
 
@@ -86,38 +86,38 @@ class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
 
     @override
     @contextlib.contextmanager
-    def model_forward_context(self, data: TBatch):
-        if not hasattr(data, "cell_displacement"):
+    def model_forward_context(self, data: TMatterTuneBatch):
+        if not hasattr(data, "strain"):
             raise ValueError(
-                "cell_displacement must be provided for GradientStressOutputHead, Can be all zeros"
+                "strain must be provided for GradientStressOutputHead, Can be all zeros"
             )
         
         with contextlib.ExitStack() as stack:
             enable_grad(stack)
 
-            if not data.pos.requires_grad:
-                data.pos.requires_grad_(True)
+            if not data.positions.requires_grad:
+                data.positions.requires_grad_(True)
 
             # 初始化 displacement 属性
             num_graphs = int(torch.max(data.batch).item() + 1)
-            data.cell_displacement = torch.zeros(
-                (num_graphs, 3, 3), dtype=data.pos.dtype, device=data.pos.device
+            data.strain = torch.zeros(
+                (num_graphs, 3, 3), dtype=data.positions.dtype, device=data.positions.device
             )
-            data.cell_displacement.requires_grad_(True)
+            data.strain.requires_grad_(True)
 
             symmetric_displacement = 0.5 * (
-                data.cell_displacement + data.cell_displacement.transpose(-1, -2)
+                data.strain + data.strain.transpose(-1, -2)
             )
 
             # 初始化 cell 属性
             if data.cell is None:
                 data.cell = torch.zeros(
-                    (3, 3), dtype=data.pos.dtype, device=data.pos.device
+                    (3, 3), dtype=data.positions.dtype, device=data.positions.device
                 )
                 data.cell.requires_grad_(True)
 
-            data.pos = data.pos + torch.bmm(
-                data.pos.unsqueeze(-2), symmetric_displacement[data.batch]
+            data.positions = data.positions + torch.bmm(
+                data.positions.unsqueeze(-2), symmetric_displacement[data.batch]
             ).squeeze(-2)
             data.cell = data.cell + torch.bmm(data.cell, symmetric_displacement)
 
@@ -128,7 +128,7 @@ class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
         return False
     
 
-class GradientStressOutputHead(nn.Module, Generic[TBatch]):
+class GradientStressOutputHead(nn.Module, Generic[TMatterTuneBatch]):
     """
     The output head of the gradient stress target.
     """
@@ -148,25 +148,25 @@ class GradientStressOutputHead(nn.Module, Generic[TBatch]):
     def forward(
         self, 
         *,
-        batch_data: TBatch,
+        batch_data: TMatterTuneBatch,
         backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
 
         # Displacement must be in data
-        cell_displacement = batch_data.cell_displacement
+        strain = batch_data.strain
         cell = batch_data.cell
         energy = output_head_results[self.head_config.energy_target_name]
-        if cell_displacement is None:
+        if strain is None:
             raise ValueError(
-                "cell_displacement must be provided for GradientStressOutputHead, but found None"
+                "strain must be provided for GradientStressOutputHead, but found None"
             )
         if cell is None:
             raise ValueError("cell must be provided for GradientStressOutputHead, but found None")
 
         if self.head_config.forces:
             forces, stress = self.force_stress_scaler.calc_forces_and_update(
-                energy, batch_data.pos, cell_displacement, cell
+                energy, batch_data.positions, strain, cell
             )
 
             # Store the forces in the input dict so that they can be used
@@ -175,7 +175,7 @@ class GradientStressOutputHead(nn.Module, Generic[TBatch]):
         else:
             grad = torch.autograd.grad(
                 energy,
-                [cell_displacement],
+                [strain],
                 grad_outputs=torch.ones_like(energy),
                 create_graph=self.training,
             )

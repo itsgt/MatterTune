@@ -1,47 +1,32 @@
-from backbone import JMPBackbone, JMPBackboneConfig
+from jmp_backbone import JMPBackboneConfig
 from jmppeft.utils.goc_graph import Cutoffs, MaxNeighbors
-from jmp_data_module import JMPDataModule
-from mattertune.finetune import (
-    FinetuneModuleBaseConfig, 
-    FinetuneModuleBase,
-)
-from mattertune.finetune.data_module import RidgeReferenceConfig
-from mattertune.finetune.metrics import MetricConfig, MAEMetric, MetricsModuleConfig
-from mattertune.finetune.optimizer import AdamConfig, AdamWConfig
-from mattertune.finetune.lr_scheduler import StepLRConfig, CosineAnnealingLRConfig
-import mattertune.finetune.loss as loss
-from mattertune.output_heads.goc_style.heads.scaler_referenced import (
+from mattertune.data_structures import RawEFSDataProviderFromXYZConfig
+from mattertune.output_heads.goc_style.heads import (
     ReferencedEnergyOutputHeadConfig,
     RandomReferenceInitializationConfig,
-    ZerosReferenceInitializationConfig,
+    GradientForceOutputHeadConfig
 )
-from mattertune.output_heads.goc_style.heads.force_gradient import GradientForceOutputHeadConfig
-from mattertune.output_heads.goc_style.heads.stress_gradient import GradientStressOutputHeadConfig
-from mattertune.output_heads.goc_style.heads.force_direct import DirectForceOutputHeadConfig
-from mattertune.output_heads.goc_style.heads.stress_direct import DirectStressOutputHeadConfig
+import mattertune.finetune.loss as loss
+from mattertune.finetune.metrics import MetricConfig, MAEMetric, MetricsModuleConfig
+from mattertune.finetune.optimizer import AdamWConfig
+from mattertune.finetune.lr_scheduler import StepLRConfig
+from mattertune.finetune.base import FinetuneModuleBase, FinetuneModuleBaseConfig
 from pytorch_lightning import Trainer
-from pytorch_lightning.strategies import DDPStrategy
 from pytorch_lightning.loggers import CSVLogger, WandbLogger
-import torch
-import argparse
-
-# torch.set_float32_matmul_precision('medium')
 
 
 def main(args_dict: dict):
-    ## Load DataModule
-    data_module = JMPDataModule(
-        batch_size=args_dict["batch_size"],
-        xyz_path=args_dict["xyz_path"],
-        num_workers=4,
-        val_split=0.485,
-        test_split=0.485,
+    ## Set DataProvider Config
+    data_provider = RawEFSDataProviderFromXYZConfig(
+        file_path=args_dict["xyz_path"],
+        val_split=(1-args_dict["train_split"])/2,
+        test_split=(1-args_dict["train_split"])/2,
         shuffle=True,
-        ignore_data_errors=True,
-        references={"energy": RidgeReferenceConfig(alpha=0.1)},
+        include_forces=True,
+        include_stress=False,
     )
     
-    ## Build FineTune Model
+    ## Set Backbone Config
     backbone = JMPBackboneConfig(
         ckpt_path="/net/csefiles/coc-fung-cluster/lingyu/checkpoints/jmp-s.pt",
         type="jmp_s",
@@ -52,6 +37,7 @@ def main(args_dict: dict):
         edge_dropout=None,
         per_graph_radius_graph=True,
     )
+    ## Set OutputHeads Config
     output_heads = [
         ReferencedEnergyOutputHeadConfig(
             target_name = "energy",
@@ -64,12 +50,13 @@ def main(args_dict: dict):
             loss_coefficient = 1.0,
         ),
         GradientForceOutputHeadConfig(
-            target_name="force",
+            target_name="forces",
             energy_target_name="energy",
             loss = loss.MACEHuberLossConfig(delta=0.01),
             loss_coefficient = 10.0,
         ),
     ]
+    ## Set MetricsModule Config
     metrics_module = MetricsModuleConfig(
         metrics = [
             MetricConfig(
@@ -78,17 +65,18 @@ def main(args_dict: dict):
                 normalize_by_num_atoms=True,
             ),
             MetricConfig(
-                target_name="force",
+                target_name="forces",
                 metric_calculator=MAEMetric(),
                 normalize_by_num_atoms=False,
             ),
         ],
         primary_metric = MetricConfig(
-                target_name="force",
+                target_name="forces",
                 metric_calculator=MAEMetric(),
                 normalize_by_num_atoms=False,
             ),
     )
+    ## Set Optimizer Config
     optimizer = AdamWConfig(
         lr=1e-3,
         weight_decay=0.01,
@@ -99,41 +87,47 @@ def main(args_dict: dict):
         step_size=50,
         gamma=0.95,
     )
+    
+    ## Setup FineTuneModule
     finetune_config = FinetuneModuleBaseConfig(
-        project="jmp-finetune-example",
-        run_name="water-ef-test",
+        project="MatterTune-Example",
+        run_name="jmp-water-ef",
         backbone=backbone,
         output_heads=output_heads,
         metrics_module=metrics_module,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
+        batch_size=args_dict["batch_size"],
+        num_workers=4,
+        ignore_data_errors = False,
         early_stopping_patience=200,
     )
-    finetune_model = FinetuneModuleBase(finetune_config)
+    finetune_model = FinetuneModuleBase(finetune_config, raw_data_provider=data_provider)
     
-    ## Train Model
-    csv_logger = CSVLogger(save_dir='./lightning_logs/', name='csv_logs')
+    ## Fit the model
     wandb_logger = WandbLogger(project=finetune_config.project, name=finetune_config.run_name)
     trainer = Trainer(
-        max_epochs=2000,
-        devices = [1,2,3],
+        max_epochs=args_dict["max_epochs"],
+        devices = args_dict["gpus"],
         gradient_clip_algorithm="value",
         gradient_clip_val=1.0,
         accelerator='gpu',  
         strategy='ddp', ## reduction of gradient for force gradient?
         precision="bf16-mixed",
-        logger=[wandb_logger, csv_logger],
+        logger=[wandb_logger],
+        default_root_dir="./checkpoints/water_ef",
     )
-    trainer.fit(finetune_model, datamodule=data_module)
+    trainer.fit(finetune_model)
+    trainer.test(finetune_model)
     
-    ## bfgs = BatchBFGS([atoms1, atoms2], calc)
-    ## bfgs.run(step=100, fmax=0.01)
-    
-
 if __name__ == "__main__":
+    import argparse
+    
     parser = argparse.ArgumentParser()
+    parser.add_argument("--max_epochs", type=int, default=2000)
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--xyz_path", type=str, default="./data/water_processed.xyz")
+    parser.add_argument("--gpus", type=int, nargs="+", default=[0,2,3])
+    parser.add_argument("--train_split", type=float, default=0.03)
     args_dict = vars(parser.parse_args())
     main(args_dict)
-    

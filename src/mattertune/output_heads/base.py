@@ -2,12 +2,12 @@ from abc import ABC, abstractmethod
 from typing import Generic, Literal
 import contextlib
 from pydantic import BaseModel
-from mattertune.protocol import TBatch
+from mattertune.data_structures import TMatterTuneBatch
 from mattertune.finetune.loss import LossConfig
 import torch.nn as nn
 
 
-class OutputHeadBaseConfig(BaseModel, ABC, Generic[TBatch]):
+class OutputHeadBaseConfig(BaseModel, ABC, Generic[TMatterTuneBatch]):
     """
     Base class for the configuration of the output head
     """
@@ -38,7 +38,7 @@ class OutputHeadBaseConfig(BaseModel, ABC, Generic[TBatch]):
         return 0
     
     @contextlib.contextmanager
-    def model_forward_context(self, data: TBatch):
+    def model_forward_context(self, data: TMatterTuneBatch):
         """
         Model forward context manager.
         Make preparations before the forward pass for the output head.

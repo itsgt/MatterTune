@@ -2,11 +2,11 @@ from typing import Literal, Generic
 from typing_extensions import override, assert_never
 import torch
 import torch.nn as nn
-from mattertune.protocol import TBatch
+from mattertune.data_structures import TMatterTuneBatch
 from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.finetune.loss import LossConfig, MAELossConfig
 from mattertune.output_heads.goc_style.heads.utils.rank2block import Rank2DecompositionEdgeBlock
-from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
+from mattertune.output_heads.goc_style.backbone_output import GOCStyleBackBoneOutput
 
 
 class DirectStressOutputHeadConfig(OutputHeadBaseConfig):
@@ -56,7 +56,7 @@ class DirectStressOutputHeadConfig(OutputHeadBaseConfig):
             hidden_dim=self.hidden_dim,
         )
 
-class DirectStressOutputHead(nn.Module, Generic[TBatch]):
+class DirectStressOutputHead(nn.Module, Generic[TMatterTuneBatch]):
     @override
     def __init__(
         self,
@@ -79,7 +79,7 @@ class DirectStressOutputHead(nn.Module, Generic[TBatch]):
     def forward(
         self, 
         *,
-        batch_data: TBatch,
+        batch_data: TMatterTuneBatch,
         backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:

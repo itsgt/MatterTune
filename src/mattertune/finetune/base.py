@@ -1,52 +1,23 @@
 import torch
 import torch.nn as nn
 import torchmetrics
-from torchmetrics import MeanAbsoluteError, MeanSquaredError, CosineSimilarity, Accuracy, Precision, Recall, F1Score
+from ase import Atoms
 from abc import ABC, abstractmethod
 from pydantic import BaseModel
 from typing import Generic
-from mattertune.protocol import TBatch, BackBoneBaseConfig
+from mattertune.data_structures import TMatterTuneData, TMatterTuneBatch, RawDataProviderBaseConfig, MatterTuneDataSetBase
+from mattertune.finetune.backbone import BackBoneBaseConfig
 from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.finetune.metrics import MetricsModuleConfig, MetricsModule
 from mattertune.finetune.optimizer import OptimizerConfig
 from mattertune.finetune.lr_scheduler import LRSchedulerConfig
-from mattertune.finetune.data_module import MatterTuneDataModuleBase
-from pytorch_lightning.utilities.types import OptimizerLRSchedulerConfig
+from pytorch_lightning.utilities.types import EVAL_DATALOADERS, OptimizerLRSchedulerConfig
+from pytorch_lightning.trainer.states import TrainerFn
 from contextlib import ExitStack
 from typing_extensions import TypeVar, override, cast, Sequence
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader
-
-
-class EarlyStoppingModule:
-    """
-    A module to handle early stopping based on a primary metric.
-    """
-    def __init__(
-        self,
-        patience: int,
-        min_delta: float,
-        mode: str = "min",
-    ):
-        self.patience = patience
-        self.min_delta = min_delta
-        self.mode = mode
-        self.best_metric = None
-        self.wait = 0
-        self.perform_early_stop = False
-
-    def update(self, current_metric: float) -> None:
-        if self.best_metric is None:
-            self.best_metric = current_metric
-        else:
-            if (self.mode == "min" and current_metric < self.best_metric - self.min_delta) or \
-               (self.mode == "max" and current_metric > self.best_metric + self.min_delta):
-                self.best_metric = current_metric
-                self.wait = 0
-            else:
-                self.wait += 1
-                if self.wait >= self.patience:
-                    self.perform_early_stop = True
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from torch.utils.data import DataLoader, DistributedSampler
 
 
 class FinetuneModuleBaseConfig(BaseModel):
@@ -64,6 +35,12 @@ class FinetuneModuleBaseConfig(BaseModel):
     """Optimizer."""
     lr_scheduler: LRSchedulerConfig
     """Learning Rate Scheduler"""
+    batch_size: int
+    """Batch size."""
+    num_workers: int = 0
+    """Number of workers for data loading."""
+    pin_memory: bool = True
+    """Whether to pin memory for data loading."""
     ignore_data_errors: bool = True
     """Whether to ignore data processing errors during training."""
     early_stopping_patience: int|None
@@ -77,19 +54,21 @@ class FinetuneModuleBaseConfig(BaseModel):
 TFinetuneModuleConfig = TypeVar("TFinetuneModuleConfig", bound=FinetuneModuleBaseConfig)
 
 
-class FinetuneModuleBase(pl.LightningModule, Generic[TBatch, TFinetuneModuleConfig]):
+class FinetuneModuleBase(pl.LightningModule, Generic[TMatterTuneBatch, TFinetuneModuleConfig]):
     """
     Finetune module base class. Heritate from pytorch_lightning.LightningModule.
     """
     def __init__(
         self,
         config: TFinetuneModuleConfig,
+        raw_data_provider: RawDataProviderBaseConfig|None = None,
     ):
         super().__init__()
         self.config = config
+        self.raw_data_provider = raw_data_provider
         self.backbone = config.backbone.construct_backbone()
-        assert len(config.output_heads) > 0, "At least one output head is required."
         
+        assert len(config.output_heads) > 0, "At least one output head is required."
         ## Put Energy Head First, and Put Stress Head before Force Head
         energy_output_heads = []
         force_output_heads = []
@@ -114,24 +93,110 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TBatch, TFinetuneModuleConf
         self.metrics_module = config.metrics_module.construct_metrics_module()
         self._freeze_backbone_and_output_heads()
         trainable_params = [p for p in self.parameters() if p.requires_grad]
-        if not trainable_params:
+        if len(trainable_params) == 0:
             raise ValueError("No parameters require gradients. Please ensure that some parts of the model are trainable.")
         
-        # Initialize EarlyStoppingModule if enabled
-        if config.early_stopping_patience is not None:
-            self.early_stopping = EarlyStoppingModule(
-                patience=config.early_stopping_patience,
-                min_delta=config.early_stopping_min_delta,
-                mode=config.early_stopping_mode,
+        self.save_hyperparameters(ignore=["raw_data_provider"])
+        
+    def configure_callbacks(self) -> list[pl.Callback]:
+        """
+        Configure callbacks for the trainer.
+        """
+        callbacks = []
+        primary_metric_name = self.metrics_module.get_primary_metric_name()
+        
+        # Setup checkpoint callback
+        checkpoint_callback = ModelCheckpoint(
+            dirpath=self.trainer.default_root_dir,  # use default root dir
+            filename=f"best-{self.config.run_name}-{{epoch:02d}}-{{val_loss:.2f}}",
+            save_top_k=1,
+            monitor=f"val/{primary_metric_name}",  # monitor primary metric
+            mode=self.config.early_stopping_mode,
+            save_last=True,  # always save the last checkpoint
+        )
+        callbacks.append(checkpoint_callback)
+        
+        # Setup early stopping callback if enabled
+        if self.config.early_stopping_patience is not None:
+            early_stopping_callback = EarlyStopping(
+                monitor=f"val/{primary_metric_name}",
+                min_delta=self.config.early_stopping_min_delta,
+                patience=self.config.early_stopping_patience,
+                mode=self.config.early_stopping_mode,
+                verbose=True
             )
-            self.primary_metric_mean = torchmetrics.MeanMetric()
+            callbacks.append(early_stopping_callback)
+        
+        return callbacks
+        
+            
+    def setup(self, stage: str):
+        """
+        Setup the model for training, validation, and testing.
+        Here backbone's process_raw() method is called to process the raw data.
+        """
+        if stage in (TrainerFn.FITTING, TrainerFn.VALIDATING):
+            if self.raw_data_provider is None:
+                raise ValueError("Raw data provider is required for training and validation.")
+            data_provider = self.raw_data_provider.build_provider()
+            train_raw_data, train_labels = data_provider.get_train_data()
+            val_raw_data, val_labels = data_provider.get_val_data()
+            train_data_list = [self.backbone.process_raw(atoms=atoms, idx = i, labels=labels, inference=False) for i, (atoms, labels) in enumerate(zip(train_raw_data, train_labels))]
+            val_data_list = [self.backbone.process_raw(atoms=atoms, idx = i, labels=labels, inference=False) for i, (atoms, labels) in enumerate(zip(val_raw_data, val_labels))]
+            self.train_dataset = MatterTuneDataSetBase(train_data_list)
+            self.val_dataset = MatterTuneDataSetBase(val_data_list)
+        elif stage == TrainerFn.TESTING:
+            if self.raw_data_provider is None:
+                raise ValueError("Raw data provider is required for testing.")
+            data_provider = self.raw_data_provider.build_provider()
+            test_raw_data, test_labels = data_provider.get_test_data()
+            test_data_list = [self.backbone.process_raw(atoms=atoms, idx = i, labels=labels, inference=False) for i, (atoms, labels) in enumerate(zip(test_raw_data, test_labels))]
+            self.test_dataset = MatterTuneDataSetBase(test_data_list)
+        elif stage == TrainerFn.PREDICTING:
+            ## We are not going to build predict dataset here
+            pass
         else:
-            self.early_stopping = None
-            self.primary_metric_mean = None
+            raise ValueError(f"Invalid stage: {stage}")
+        
+    def train_dataloader(self):
+        sampler = DistributedSampler(self.train_dataset) if self.trainer and self.trainer.num_devices > 1 else None
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.config.batch_size,
+            shuffle=(sampler is None) and True,
+            num_workers=self.config.num_workers,
+            collate_fn=self.backbone.collate_fn,
+            sampler=sampler,
+            pin_memory=self.config.pin_memory,
+        )
+    
+    def val_dataloader(self):
+        sampler = DistributedSampler(self.val_dataset) if self.trainer and self.trainer.num_devices > 1 else None
+        return DataLoader(
+            self.val_dataset,
+            batch_size=self.config.batch_size,
+            shuffle=(sampler is None) and False,
+            num_workers=self.config.num_workers,
+            collate_fn=self.backbone.collate_fn,
+            sampler=sampler,
+            pin_memory=self.config.pin_memory,
+        )
+        
+    def test_dataloader(self):
+        sampler = DistributedSampler(self.test_dataset) if self.trainer and self.trainer.num_devices > 1 else None
+        return DataLoader(
+            self.test_dataset,
+            batch_size=self.config.batch_size,
+            shuffle=(sampler is None) and False,
+            num_workers=self.config.num_workers,
+            collate_fn=self.backbone.collate_fn,
+            sampler=sampler,
+            pin_memory=self.config.pin_memory,
+        )
     
     def forward(
         self,
-        batch: TBatch,
+        batch: TMatterTuneBatch,
     ) -> dict[str, torch.Tensor]:
         
         with ExitStack() as stack:
@@ -149,7 +214,7 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TBatch, TFinetuneModuleConf
                     print(f"Error in forward pass: {e}")
             else:
                 batch = self.backbone.process_batch_under_grad(batch, training=True)
-
+                
             backbone_output = self.backbone(batch)
             output_head_results = {}
 
@@ -166,7 +231,7 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TBatch, TFinetuneModuleConf
     @override
     def training_step(
         self,
-        batch: TBatch,
+        batch: TMatterTuneBatch,
         batch_idx: int,
     ):
         output_head_results = self(batch)
@@ -175,12 +240,11 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TBatch, TFinetuneModuleConf
         loss_sum = None
         loss_results: dict[str, float] = {}
         batch_size = int(torch.max(batch.batch).detach().cpu().item() + 1)
+        batch_labels = batch.labels
         for output_head_config in self.config.output_heads:
             target_name = output_head_config.target_name
             pred = output_head_results[target_name]
-            if not hasattr(batch, target_name):
-                raise ValueError(f"Target {target_name} not found in batch.")
-            target = getattr(batch, target_name)
+            target = batch_labels[target_name]
             loss = output_head_config.loss.compute(pred, target, batch)
             if hasattr(output_head_config, "loss_coefficient"):
                 loss_coefficient = output_head_config.loss_coefficient
@@ -217,7 +281,7 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TBatch, TFinetuneModuleConf
     @override
     def validation_step(
         self,
-        batch: TBatch,
+        batch: TMatterTuneBatch,
         batch_idx: int,
     ):
         output_head_results = self(batch)
@@ -229,30 +293,14 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TBatch, TFinetuneModuleConf
         for metric_name, metric_value in metrics_results.items():
             self.log(f"val/{metric_name}", metric_value, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, batch_size=batch_size)
             
-        # Track primary metric for early stopping if enabled
-        if self.early_stopping is not None and self.primary_metric_mean is not None:
-            primary_metric_name = self.config.metrics_module.primary_metric.target_name+"-"+self.config.metrics_module.primary_metric.metric_calculator.name
-            if self.config.metrics_module.primary_metric.normalize_by_num_atoms:
-                primary_metric_name += "-peratom"
-            primary_metric_value = metrics_results[primary_metric_name]
-            self.primary_metric_mean.update(primary_metric_value)
-            self.log("val/primary_metric", primary_metric_value, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
-            
     @override
     def on_validation_epoch_end(self):
-        # Early stopping check
-        if self.early_stopping is not None and self.primary_metric_mean is not None:
-            primary_metric_avg = self.primary_metric_mean.compute()
-            self.early_stopping.update(primary_metric_avg.detach().cpu().item())
-            self.primary_metric_mean.reset()
-            if self.early_stopping.perform_early_stop:
-                self.trainer.should_stop = True
         return super().on_validation_epoch_end()
         
     @override
     def test_step(
         self,
-        batch: TBatch,
+        batch: TMatterTuneBatch,
         batch_idx: int,
     ):
         output_head_results = self(batch)
@@ -263,6 +311,16 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TBatch, TFinetuneModuleConf
         batch_size = int(torch.max(batch.batch).detach().cpu().item() + 1)
         for metric_name, metric_value in metrics_results.items():
             self.log(f"test/{metric_name}", metric_value, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, batch_size=batch_size)
+            
+    @override
+    def predict_step(
+        self,
+        batch: TMatterTuneBatch,
+        batch_idx: int,
+    ) -> dict[str, torch.Tensor]:
+        output_head_results = self(batch)
+        output_head_results["idx"] = batch.idx
+        return output_head_results
     
     @override
     def on_test_epoch_end(self):
@@ -305,54 +363,3 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TBatch, TFinetuneModuleConf
                 self.output_heads[output_head_config.target_name].train()
                 for param in self.output_heads[output_head_config.target_name].parameters():
                     param.requires_grad = True
-
-    def predict(self, dataloader: DataLoader) -> dict[str, torch.Tensor]:
-        """
-        Run forward prediction on a given dataloader, with support for multi-GPU and accelerated predictions.
-
-        Args:
-            dataloader (DataLoader): The dataloader containing data for prediction.
-
-        Returns:
-            dict[str, torch.Tensor]: A dictionary where each key is an output head name, and the value is a concatenated tensor of predictions.
-        """
-        device = self.device  # Get the current device (supports multi-GPU setups)
-        all_predictions = {target_name: [] for target_name in self.output_heads.keys()}
-
-        for batch in dataloader:
-            batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}  # Move batch to appropriate device
-            output_head_results = self(batch)
-            for target_name, prediction in output_head_results.items():
-                all_predictions[target_name].append(prediction.cpu())
-
-        # Concatenate predictions for each output head
-        concatenated_predictions = {
-            target_name: torch.cat(predictions, dim=0)
-            for target_name, predictions in all_predictions.items()
-        }
-        return concatenated_predictions
-
-    def predict_distributed(self, dataloader: DataLoader) -> dict[str, torch.Tensor]:
-        """
-        Run forward prediction on a given dataloader with multi-GPU support using PyTorch Lightning's distributed prediction capabilities.
-
-        Args:
-            dataloader (DataLoader): The dataloader containing data for prediction.
-
-        Returns:
-            dict[str, torch.Tensor]: A dictionary where each key is an output head name, and the value is a concatenated tensor of predictions.
-        """
-        outputs = self.trainer.predict(self, dataloaders=dataloader)
-        all_predictions = {target_name: [] for target_name in self.output_heads.keys()}
-
-        # Collect predictions from all devices
-        for output in outputs:
-            for target_name, prediction in output.items():
-                all_predictions[target_name].append(prediction.cpu())
-
-        # Ensure predictions from all GPUs are combined correctly
-        concatenated_predictions = {
-            target_name: torch.cat([pred for pred_list in all_predictions[target_name] for pred in pred_list], dim=0).to(torch.float32)
-            for target_name in all_predictions.keys()
-        }
-        return concatenated_predictions

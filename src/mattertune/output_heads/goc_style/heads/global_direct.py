@@ -4,13 +4,13 @@ import contextlib
 import torch
 import torch.nn as nn
 from einops import rearrange
-from mattertune.protocol import TBatch
+from mattertune.data_structures import TMatterTuneBatch
 from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.finetune.loss import LossConfig, MAELossConfig
 from mattertune.output_heads.layers.mlp import MLP
 from mattertune.output_heads.layers.activation import get_activation_cls
 from mattertune.output_heads.goc_style.heads.utils.scatter_polyfill import scatter
-from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
+from mattertune.output_heads.goc_style.backbone_output import GOCStyleBackBoneOutput
 
 
 class GlobalScalerOutputHeadConfig(OutputHeadBaseConfig):
@@ -106,7 +106,7 @@ class GlobalBinaryClassificationOutputHeadConfig(OutputHeadBaseConfig):
         return 2
         
 
-class GlobalMultiClassificationOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
+class GlobalMultiClassificationOutputHeadConfig(OutputHeadBaseConfig):
     """
     Configuration of the GlobalMultiClassificationOutputHead
     Compute a global multi classification output from the backbone output
@@ -163,7 +163,7 @@ class GlobalMultiClassificationOutputHeadConfig(OutputHeadBaseConfig, Generic[TB
         return self.num_classes
         
 
-class GlobalScalerOutputHead(nn.Module, Generic[TBatch]):
+class GlobalScalerOutputHead(nn.Module, Generic[TMatterTuneBatch]):
     r"""
     Compute a global scalar output from the backbone output
     """
@@ -189,7 +189,7 @@ class GlobalScalerOutputHead(nn.Module, Generic[TBatch]):
     def forward(
         self,
         *,
-        batch_data: TBatch,
+        batch_data: TMatterTuneBatch,
         backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ):
@@ -210,7 +210,7 @@ class GlobalScalerOutputHead(nn.Module, Generic[TBatch]):
         return scaler
     
 
-class GlobalBinaryClassificationOutputHead(nn.Module, Generic[TBatch]):
+class GlobalBinaryClassificationOutputHead(nn.Module, Generic[TMatterTuneBatch]):
     """
     Compute a global binary classification output from the backbone output
     """
@@ -236,7 +236,7 @@ class GlobalBinaryClassificationOutputHead(nn.Module, Generic[TBatch]):
     def forward(
         self,
         *,
-        batch_data: TBatch,
+        batch_data: TMatterTuneBatch,
         backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ):
@@ -257,7 +257,7 @@ class GlobalBinaryClassificationOutputHead(nn.Module, Generic[TBatch]):
         return logits
     
 
-class GlobalMultiClassificationOutputHead(nn.Module, Generic[TBatch]):
+class GlobalMultiClassificationOutputHead(nn.Module, Generic[TMatterTuneBatch]):
     """
     Compute a global multi classification output from the backbone output
     """
@@ -289,7 +289,7 @@ class GlobalMultiClassificationOutputHead(nn.Module, Generic[TBatch]):
     def forward(
         self,
         *,
-        batch_data: TBatch,
+        batch_data: TMatterTuneBatch,
         backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ):
