@@ -4,7 +4,10 @@ This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 """
 
+from __future__ import annotations
+
 import logging
+
 import torch
 import torch.nn as nn
 from einops import rearrange
@@ -149,14 +152,22 @@ class ForceStressScaler(nn.Module):
             allow_unused=True,
         )
         forces_scaled = -1 * grad[0]
-        assert forces_scaled.shape[1] == 3 and forces_scaled.shape[0] == pos.shape[0], f"forces_scaled.shape: {forces_scaled.shape}, pos.shape: {pos.shape}"
-        assert torch.is_floating_point(forces_scaled), f"forces_scaled.dtype: {forces_scaled.dtype}, should be float"
+        assert (
+            forces_scaled.shape[1] == 3 and forces_scaled.shape[0] == pos.shape[0]
+        ), f"forces_scaled.shape: {forces_scaled.shape}, pos.shape: {pos.shape}"
+        assert torch.is_floating_point(
+            forces_scaled
+        ), f"forces_scaled.dtype: {forces_scaled.dtype}, should be float"
         virial_scaled = grad[1]
         forces, virial = self.unscale(forces_scaled, virial_scaled)
 
         volume = torch.linalg.det(cell).abs()
-        assert volume.shape[0] == cell.shape[0], f"volume.shape: {volume.shape}, cell.shape: {cell.shape}"
-        assert torch.is_floating_point(volume), f"volume.dtype: {volume.dtype}, should be float"
+        assert (
+            volume.shape[0] == cell.shape[0]
+        ), f"volume.shape: {volume.shape}, cell.shape: {cell.shape}"
+        assert torch.is_floating_point(
+            volume
+        ), f"volume.dtype: {volume.dtype}, should be float"
         stress = virial / rearrange(volume, "b -> b 1 1")
 
         return forces, stress
@@ -188,7 +199,9 @@ class ForceStressScaler(nn.Module):
                     #     found_nans_or_infs
                     # )
                     # ^ (world_size, 1)
-                    found_nans_or_infs = bool(found_nans_or_infs.any().detach().cpu().item())
+                    found_nans_or_infs = bool(
+                        found_nans_or_infs.any().detach().cpu().item()
+                    )
 
                 if found_nans_or_infs:
                     self.finite_force_stress_results = 0
@@ -213,7 +226,7 @@ class ForceStressScaler(nn.Module):
                 self.update()
         else:
             forces, stress = self.calc_forces(energy, pos, displacement, cell)
-        
+
         return forces, stress
 
     def update(self):

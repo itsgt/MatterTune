@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing_extensions import override
-from typing import Literal, TypeAlias, Annotated
-from pydantic import BaseModel, Field
+from typing import Annotated, Literal, TypeAlias
+
 import torch
+from pydantic import BaseModel, Field
+from typing_extensions import override
 
 
 class LRSchedulerBaseConfig(BaseModel, ABC):

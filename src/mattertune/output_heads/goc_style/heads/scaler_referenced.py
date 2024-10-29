@@ -1,35 +1,34 @@
-from typing import Annotated, Literal, TypeAlias, Generic
-from typing_extensions import override
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from pydantic import Field
+from typing import Annotated, Generic, Literal, TypeAlias
+
 import pandas as pd
 import torch
 import torch.nn as nn
 from einops import rearrange
-from mattertune.protocol import TBatch
-from mattertune.output_heads.base import OutputHeadBaseConfig
+from pydantic import BaseModel, Field
+from typing_extensions import override
+
 from mattertune.finetune.loss import LossConfig, MAELossConfig
-from mattertune.output_heads.layers.mlp import MLP
-from mattertune.output_heads.layers.activation import get_activation_cls
-from mattertune.output_heads.goc_style.heads.utils.scatter_polyfill import scatter
+from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
-from pydantic import BaseModel
+from mattertune.output_heads.goc_style.heads.utils.scatter_polyfill import scatter
+from mattertune.output_heads.layers.activation import get_activation_cls
+from mattertune.output_heads.layers.mlp import MLP
+from mattertune.protocol import TBatch
 
 
 class ReferenceInitializationConfigBase(ABC, BaseModel):
     @abstractmethod
-    def initialize(
-        self, max_atomic_number: int
-    ) -> torch.Tensor: ...
+    def initialize(self, max_atomic_number: int) -> torch.Tensor: ...
 
 
 class ZerosReferenceInitializationConfig(ReferenceInitializationConfigBase):
     name: Literal["zeros"] = "zeros"
 
     @override
-    def initialize(
-        self, max_atomic_number: int
-    ) -> torch.Tensor:
+    def initialize(self, max_atomic_number: int) -> torch.Tensor:
         return torch.zeros((max_atomic_number + 1, 1))
 
 
@@ -37,9 +36,7 @@ class RandomReferenceInitializationConfig(ReferenceInitializationConfigBase):
     name: Literal["random"] = "random"
 
     @override
-    def initialize(
-        self, max_atomic_number: int
-    ) -> torch.Tensor:
+    def initialize(self, max_atomic_number: int) -> torch.Tensor:
         return torch.randn((max_atomic_number + 1, 1))
 
 
@@ -48,14 +45,14 @@ class MPElementalReferenceInitializationConfig(ReferenceInitializationConfigBase
     name: Literal["mp_elemental"] = "mp_elemental"
 
     @override
-    def initialize(
-        self, max_atomic_number: int
-    ) -> torch.Tensor:
+    def initialize(self, max_atomic_number: int) -> torch.Tensor:
         from matbench_discovery.data import DATA_FILES
         from pymatgen.core import Element
         from pymatgen.entries.computed_entries import ComputedEntry
 
-        raise NotImplementedError("This method has a bug, it will be fixed in the future.")
+        raise NotImplementedError(
+            "This method has a bug, it will be fixed in the future."
+        )
         references = torch.zeros((max_atomic_number + 1, 1))
 
         for elem_str, entry in (
@@ -76,12 +73,14 @@ ReferenceInitializationConfig: TypeAlias = Annotated[
     Field(discriminator="name"),
 ]
 
+
 class ReferencedScalerOutputHeadConfig(OutputHeadBaseConfig):
     """
     Configuration of the ReferencedScalerOutputHead
     For example:
     e_i = f(x_i) + r_{Z_i}, where f is the output layer and r is the reference.
     """
+
     ## Paramerters heritated from OutputHeadBaseConfig:
     pred_type: Literal["scalar", "vector", "tensor", "classification"] = "scalar"
     """The prediction type of the output head"""
@@ -126,11 +125,13 @@ class ReferencedScalerOutputHeadConfig(OutputHeadBaseConfig):
             hidden_dim=self.hidden_dim,
             activation_cls=get_activation_cls(self.activation),
         )
-        
+
+
 class ReferencedScalerOutputHead(nn.Module, Generic[TBatch]):
     """
     The output head of the direct graph scaler.
     """
+
     def __init__(
         self,
         head_config: ReferencedScalerOutputHeadConfig,
@@ -138,7 +139,7 @@ class ReferencedScalerOutputHead(nn.Module, Generic[TBatch]):
         activation_cls: type[nn.Module],
     ):
         super(ReferencedScalerOutputHead, self).__init__()
-        
+
         self.head_config = head_config
         self.hidden_dim = hidden_dim
         self.activation_cls = activation_cls
@@ -155,18 +156,22 @@ class ReferencedScalerOutputHead(nn.Module, Generic[TBatch]):
         ), f"{self.references.weight.shape=} != {(head_config.max_atomic_number + 1, 1)}"
 
     def forward(
-        self, 
+        self,
         *,
         batch_data: TBatch,
         backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
-        node_features = backbone_output["node_hidden_features"] ## [num_nodes_in_batch, hidden_dim]
+        node_features = backbone_output[
+            "node_hidden_features"
+        ]  ## [num_nodes_in_batch, hidden_dim]
         atomic_numbers = batch_data.atomic_numbers
         batch_idx = batch_data.batch
         num_graphs = int(torch.max(batch_idx).detach().cpu().item() + 1)
-        predicted_scaler = self.out_mlp(node_features) ## [num_nodes_in_batch, 1]
-        predicted_reference = self.references(atomic_numbers) ## [num_nodes_in_batch, 1]
+        predicted_scaler = self.out_mlp(node_features)  ## [num_nodes_in_batch, 1]
+        predicted_reference = self.references(
+            atomic_numbers
+        )  ## [num_nodes_in_batch, 1]
         predicted_scaler = predicted_scaler + predicted_reference
         if self.head_config.reduction == "none":
             predicted_scaler = rearrange(predicted_scaler, "n 1 -> n")
@@ -179,11 +184,11 @@ class ReferencedScalerOutputHead(nn.Module, Generic[TBatch]):
                 dim=0,
                 dim_size=num_graphs,
                 reduce=self.head_config.reduction,
-            ) ## [batch_size, 1]
+            )  ## [batch_size, 1]
             scaler = rearrange(scaler, "b 1 -> b")
             output_head_results[self.head_config.target_name] = scaler
             return scaler
-        
+
 
 class ReferencedEnergyOutputHeadConfig(OutputHeadBaseConfig):
     """
@@ -191,7 +196,8 @@ class ReferencedEnergyOutputHeadConfig(OutputHeadBaseConfig):
     For example:
     e_i = f(x_i) + r_{Z_i}, where f is the output layer and r is the reference.
     """
-    ## Paramerters heritated from OutputHeadBaseConfig: 
+
+    ## Paramerters heritated from OutputHeadBaseConfig:
     pred_type: Literal["scalar", "vector", "tensor", "classification"] = "scalar"
     """The prediction type of the output head"""
     target_name: str = "referenced_scaler"
@@ -231,7 +237,9 @@ class ReferencedEnergyOutputHeadConfig(OutputHeadBaseConfig):
         """
         Construct the output head and return it.
         """
-        assert self.reduction != "none", "The reduction can't be none for ReferencedEnergyOutputHead, choose 'mean' or 'sum'"
+        assert (
+            self.reduction != "none"
+        ), "The reduction can't be none for ReferencedEnergyOutputHead, choose 'mean' or 'sum'"
         if self.hidden_dim is None:
             raise ValueError("hidden_dim must be provided for DirectScalerOutputHead")
         return ReferencedEnergyOutputHead(
@@ -239,11 +247,13 @@ class ReferencedEnergyOutputHeadConfig(OutputHeadBaseConfig):
             hidden_dim=self.hidden_dim,
             activation_cls=get_activation_cls(self.activation),
         )
-        
+
+
 class ReferencedEnergyOutputHead(nn.Module, Generic[TBatch]):
     """
     The output head of the direct graph scaler.
     """
+
     def __init__(
         self,
         head_config: ReferencedEnergyOutputHeadConfig,
@@ -251,7 +261,7 @@ class ReferencedEnergyOutputHead(nn.Module, Generic[TBatch]):
         activation_cls: type[nn.Module],
     ):
         super(ReferencedEnergyOutputHead, self).__init__()
-        
+
         self.head_config = head_config
         self.hidden_dim = hidden_dim
         self.activation_cls = activation_cls
@@ -268,18 +278,22 @@ class ReferencedEnergyOutputHead(nn.Module, Generic[TBatch]):
         ), f"{self.references.weight.shape=} != {(head_config.max_atomic_number + 1, 1)}"
 
     def forward(
-        self, 
+        self,
         *,
         batch_data: TBatch,
         backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
-        energy_features = backbone_output["energy_features"] ## [num_nodes_in_batch, hidden_dim]
+        energy_features = backbone_output[
+            "energy_features"
+        ]  ## [num_nodes_in_batch, hidden_dim]
         atomic_numbers = batch_data.atomic_numbers
         batch_idx = batch_data.batch
         num_graphs = int(torch.max(batch_idx).detach().cpu().item() + 1)
-        predicted_scaler = self.out_mlp(energy_features) ## [num_nodes_in_batch, 1]
-        predicted_reference = self.references(atomic_numbers) ## [num_nodes_in_batch, 1]
+        predicted_scaler = self.out_mlp(energy_features)  ## [num_nodes_in_batch, 1]
+        predicted_reference = self.references(
+            atomic_numbers
+        )  ## [num_nodes_in_batch, 1]
         predicted_scaler = predicted_scaler + predicted_reference
         scaler = scatter(
             predicted_scaler,
@@ -287,8 +301,11 @@ class ReferencedEnergyOutputHead(nn.Module, Generic[TBatch]):
             dim=0,
             dim_size=num_graphs,
             reduce=self.head_config.reduction,
-        ) ## [batch_size, 1]
-        assert scaler.shape == (num_graphs, 1), f"energy_scaler.shape={scaler.shape} != [(batch_size, 1)]"
+        )  ## [batch_size, 1]
+        assert scaler.shape == (
+            num_graphs,
+            1,
+        ), f"energy_scaler.shape={scaler.shape} != [(batch_size, 1)]"
         scaler = rearrange(scaler, "b 1 -> b")
         output_head_results[self.head_config.target_name] = scaler
         return scaler

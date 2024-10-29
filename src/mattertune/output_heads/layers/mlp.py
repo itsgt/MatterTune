@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import copy
 from collections.abc import Callable, Sequence
-from typing_extensions import override
 from typing import Literal, Protocol, runtime_checkable
+
 import torch
 import torch.nn as nn
+from typing_extensions import override
+
 
 class ScaledSiLU(nn.Module):
     def __init__(self):
@@ -14,16 +18,19 @@ class ScaledSiLU(nn.Module):
     def forward(self, x):
         return self._activation(x) * self.scale_factor
 
+
 @runtime_checkable
 class LinearModuleConstructor(Protocol):
     def __call__(
         self, in_features: int, out_features: int, bias: bool = True
     ) -> nn.Module: ...
 
+
 class ResidualSequential(nn.Sequential):
     @override
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         return input + super().forward(input)
+
 
 def MLP(
     dims: Sequence[int],

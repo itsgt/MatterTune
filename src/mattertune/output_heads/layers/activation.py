@@ -1,5 +1,7 @@
-import torch
+from __future__ import annotations
+
 import torch.nn as nn
+
 
 class ScaledSiLU(nn.Module):
     def __init__(self):
@@ -9,8 +11,8 @@ class ScaledSiLU(nn.Module):
 
     def forward(self, x):
         return self._activation(x) * self.scale_factor
-    
-    
+
+
 def get_activation_cls(activation: str) -> type[nn.Module]:
     """
     Get the activation class from the activation name

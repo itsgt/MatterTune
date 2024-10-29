@@ -1,15 +1,24 @@
-import torch
+from __future__ import annotations
+
+from functools import partial
+
 import torch.nn as nn
-from torch_geometric.data.data import BaseData
-from typing import Generic
-from typing_extensions import override, cast
 from jmppeft.models.gemnet.backbone import GOCBackboneOutput
+from jmppeft.utils.goc_graph import (
+    Cutoffs,
+    Graph,
+    MaxNeighbors,
+    generate_graph,
+    subselect_graph,
+    tag_mask,
+)
+from load_pretrain import load_pretrain
+from torch_geometric.data.data import BaseData
+from torch_geometric.utils import dropout_edge
+from typing_extensions import cast, override
+
 from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
 from mattertune.protocol import BackBoneBaseConfig, BackBoneBaseModule
-from load_pretrain import load_pretrain
-from jmppeft.utils.goc_graph import generate_graph, MaxNeighbors, Cutoffs, subselect_graph, tag_mask, Graph
-from torch_geometric.utils import dropout_edge
-from functools import partial
 
 
 class JMPBackbone(BackBoneBaseModule, nn.Module):
@@ -20,7 +29,7 @@ class JMPBackbone(BackBoneBaseModule, nn.Module):
         cutoffs: Cutoffs,
         max_neighbors: MaxNeighbors,
         qint_tags: list,
-        edge_dropout: float|None = None,
+        edge_dropout: float | None = None,
         pbc: bool = True,
         per_graph_radius_graph: bool = False,
     ):
@@ -34,7 +43,7 @@ class JMPBackbone(BackBoneBaseModule, nn.Module):
         self.edge_dropout = edge_dropout
         self.pbc = pbc
         self.per_graph_radius_graph = per_graph_radius_graph
-    
+
     @classmethod
     @override
     def load_backbone(
@@ -44,22 +53,29 @@ class JMPBackbone(BackBoneBaseModule, nn.Module):
         cutoffs: Cutoffs,
         max_neighbors: MaxNeighbors,
         qint_tags: list,
-        edge_dropout: float|None = None,
+        edge_dropout: float | None = None,
         per_graph_radius_graph: bool = False,
     ):
         backbone, embedding = load_pretrain(
             model_type=type,
             ckpt_path=path,
         )
-        return JMPBackbone(embedding, backbone, cutoffs, max_neighbors, qint_tags, edge_dropout, per_graph_radius_graph)
-        
+        return JMPBackbone(
+            embedding,
+            backbone,
+            cutoffs,
+            max_neighbors,
+            qint_tags,
+            edge_dropout,
+            per_graph_radius_graph,
+        )
+
     @override
     def forward(self, batch: BaseData) -> GOCStyleBackBoneOutput:
-        
         atomic_numbers = batch.atomic_numbers.long() - 1
         h = self.embedding(atomic_numbers)
         out = cast(GOCBackboneOutput, self.backbone(batch, h=h))
-        
+
         output = {
             "edge_index_src": out["idx_s"],
             "edge_index_dst": out["idx_t"],
@@ -71,7 +87,7 @@ class JMPBackbone(BackBoneBaseModule, nn.Module):
             "force_features": out["forces"],
         }
         return cast(GOCStyleBackBoneOutput, output)
-    
+
     @override
     def process_batch_under_grad(self, batch: BaseData, training: bool) -> BaseData:
         aint_graph = generate_graph(
@@ -111,7 +127,7 @@ class JMPBackbone(BackBoneBaseModule, nn.Module):
                 setattr(batch, f"{graph_type}_{key}", value)
 
         return batch
-    
+
     def process_aint_graph(self, graph: Graph, *, training: bool):
         if self.edge_dropout:
             graph["edge_index"], mask = dropout_edge(
@@ -136,9 +152,17 @@ class JMPBackboneConfig(BackBoneBaseConfig):
     cutoffs: Cutoffs
     max_neighbors: MaxNeighbors
     qint_tags: list
-    edge_dropout: float|None = None
-    per_graph_radius_graph: bool = False,
-    
+    edge_dropout: float | None = None
+    per_graph_radius_graph: bool = (False,)
+
     @override
     def construct_backbone(self) -> JMPBackbone:
-        return JMPBackbone.load_backbone(self.ckpt_path, self.type, self.cutoffs, self.max_neighbors, self.qint_tags, self.edge_dropout, self.per_graph_radius_graph)
+        return JMPBackbone.load_backbone(
+            self.ckpt_path,
+            self.type,
+            self.cutoffs,
+            self.max_neighbors,
+            self.qint_tags,
+            self.edge_dropout,
+            self.per_graph_radius_graph,
+        )

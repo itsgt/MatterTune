@@ -1,14 +1,18 @@
-from typing import Literal, Generic
-from typing_extensions import override
+from __future__ import annotations
+
+from typing import Generic, Literal
+
 import torch
 import torch.nn as nn
-from mattertune.protocol import TBatch
+from typing_extensions import override
+
+from mattertune.finetune.loss import L2MAELossConfig, LossConfig
 from mattertune.output_heads.base import OutputHeadBaseConfig
-from mattertune.finetune.loss import LossConfig, L2MAELossConfig
-from mattertune.output_heads.layers.mlp import MLP
-from mattertune.output_heads.layers.activation import get_activation_cls
-from mattertune.output_heads.goc_style.heads.utils.scatter_polyfill import scatter
 from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
+from mattertune.output_heads.goc_style.heads.utils.scatter_polyfill import scatter
+from mattertune.output_heads.layers.activation import get_activation_cls
+from mattertune.output_heads.layers.mlp import MLP
+from mattertune.protocol import TBatch
 
 
 class DirectForceOutputHeadConfig(OutputHeadBaseConfig):
@@ -16,6 +20,7 @@ class DirectForceOutputHeadConfig(OutputHeadBaseConfig):
     Configuration of the DirectForceTarget
     Compute force directly from the output layer
     """
+
     ## Paramerters heritated from OutputHeadBaseConfig:
     pred_type: Literal["scalar", "vector", "tensor", "classification"] = "vector"
     """The prediction type of the output head"""
@@ -36,7 +41,7 @@ class DirectForceOutputHeadConfig(OutputHeadBaseConfig):
     """The loss function to use for the target"""
     activation: str
     """Activation function to use for the output layer"""
-    
+
     @override
     def is_classification(self) -> bool:
         return False
@@ -52,12 +57,14 @@ class DirectForceOutputHeadConfig(OutputHeadBaseConfig):
             self.hidden_dim,
             get_activation_cls(self.activation),
         )
-        
+
+
 class DirectForceOutputHead(nn.Module, Generic[TBatch]):
     """
     Compute force components directly from the backbone output's edge features
     Without using gradients
     """
+
     @override
     def __init__(
         self,
@@ -66,15 +73,15 @@ class DirectForceOutputHead(nn.Module, Generic[TBatch]):
         activation_cls,
     ):
         super(DirectForceOutputHead, self).__init__()
-        
+
         self.head_config = head_config
         self.hidden_dim = hidden_dim
-        
+
         self.out_mlp = MLP(
             ([self.hidden_dim] * self.head_config.num_layers) + [1],
             activation_cls=activation_cls,
         )
-    
+
     @override
     def forward(
         self,
@@ -83,9 +90,9 @@ class DirectForceOutputHead(nn.Module, Generic[TBatch]):
         backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ):
-        force_feature:torch.Tensor = backbone_output["force_features"]
-        edge_vectors:torch.Tensor = backbone_output["edge_vectors"]
-        edge_index_dst:torch.Tensor = backbone_output["edge_index_dst"]
+        force_feature: torch.Tensor = backbone_output["force_features"]
+        edge_vectors: torch.Tensor = backbone_output["edge_vectors"]
+        edge_index_dst: torch.Tensor = backbone_output["edge_index_dst"]
         natoms_in_batch = batch_data.pos.shape[0]
         forces_scale = self.out_mlp(force_feature)
         forces = forces_scale * edge_vectors
@@ -96,6 +103,9 @@ class DirectForceOutputHead(nn.Module, Generic[TBatch]):
             dim_size=natoms_in_batch,
             reduce=self.head_config.reduction,
         )
-        assert forces.shape == (natoms_in_batch, 3), f"forces.shape={forces.shape} != [num_nodes_in_batch, 3]"
+        assert forces.shape == (
+            natoms_in_batch,
+            3,
+        ), f"forces.shape={forces.shape} != [num_nodes_in_batch, 3]"
         output_head_results[self.head_config.target_name] = forces
         return forces

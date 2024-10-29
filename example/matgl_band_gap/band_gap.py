@@ -1,42 +1,38 @@
-from m3gnet_backbone import M3GNetBackbone, M3GNetBackboneConfig
-from bandgap_data_module import MatglDataModule
-from mp_api.client import MPRester
-import numpy as np
-from matgl.config import DEFAULT_ELEMENTS
-from matgl.ext.pymatgen import Structure2Graph, get_element_list
-from mattertune.finetune import (
-    FinetuneModuleBaseConfig, 
-    FinetuneModuleBase,
-)
-from mattertune.finetune.data_module import RidgeReferenceConfig
-from mattertune.finetune.metrics import MetricConfig, MAEMetric, MetricsModuleConfig
-from mattertune.finetune.optimizer import AdamConfig, AdamWConfig
-from mattertune.finetune.lr_scheduler import StepLRConfig, CosineAnnealingLRConfig
-import mattertune.finetune.loss as loss
-from mattertune.output_heads.goc_style.heads.scaler_referenced import (
-    ReferencedEnergyOutputHeadConfig,
-    RandomReferenceInitializationConfig,
-    ZerosReferenceInitializationConfig,
-)
-from mattertune.output_heads.goc_style.heads.force_gradient import GradientForceOutputHeadConfig
-from mattertune.output_heads.goc_style.heads.stress_gradient import GradientStressOutputHeadConfig
-from mattertune.output_heads.goc_style.heads.force_direct import DirectForceOutputHeadConfig
-from mattertune.output_heads.goc_style.heads.stress_direct import DirectStressOutputHeadConfig
-from mattertune.output_heads.goc_style.heads.global_direct import GlobalScalerOutputHeadConfig
-from pytorch_lightning import Trainer
-from pytorch_lightning.strategies import DDPStrategy
-from pytorch_lightning.loggers import CSVLogger, WandbLogger
-import torch
+from __future__ import annotations
+
 import argparse
 
+from bandgap_data_module import MatglDataModule
+from m3gnet_backbone import M3GNetBackboneConfig
+from matgl.ext.pymatgen import Structure2Graph, get_element_list
+from mp_api.client import MPRester
+from pytorch_lightning import Trainer
+from pytorch_lightning.loggers import CSVLogger, WandbLogger
 
-def main(args_dict:dict):
+import mattertune.finetune.loss as loss
+from mattertune.finetune import (
+    FinetuneModuleBase,
+    FinetuneModuleBaseConfig,
+)
+from mattertune.finetune.lr_scheduler import StepLRConfig
+from mattertune.finetune.metrics import MAEMetric, MetricConfig, MetricsModuleConfig
+from mattertune.finetune.optimizer import AdamWConfig
+from mattertune.output_heads.goc_style.heads.global_direct import (
+    GlobalScalerOutputHeadConfig,
+)
+
+
+def main(args_dict: dict):
     # TODO: use matbench
-    
+
     api_key = "m6MxOKC4V7487mjSRrhHYFayktrzUCJW"
     with MPRester(api_key) as mpr:
         search_results = mpr.summary.search(
-            fields=["material_id", "formula_pretty", "band_gap",],
+            fields=[
+                "material_id",
+                "formula_pretty",
+                "band_gap",
+            ],
         )
         materials_data = list(search_results)
         structures = []
@@ -52,7 +48,7 @@ def main(args_dict:dict):
         labels = {
             "band_gap": band_gaps,
         }
-        
+
     ## Build DataModule
     element_types = get_element_list(structures)
     converter = Structure2Graph(element_types=element_types, cutoff=args_dict["cutoff"])
@@ -70,7 +66,7 @@ def main(args_dict:dict):
         shuffle=True,
         ignore_data_errors=True,
     )
-    
+
     ## Build FineTune Model
     backbone = M3GNetBackboneConfig(
         path="M3GNet-MP-2021.2.8-PES",
@@ -78,26 +74,26 @@ def main(args_dict:dict):
     )
     output_heads = [
         GlobalScalerOutputHeadConfig(
-            target_name = "band_gap",
-            hidden_dim = 64,
+            target_name="band_gap",
+            hidden_dim=64,
             activation="SiLU",
-            loss = loss.MACEHuberEnergyLossConfig(delta=0.01),
+            loss=loss.MACEHuberEnergyLossConfig(delta=0.01),
             reduction="mean",
         )
     ]
     metrics_module = MetricsModuleConfig(
-        metrics = [
+        metrics=[
             MetricConfig(
                 target_name="band_gap",
                 metric_calculator=MAEMetric(),
                 normalize_by_num_atoms=False,
             ),
         ],
-        primary_metric = MetricConfig(
-                target_name="band_gap",
-                metric_calculator=MAEMetric(),
-                normalize_by_num_atoms=False,
-            ),
+        primary_metric=MetricConfig(
+            target_name="band_gap",
+            metric_calculator=MAEMetric(),
+            normalize_by_num_atoms=False,
+        ),
     )
     optimizer = AdamWConfig(
         lr=1e-3,
@@ -120,22 +116,24 @@ def main(args_dict:dict):
         early_stopping_patience=None,
     )
     finetune_model = FinetuneModuleBase(finetune_config)
-    
+
     ## Train Model
-    csv_logger = CSVLogger(save_dir='./lightning_logs/', name='csv_logs')
-    wandb_logger = WandbLogger(project=finetune_config.project, name=finetune_config.run_name)
+    csv_logger = CSVLogger(save_dir="./lightning_logs/", name="csv_logs")
+    wandb_logger = WandbLogger(
+        project=finetune_config.project, name=finetune_config.run_name
+    )
     trainer = Trainer(
         max_epochs=args_dict["max_epochs"],
-        devices = args_dict["devices"],
+        devices=args_dict["devices"],
         gradient_clip_algorithm="value",
         gradient_clip_val=1.0,
-        accelerator='gpu',  
-        strategy='ddp',
+        accelerator="gpu",
+        strategy="ddp",
         precision="bf16-mixed",
         logger=[wandb_logger, csv_logger],
     )
     trainer.fit(finetune_model, datamodule=data_module)
-    
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

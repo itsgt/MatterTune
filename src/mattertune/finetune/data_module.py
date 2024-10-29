@@ -1,12 +1,21 @@
+from __future__ import annotations
+
+import logging
 from abc import ABC, abstractmethod
-from mattertune.protocol import TBatch, TData
-from typing import Generic, TypeAlias, Annotated, Literal
-from torch.utils.data import Dataset, DataLoader, DistributedSampler
-import pytorch_lightning as pl
-from pydantic import Field, BaseModel
+from typing import Annotated, Any, Generic, Literal, TypeAlias
+
 import jaxtyping as jt
 import numpy as np
+import pytorch_lightning as pl
+from pydantic import BaseModel, Field
+from torch.utils.data import DataLoader, Dataset, DistributedSampler, IterableDataset
 from typing_extensions import final, override
+
+from mattertune.protocol import TBatch, TData
+
+from .data.util import IterableDatasetWrapper, MapDatasetWrapper
+
+log = logging.getLogger(__name__)
 
 
 class BaseReferenceConfig(BaseModel, ABC):
@@ -76,6 +85,7 @@ class MatterTuneDatasetBase(Dataset, ABC, Generic[TData]):
     """
     Base class for MatterTune dataset
     """
+
     @abstractmethod
     def __len__(self) -> int:
         pass
@@ -83,13 +93,13 @@ class MatterTuneDatasetBase(Dataset, ABC, Generic[TData]):
     @abstractmethod
     def __getitem__(self, idx) -> TData:
         pass
-    
-    
-    
+
+
 class MatterTuneDataModuleBase(pl.LightningDataModule, Generic[TData, TBatch]):
     """
     The base class for MatterTune data modules.
     """
+
     def __init__(
         self,
         batch_size: int,
@@ -116,16 +126,57 @@ class MatterTuneDataModuleBase(pl.LightningDataModule, Generic[TData, TBatch]):
         Split the data into train, validation, and test datasets
         """
         pass
-    
-    @abstractmethod
-    def collate_fn(self, data_list: list[TData]) -> TBatch:
-        """
-        Collate function for the DataLoader
-        """
-        pass
-    
+
+    @property
+    def data_transform(self):
+        if self.trainer is None:
+            log.warning("The trainer is not set. The collate function will not be set.")
+            return None
+
+        from .base import FinetuneModuleBase
+
+        if not isinstance(lm := self.trainer.lightning_module, FinetuneModuleBase):
+            log.warning(
+                "The model is not a MatterTune model. The collate function will not be set."
+            )
+            return None
+
+        return lm.data_transform
+
+    def _wrap_dataset(self, dataset: Any):
+        if (data_transform := self.data_transform) is None:
+            return dataset
+
+        if isinstance(dataset, IterableDataset):
+            return IterableDatasetWrapper(dataset, data_transform)
+        elif isinstance(dataset, Dataset):
+            return MapDatasetWrapper(dataset, data_transform)
+        else:
+            raise ValueError(f"Unsupported dataset type: {type(dataset)}")
+
+    @property
+    def collate_fn(self):
+        if self.trainer is None:
+            log.warning("The trainer is not set. The collate function will not be set.")
+            return None
+
+        from .base import FinetuneModuleBase
+
+        if not isinstance(lm := self.trainer.lightning_module, FinetuneModuleBase):
+            log.warning(
+                "The model is not a MatterTune model. The collate function will not be set."
+            )
+            return None
+
+        return lm.collate_fn
+
     def _create_dataloader(self, dataset, shuffle: bool) -> DataLoader:
-        sampler = DistributedSampler(dataset) if self.trainer and self.trainer.num_devices > 1 else None
+        dataset = self._wrap_dataset(dataset)
+        sampler = (
+            DistributedSampler(dataset)
+            if self.trainer and self.trainer.num_devices > 1
+            else None
+        )
         return DataLoader(
             dataset,
             batch_size=self.batch_size,
@@ -135,14 +186,14 @@ class MatterTuneDataModuleBase(pl.LightningDataModule, Generic[TData, TBatch]):
             collate_fn=self.collate_fn,
             pin_memory=True,
         )
-    
+
     @abstractmethod
     def train_dataloader(self) -> DataLoader:
         """
         DataLoader for training dataset
         """
         pass
-    
+
     @abstractmethod
     def val_dataloader(self) -> DataLoader:
         """

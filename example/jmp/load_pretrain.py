@@ -1,16 +1,18 @@
+from __future__ import annotations
+
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
-import os
+
 import nshtrainer as nt
-import nshutils as nu
 from jmppeft.configs.finetune.jmp_l import jmp_l_ft_config_
 from jmppeft.configs.finetune.jmp_s import jmp_s_ft_config_
+from jmppeft.datasets import mptrj_hf
+from jmppeft.datasets.mptrj_hf import MPTrjDatasetFromXYZConfig
 from jmppeft.modules import loss
 from jmppeft.tasks.config import AdamWConfig
 from jmppeft.tasks.finetune import base, output_head
-from jmppeft.datasets.mptrj_hf import MPTrjDatasetFromXYZConfig
-from jmppeft.datasets import mptrj_hf
 from jmppeft.tasks.finetune import matbench_discovery as M
 from jmppeft.utils.param_specific_util import (
     make_parameter_specific_optimizer_config,
@@ -36,14 +38,16 @@ def load_pretrain(model_type: str, ckpt_path: str):
             )
             config.meta["jmp_kind"] = "s"
         else:
-            raise ValueError("Invalid Model Name, Please choose between jmp_l and jmp_s")
-    
+            raise ValueError(
+                "Invalid Model Name, Please choose between jmp_l and jmp_s"
+            )
+
     ## Predict Forces Directly
     def direct_(config: base.FinetuneConfigBase):
         config.backbone.regress_forces = True
         config.backbone.direct_forces = True
         config.backbone.regress_energy = True
-    
+
     ## Predict Forces with Gradient Method
     def grad_(config: base.FinetuneConfigBase):
         config.backbone.regress_forces = True
@@ -51,7 +55,7 @@ def load_pretrain(model_type: str, ckpt_path: str):
         config.backbone.regress_energy = True
 
         config.trainer.inference_mode = False
-        
+
     ## Data Config
     def data_config_(
         config: M.MatbenchDiscoveryConfig,
@@ -82,7 +86,7 @@ def load_pretrain(model_type: str, ckpt_path: str):
         # Balanced batch sampler
         config.use_balanced_batch_sampler = True
         config.trainer.use_distributed_sampler = False
-    
+
     ## Output Head Config
     def output_heads_config_direct_(
         config: M.MatbenchDiscoveryConfig,
@@ -139,7 +143,7 @@ def load_pretrain(model_type: str, ckpt_path: str):
         config.tags.append(f"ec{energy_coefficient}")
         config.tags.append(f"fc{force_coefficient}")
         config.tags.append(f"sc{stress_coefficient}")
-    
+
     def output_heads_config_grad_(
         config: M.MatbenchDiscoveryConfig,
         *,
@@ -186,7 +190,7 @@ def load_pretrain(model_type: str, ckpt_path: str):
         config.name_parts.append(f"fc{force_coefficient}")
         config.name_parts.append(f"sc{stress_coefficient}")
         return config
-    
+
     ## Optimizer Config
     def optimization_config_(
         config: M.MatbenchDiscoveryConfig,
@@ -254,7 +258,7 @@ def load_pretrain(model_type: str, ckpt_path: str):
                 )
             case _:
                 raise ValueError(f"Invalid jmp_kind: {config.meta['jmp_kind']}")
-    
+
     ## Energy Reference Optimization Config
     def parameter_specific_optimizers_energy_references_(
         config: base.FinetuneConfigBase,
@@ -319,7 +323,7 @@ def load_pretrain(model_type: str, ckpt_path: str):
             )
         else:
             raise ValueError("No energy reference or allegro heads found")
-        
+
     ## Layer Norm
     def ln_(
         config: base.FinetuneConfigBase,
@@ -374,7 +378,7 @@ def load_pretrain(model_type: str, ckpt_path: str):
             name="matbench_discovery/force_mae", mode="min"
         )
         return config
-    
+
     configs: list[tuple[M.MatbenchDiscoveryConfig, type[M.MatbenchDiscoveryModel]]] = []
 
     config = create_config(jmp_)
@@ -398,15 +402,15 @@ def load_pretrain(model_type: str, ckpt_path: str):
     config.per_graph_radius_graph = True
     config.ignore_graph_generation_errors = True
     config.trainer.early_stopping = nt.model.EarlyStoppingConfig(
-            patience=50, min_lr=1e-08
-        )
+        patience=50, min_lr=1e-08
+    )
     config.trainer.max_epochs = 200
     config = config.finalize()
     configs.append((config, M.MatbenchDiscoveryModel))
-    
+
     model = M.MatbenchDiscoveryModel.construct_and_load_checkpoint(config)
     embedding = model.embedding
     backbone = model.backbone
-    
+
     os.system("rm -r ./nshtrainer")
     return backbone, embedding

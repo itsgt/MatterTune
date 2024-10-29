@@ -1,15 +1,19 @@
-from typing import Literal, Generic
-from typing_extensions import override
+from __future__ import annotations
+
 import contextlib
+from typing import Generic, Literal
+
 import torch
 import torch.nn as nn
 from einops import rearrange
-from mattertune.protocol import TBatch
-from mattertune.output_heads.base import OutputHeadBaseConfig
+from typing_extensions import override
+
 from mattertune.finetune.loss import LossConfig, MAELossConfig
+from mattertune.output_heads.base import OutputHeadBaseConfig
+from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
 from mattertune.output_heads.goc_style.heads.utils.force_scaler import ForceStressScaler
 from mattertune.output_heads.goc_style.heads.utils.tensor_grad import enable_grad
-from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
+from mattertune.protocol import TBatch
 
 
 class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
@@ -61,7 +65,7 @@ class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
     $V = |\det(\mathbf{h})|$
     $\mathbf{\sigma} = -\frac{1}{V}\mathbf{W}$
     """
-    
+
     ## Paramerters heritated from OutputHeadBaseConfig:
     pred_type: Literal["scalar", "vector", "tensor", "classification"] = "tensor"
     """The prediction type of the output head"""
@@ -91,7 +95,7 @@ class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
             raise ValueError(
                 "cell_displacement must be provided for GradientStressOutputHead, Can be all zeros"
             )
-        
+
         with contextlib.ExitStack() as stack:
             enable_grad(stack)
 
@@ -122,11 +126,11 @@ class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TBatch]):
             data.cell = data.cell + torch.bmm(data.cell, symmetric_displacement)
 
             yield
-        
+
     @override
     def supports_inference_mode(self):
         return False
-    
+
 
 class GradientStressOutputHead(nn.Module, Generic[TBatch]):
     """
@@ -135,7 +139,7 @@ class GradientStressOutputHead(nn.Module, Generic[TBatch]):
 
     @override
     def __init__(
-        self, 
+        self,
         head_config: GradientStressOutputHeadConfig,
     ):
         super().__init__()
@@ -146,13 +150,12 @@ class GradientStressOutputHead(nn.Module, Generic[TBatch]):
 
     @override
     def forward(
-        self, 
+        self,
         *,
         batch_data: TBatch,
         backbone_output: GOCStyleBackBoneOutput,
         output_head_results: dict[str, torch.Tensor],
     ) -> torch.Tensor:
-
         # Displacement must be in data
         cell_displacement = batch_data.cell_displacement
         cell = batch_data.cell
@@ -162,7 +165,9 @@ class GradientStressOutputHead(nn.Module, Generic[TBatch]):
                 "cell_displacement must be provided for GradientStressOutputHead, but found None"
             )
         if cell is None:
-            raise ValueError("cell must be provided for GradientStressOutputHead, but found None")
+            raise ValueError(
+                "cell must be provided for GradientStressOutputHead, but found None"
+            )
 
         if self.head_config.forces:
             forces, stress = self.force_stress_scaler.calc_forces_and_update(
@@ -185,8 +190,12 @@ class GradientStressOutputHead(nn.Module, Generic[TBatch]):
             volume = torch.linalg.det(batch_data.cell).abs()
             # tc.tassert(tc.Float[torch.Tensor, "bsz"], volume)
             num_graphs = int(torch.max(batch_data.batch).item() + 1)
-            assert volume.shape == (num_graphs,), f"volume.shape={volume.shape} != {(num_graphs,)}"
-            assert torch.is_floating_point(volume), f"volume.dtype={volume.dtype}, expected floating point"
+            assert volume.shape == (
+                num_graphs,
+            ), f"volume.shape={volume.shape} != {(num_graphs,)}"
+            assert torch.is_floating_point(
+                volume
+            ), f"volume.dtype={volume.dtype}, expected floating point"
             stress = virial / rearrange(volume, "b -> b 1 1")
 
         return stress

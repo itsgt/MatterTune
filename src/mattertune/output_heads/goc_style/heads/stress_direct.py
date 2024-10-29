@@ -1,12 +1,18 @@
-from typing import Literal, Generic
-from typing_extensions import override, assert_never
+from __future__ import annotations
+
+from typing import Generic, Literal
+
 import torch
 import torch.nn as nn
-from mattertune.protocol import TBatch
-from mattertune.output_heads.base import OutputHeadBaseConfig
+from typing_extensions import assert_never, override
+
 from mattertune.finetune.loss import LossConfig, MAELossConfig
-from mattertune.output_heads.goc_style.heads.utils.rank2block import Rank2DecompositionEdgeBlock
+from mattertune.output_heads.base import OutputHeadBaseConfig
 from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
+from mattertune.output_heads.goc_style.heads.utils.rank2block import (
+    Rank2DecompositionEdgeBlock,
+)
+from mattertune.protocol import TBatch
 
 
 class DirectStressOutputHeadConfig(OutputHeadBaseConfig):
@@ -14,6 +20,7 @@ class DirectStressOutputHeadConfig(OutputHeadBaseConfig):
     Configuration of the DirectStressOutputHead
     Compute stress directly without using gradients
     """
+
     ## Paramerters heritated from OutputHeadBaseConfig:
     pred_type: Literal["scalar", "vector", "tensor", "classification"] = "tensor"
     """The prediction type of the output head"""
@@ -30,11 +37,11 @@ class DirectStressOutputHeadConfig(OutputHeadBaseConfig):
     """Number of layers in the output layer."""
     loss: LossConfig = MAELossConfig()
     """The loss function to use for the target"""
-    
+
     @override
     def is_classification(self) -> bool:
         return False
-    
+
     @property
     def extensive(self):
         match self.reduction:
@@ -44,7 +51,7 @@ class DirectStressOutputHeadConfig(OutputHeadBaseConfig):
                 return False
             case _:
                 assert_never(self.reduction)
-    
+
     @override
     def construct_output_head(
         self,
@@ -55,6 +62,7 @@ class DirectStressOutputHeadConfig(OutputHeadBaseConfig):
             self,
             hidden_dim=self.hidden_dim,
         )
+
 
 class DirectStressOutputHead(nn.Module, Generic[TBatch]):
     @override
@@ -77,7 +85,7 @@ class DirectStressOutputHead(nn.Module, Generic[TBatch]):
 
     @override
     def forward(
-        self, 
+        self,
         *,
         batch_data: TBatch,
         backbone_output: GOCStyleBackBoneOutput,
@@ -95,6 +103,10 @@ class DirectStressOutputHead(nn.Module, Generic[TBatch]):
             batch_idx,
             batch_size,
         )
-        assert stress.shape == (batch_size, 3, 3), f"stress.shape={stress.shape} != [batch_size, 3, 3]"
+        assert stress.shape == (
+            batch_size,
+            3,
+            3,
+        ), f"stress.shape={stress.shape} != [batch_size, 3, 3]"
         output_head_results[self.target_config.target_name] = stress
         return stress

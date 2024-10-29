@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import torch
 import torch.nn as nn
 from e3nn import o3
@@ -19,7 +21,7 @@ class Rank2DecompositionEdgeBlock(nn.Module):
     --------
     """
 
-    change_mat: torch.Tensor ## size must be [9, 9]
+    change_mat: torch.Tensor  ## size must be [9, 9]
 
     def __init__(
         self,
@@ -29,7 +31,10 @@ class Rank2DecompositionEdgeBlock(nn.Module):
         num_layers=2,
     ):
         super().__init__()
-        assert self.change_mat.shape == (9, 9), f"{self.change_mat.shape=} must be {(9, 9)}, found {self.change_mat.shape}"
+        assert self.change_mat.shape == (
+            9,
+            9,
+        ), f"{self.change_mat.shape=} must be {(9, 9)}, found {self.change_mat.shape}"
         self.emb_size = emb_size
         self.edge_level = edge_level
         self.extensive = extensive
@@ -83,10 +88,10 @@ class Rank2DecompositionEdgeBlock(nn.Module):
     @override
     def forward(
         self,
-        edge_features: torch.Tensor, ## [num_edges, edge_hidden_dim]
-        edge_vectors: torch.Tensor, ## [num_edges, 3]
-        edge_index_dst: torch.Tensor, ## [num_edges]
-        batch_idx: torch.Tensor, ## [num_edges]
+        edge_features: torch.Tensor,  ## [num_edges, edge_hidden_dim]
+        edge_vectors: torch.Tensor,  ## [num_edges, 3]
+        edge_index_dst: torch.Tensor,  ## [num_edges]
+        batch_idx: torch.Tensor,  ## [num_edges]
         batch_size: int,
     ) -> torch.Tensor:
         """evaluate
@@ -195,8 +200,13 @@ class Rank2DecompositionEdgeBlock(nn.Module):
         stress = torch.einsum(
             "ab, cb->ca", self.change_mat.to(flatten_irreps.device), flatten_irreps
         )
-        assert stress.shape == (batch_size, 9), f"{stress.shape=} must be {(batch_size, 9)}, found {stress.shape}"
-        assert torch.is_floating_point(stress), f"{stress.dtype=} must be float, found {stress.dtype}"
+        assert stress.shape == (
+            batch_size,
+            9,
+        ), f"{stress.shape=} must be {(batch_size, 9)}, found {stress.shape}"
+        assert torch.is_floating_point(
+            stress
+        ), f"{stress.dtype=} must be float, found {stress.dtype}"
 
         stress = rearrange(
             stress,
@@ -204,7 +214,13 @@ class Rank2DecompositionEdgeBlock(nn.Module):
             three1=3,
             three2=3,
         )
-        assert stress.shape == (batch_size, 3, 3), f"{stress.shape=} must be {(batch_size, 3, 3)}, found {stress.shape}"
-        assert torch.allclose(stress, stress.permute(0, 2, 1)), f"{stress=} must be symmetric, found not symmetric"
+        assert stress.shape == (
+            batch_size,
+            3,
+            3,
+        ), f"{stress.shape=} must be {(batch_size, 3, 3)}, found {stress.shape}"
+        assert torch.allclose(
+            stress, stress.permute(0, 2, 1)
+        ), f"{stress=} must be symmetric, found not symmetric"
 
         return stress

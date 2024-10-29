@@ -1,20 +1,22 @@
-import torch
-import torch.nn as nn
+from __future__ import annotations
+
 from pathlib import Path
-from matgl.models import M3GNet
+
+import torch
+from efs_data_module import BatchTypedDict
 from matgl.graph.compute import (
     compute_pair_vector_and_distance,
     compute_theta_and_phi,
     create_line_graph,
     ensure_line_graph_compatibility,
 )
+from matgl.models import M3GNet
 from matgl.utils.cutoff import polynomial_cutoff
 from matgl.utils.io import _get_file_paths
 from typing_extensions import override
-import dgl
+
 from mattertune.output_heads.goc_style.backbone_module import GOCStyleBackBoneOutput
 from mattertune.protocol import BackBoneBaseConfig, BackBoneBaseModule
-from efs_data_module import BatchTypedDict
 
 
 class M3GNetBackbone(BackBoneBaseModule, M3GNet):
@@ -29,10 +31,9 @@ class M3GNetBackbone(BackBoneBaseModule, M3GNet):
         fpaths = _get_file_paths(path, **kwargs)
         backbone = cls.load(fpaths, **kwargs)
         backbone.final_layer.requires_grad_(False)
-        
+
         return backbone
-        
-    
+
     @override
     def forward(
         self,
@@ -57,8 +58,12 @@ class M3GNetBackbone(BackBoneBaseModule, M3GNet):
         l_g.apply_edges(compute_theta_and_phi)
         g.edata["rbf"] = expanded_dists
         three_body_basis = self.basis_expansion(l_g)
-        three_body_cutoff = polynomial_cutoff(g.edata["bond_dist"], self.threebody_cutoff)
-        node_feat, edge_feat, state_feat = self.embedding(node_types, g.edata["rbf"], state_attr)
+        three_body_cutoff = polynomial_cutoff(
+            g.edata["bond_dist"], self.threebody_cutoff
+        )
+        node_feat, edge_feat, state_feat = self.embedding(
+            node_types, g.edata["rbf"], state_attr
+        )
         fea_dict = {
             "bond_expansion": expanded_dists,
             "three_body_basis": three_body_basis,
@@ -77,7 +82,9 @@ class M3GNetBackbone(BackBoneBaseModule, M3GNet):
                 node_feat,
                 edge_feat,
             )
-            edge_feat, node_feat, state_feat = self.graph_layers[i](g, edge_feat, node_feat, state_feat)
+            edge_feat, node_feat, state_feat = self.graph_layers[i](
+                g, edge_feat, node_feat, state_feat
+            )
             fea_dict[f"gc_{i+1}"] = {
                 "node_feat": node_feat,
                 "edge_feat": edge_feat,
@@ -96,30 +103,38 @@ class M3GNetBackbone(BackBoneBaseModule, M3GNet):
             force_features=g.edata["edge_feat"],
         )
         return output
-    
+
     @override
-    def process_batch_under_grad(self, batch: BatchTypedDict, training: bool) -> BatchTypedDict:
+    def process_batch_under_grad(
+        self, batch: BatchTypedDict, training: bool
+    ) -> BatchTypedDict:
         g = batch["graph"]
         lat = batch["lattice"]
         state_attr = batch["state_attr"]
         l_g = batch["line_graph"]
-        
+
         strain = batch["cell_displacement"]
         lattice = lat @ (torch.eye(3, device=lat.device) + strain)
-        g.edata["lattice"] = torch.repeat_interleave(lattice, g.batch_num_edges(), dim=0)
-        g.edata["pbc_offshift"] = (g.edata["pbc_offset"].unsqueeze(dim=-1) * g.edata["lattice"]).sum(dim=1)
+        g.edata["lattice"] = torch.repeat_interleave(
+            lattice, g.batch_num_edges(), dim=0
+        )
+        g.edata["pbc_offshift"] = (
+            g.edata["pbc_offset"].unsqueeze(dim=-1) * g.edata["lattice"]
+        ).sum(dim=1)
         g.ndata["pos"] = (
-            g.ndata["frac_coords"].unsqueeze(dim=-1) * torch.repeat_interleave(lattice, g.batch_num_nodes(), dim=0)
+            g.ndata["frac_coords"].unsqueeze(dim=-1)
+            * torch.repeat_interleave(lattice, g.batch_num_nodes(), dim=0)
         ).sum(dim=1)
         if batch["pos"].requires_grad:
             g.ndata["pos"] = batch["pos"]
         batch["graph"] = g
         return batch
-        
+
 
 class M3GNetBackboneConfig(BackBoneBaseConfig):
     freeze: bool = False
     path: Path
+
     @override
     def construct_backbone(self) -> M3GNetBackbone:
         return M3GNetBackbone.load_backbone(self.path)

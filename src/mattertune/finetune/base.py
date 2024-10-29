@@ -1,52 +1,42 @@
+from __future__ import annotations
+
+import contextlib
+import logging
+from abc import abstractmethod
+from collections.abc import Iterable, Mapping
+from contextlib import ExitStack
+from typing import Any, Generic, Protocol, runtime_checkable
+
+import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-import torchmetrics
-from torchmetrics import MeanAbsoluteError, MeanSquaredError, CosineSimilarity, Accuracy, Precision, Recall, F1Score
-from abc import ABC, abstractmethod
+import torch.nn.functional as F
 from pydantic import BaseModel
-from typing import Generic
-from mattertune.protocol import TBatch, BackBoneBaseConfig
-from mattertune.output_heads.base import OutputHeadBaseConfig
-from mattertune.finetune.metrics import MetricsModuleConfig, MetricsModule
-from mattertune.finetune.optimizer import OptimizerConfig
-from mattertune.finetune.lr_scheduler import LRSchedulerConfig
-from mattertune.finetune.data_module import MatterTuneDataModuleBase
 from pytorch_lightning.utilities.types import OptimizerLRSchedulerConfig
-from contextlib import ExitStack
-from typing_extensions import TypeVar, override, cast, Sequence
-import pytorch_lightning as pl
-from torch.utils.data import DataLoader
+from typing_extensions import TypeVar, cast, override
+
+from mattertune.finetune.lr_scheduler import LRSchedulerConfig
+from mattertune.finetune.optimizer import OptimizerConfig
+from mattertune.protocol import TBatch, TData
+
+from .loss import (
+    HuberLossConfig,
+    L2MAELossConfig,
+    MAELossConfig,
+    MSELossConfig,
+    l2_mae_loss,
+)
+from .metrics import FinetuneMetrics
+from .properties import PropertyConfig
+
+log = logging.getLogger(__name__)
 
 
-class EarlyStoppingModule:
-    """
-    A module to handle early stopping based on a primary metric.
-    """
-    def __init__(
-        self,
-        patience: int,
-        min_delta: float,
-        mode: str = "min",
-    ):
-        self.patience = patience
-        self.min_delta = min_delta
-        self.mode = mode
-        self.best_metric = None
-        self.wait = 0
-        self.perform_early_stop = False
-
-    def update(self, current_metric: float) -> None:
-        if self.best_metric is None:
-            self.best_metric = current_metric
-        else:
-            if (self.mode == "min" and current_metric < self.best_metric - self.min_delta) or \
-               (self.mode == "max" and current_metric > self.best_metric + self.min_delta):
-                self.best_metric = current_metric
-                self.wait = 0
-            else:
-                self.wait += 1
-                if self.wait >= self.patience:
-                    self.perform_early_stop = True
+@runtime_checkable
+class ForwardContextPropertyHeadProtocol(Protocol[TBatch]):
+    def model_forward_context(
+        self, data: TBatch
+    ) -> contextlib.AbstractContextManager: ...
 
 
 class FinetuneModuleBaseConfig(BaseModel):
@@ -54,305 +44,265 @@ class FinetuneModuleBaseConfig(BaseModel):
     """Name of this series of finetuning experiments."""
     run_name: str = "default_run"
     """Name of this specific run."""
-    backbone: BackBoneBaseConfig
-    """Backbone model configuration."""
-    output_heads: Sequence[OutputHeadBaseConfig]
-    """Output heads configurations."""
-    metrics_module: MetricsModuleConfig
-    """Metrics module configuration."""
+
     optimizer: OptimizerConfig
     """Optimizer."""
     lr_scheduler: LRSchedulerConfig
     """Learning Rate Scheduler"""
+
     ignore_data_errors: bool = True
     """Whether to ignore data processing errors during training."""
-    early_stopping_patience: int|None
-    """Number of epochs to wait before early stopping. Set to None to disable early stopping."""
-    early_stopping_min_delta: float = 0.0
-    """Minimum change in the primary metric to consider as an improvement."""
-    early_stopping_mode: str = "min"
-    """Mode for early stopping. One of ["min", "max"]."""
-    
-    
+
+    properties: Mapping[str, PropertyConfig]
+    """Properties to predict."""
+
+
 TFinetuneModuleConfig = TypeVar("TFinetuneModuleConfig", bound=FinetuneModuleBaseConfig)
 
 
-class FinetuneModuleBase(pl.LightningModule, Generic[TBatch, TFinetuneModuleConfig]):
+class FinetuneModuleBase(
+    pl.LightningModule, Generic[TData, TBatch, TFinetuneModuleConfig]
+):
     """
     Finetune module base class. Heritate from pytorch_lightning.LightningModule.
     """
-    def __init__(
-        self,
-        config: TFinetuneModuleConfig,
-    ):
+
+    # region ABC methods for data processing
+    @abstractmethod
+    def cpu_data_transform(self, data: TData) -> TData:
+        """
+        Transform data (on the CPU) before being batched and sent to the GPU.
+        """
+        ...
+
+    @abstractmethod
+    def collate_fn(self, data_list: list[TData]) -> TBatch:
+        """
+        Collate function for the DataLoader
+        """
+        ...
+
+    @abstractmethod
+    def gpu_batch_transform(self, batch: TBatch) -> TBatch:
+        """
+        Transform batch (on the GPU) before being fed to the model.
+        """
+        ...
+
+    @abstractmethod
+    def ground_truth_dict_from_batch(self, batch: TBatch) -> dict[str, torch.Tensor]:
+        """
+        Extract ground truth values from a batch. The output of this function
+        should be a dictionary with keys corresponding to the target names
+        and values corresponding to the ground truth values. The values should
+        be torch tensors that match, in shape, the output of the corresponding
+        output head.
+        """
+        ...
+
+    # endregion
+
+    # region ABC methods for output heads and model forward pass
+    @abstractmethod
+    def create_head(self, property_config: PropertyConfig) -> nn.Module:
+        """
+        Create an output head for a given property.
+        """
+        ...
+
+    @abstractmethod
+    def model_forward_context(self, data: TBatch) -> contextlib.AbstractContextManager:
+        """
+        Context manager for the model forward pass.
+        """
+        ...
+
+    @abstractmethod
+    def forward_backbone(self, batch: TBatch) -> Any:
+        """
+        Forward pass of the backbone model.
+        """
+        ...
+
+    # endregion
+
+    # region Overridable methods with sensible defaults
+    def backbone_parameters(self) -> Iterable[nn.Parameter]:
+        """
+        Return the parameters of the backbone model.
+
+        Default implementation returns all parameters that are not part of any output head.
+        """
+        head_params = set(p for head in self.heads.values() for p in head.parameters())
+        for p in self.parameters():
+            if p not in head_params:
+                yield p
+
+    # endregion
+
+    def __init__(self, config: TFinetuneModuleConfig):
         super().__init__()
+
         self.config = config
-        self.backbone = config.backbone.construct_backbone()
-        assert len(config.output_heads) > 0, "At least one output head is required."
-        
-        ## Put Energy Head First, and Put Stress Head before Force Head
-        energy_output_heads = []
-        force_output_heads = []
-        stress_output_heads = []
-        other_output_heads = []
-        for output_head_config in config.output_heads:
-            if "energy" in output_head_config.target_name:
-                energy_output_heads.append(output_head_config)
-            elif "stress" in output_head_config.target_name:
-                stress_output_heads.append(output_head_config)
-            elif "force" in output_head_config.target_name:
-                force_output_heads.append(output_head_config)
-            else:
-                other_output_heads.append(output_head_config)
-        config.output_heads = energy_output_heads + stress_output_heads + force_output_heads + other_output_heads
-        self.output_heads = nn.ModuleDict()
-        for output_head_config in config.output_heads:
-            output_head = output_head_config.construct_output_head()
-            self.output_heads[output_head_config.target_name] = output_head
-        
-        self.ignore_data_errors = config.ignore_data_errors
-        self.metrics_module = config.metrics_module.construct_metrics_module()
-        self._freeze_backbone_and_output_heads()
-        trainable_params = [p for p in self.parameters() if p.requires_grad]
-        if not trainable_params:
-            raise ValueError("No parameters require gradients. Please ensure that some parts of the model are trainable.")
-        
-        # Initialize EarlyStoppingModule if enabled
-        if config.early_stopping_patience is not None:
-            self.early_stopping = EarlyStoppingModule(
-                patience=config.early_stopping_patience,
-                min_delta=config.early_stopping_min_delta,
-                mode=config.early_stopping_mode,
+        self.heads = nn.ModuleDict()
+
+        def _sort_properties(property_config_tuple: tuple[str, PropertyConfig]):
+            _, property_config = property_config_tuple
+            if property_config.type == "energy":
+                return 0
+            if property_config.type == "stress":
+                return 1
+            if property_config.type == "force":
+                return 2
+            return 3
+
+        for property_name, property_config in sorted(
+            list(self.config.properties.items()), key=_sort_properties
+        ):
+            head = self.create_head(property_config)
+            self.heads[property_name] = head
+
+        # Create metrics
+        self.train_metrics = FinetuneMetrics(self.config.properties)
+        self.val_metrics = FinetuneMetrics(self.config.properties)
+        self.test_metrics = FinetuneMetrics(self.config.properties)
+
+        if not any(p for p in self.parameters() if p.requires_grad):
+            raise ValueError(
+                "No parameters require gradients. Please ensure that some parts of the model are trainable."
             )
-            self.primary_metric_mean = torchmetrics.MeanMetric()
-        else:
-            self.early_stopping = None
-            self.primary_metric_mean = None
-    
-    def forward(
-        self,
-        batch: TBatch,
-    ) -> dict[str, torch.Tensor]:
-        
+
+    def forward(self, batch: TBatch) -> dict[str, torch.Tensor]:
         with ExitStack() as stack:
             # Enter all the necessary contexts for output heads.
             # Right now, this is only for gradient forces, which
             #   requires torch.inference_mode(False), torch.enable_grad,
             #   and data.pos.requires_grad_(True).
-            for output_head in self.config.output_heads:
-                stack.enter_context(output_head.model_forward_context(data=batch))
-                
-            if self.ignore_data_errors:
+            for output_head in self.heads.values():
+                if isinstance(output_head, ForwardContextPropertyHeadProtocol):
+                    stack.enter_context(output_head.model_forward_context(batch))
+
+            # Generate graph/etc
+            if self.config.ignore_data_errors:
                 try:
-                    batch = self.backbone.process_batch_under_grad(batch, training=True)
+                    batch = self.gpu_batch_transform(batch)
                 except Exception as e:
-                    print(f"Error in forward pass: {e}")
+                    log.warning("Error in forward pass.", exc_info=e)
             else:
-                batch = self.backbone.process_batch_under_grad(batch, training=True)
+                batch = self.gpu_batch_transform(batch)
 
-            backbone_output = self.backbone(batch)
-            output_head_results = {}
+            # Run the model through the backbone
+            backbone_output = self.forward_backbone(batch)
 
-            for target_name, output_head in self.output_heads.items():
-                output = output_head(
-                    batch_data=batch,
-                    backbone_output=backbone_output,
-                    output_head_results=output_head_results,
-                )
-                if target_name not in output_head_results:
-                    output_head_results[target_name] = output
-            return output_head_results
+            # Run the model through the output heads
+            head_results: dict[str, torch.Tensor] = {}
+            for property_name, head in self.heads.items():
+                head_results[property_name] = head(batch, backbone_output)
 
-    @override
-    def training_step(
+            return head_results
+
+    def _compute_loss_for_head(
+        self,
+        config: PropertyConfig,
+        prediction: torch.Tensor,
+        target: torch.Tensor,
+    ):
+        match config.loss:
+            case MAELossConfig():
+                return F.l1_loss(prediction, target)
+            case MSELossConfig():
+                return F.mse_loss(prediction, target)
+            case HuberLossConfig():
+                return F.huber_loss(prediction, target, delta=config.loss.delta)
+            case L2MAELossConfig():
+                return l2_mae_loss(prediction, target)
+            case _:
+                raise ValueError(f"Unknown loss function: {config.loss}")
+
+    def _compute_loss(
+        self,
+        prediction: dict[str, torch.Tensor],
+        ground_truth: dict[str, torch.Tensor],
+        log: bool = True,
+        log_prefix: str = "",
+    ):
+        losses: list[torch.Tensor] = []
+        for target_name, head_config in self.config.properties.items():
+            # Get the target and prediction
+            pred = prediction[target_name]
+            target = ground_truth[target_name]
+
+            # Compute the loss
+            loss = (
+                self._compute_loss_for_head(head_config, pred, target)
+                * head_config.loss_coefficient
+            )
+
+            # Log the loss
+            if log:
+                self.log(f"{log_prefix}{target_name}_loss", loss)
+            losses.append(loss)
+
+        # Sum the losses
+        loss = cast(torch.Tensor, sum(losses))
+
+        # Log the total loss & return
+        if log:
+            self.log(f"{log_prefix}total_loss", loss)
+        return loss
+
+    def _common_step(
         self,
         batch: TBatch,
-        batch_idx: int,
+        name: str,
+        metrics: FinetuneMetrics | None,
+        log: bool = True,
     ):
-        output_head_results = self(batch)
-        
-        ## Compute loss and Log into monitor
-        loss_sum = None
-        loss_results: dict[str, float] = {}
-        batch_size = int(torch.max(batch.batch).detach().cpu().item() + 1)
-        for output_head_config in self.config.output_heads:
-            target_name = output_head_config.target_name
-            pred = output_head_results[target_name]
-            if not hasattr(batch, target_name):
-                raise ValueError(f"Target {target_name} not found in batch.")
-            target = getattr(batch, target_name)
-            loss = output_head_config.loss.compute(pred, target, batch)
-            if hasattr(output_head_config, "loss_coefficient"):
-                loss_coefficient = output_head_config.loss_coefficient
-            else:
-                loss_coefficient = 1.0
-                
-            loss_results[target_name+"-"+output_head_config.loss.name] = loss.detach().cpu().item() * loss_coefficient
-                
-            if loss_sum is None:
-                loss_sum = loss * loss_coefficient
-            else:
-                loss_sum += loss * loss_coefficient
-        assert loss_sum is not None, "Found loss=None, At least one loss is required."
-        self.log("train/total-loss", loss_sum.detach().cpu().item(), on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, batch_size=batch_size)
-        for loss_name, loss_value in loss_results.items():
-            self.log(f"train/{loss_name}", loss_value, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, batch_size=batch_size)
-            
-        ## Evaluate metrics and Log into monitor
-        metrics_results = self.metrics_module.compute(
-            batch=batch,
-            output_head_results=output_head_results,
+        prediction = self(batch)
+        ground_truth = self.ground_truth_dict_from_batch(batch)
+
+        # Compute loss
+        loss = self._compute_loss(
+            prediction,
+            ground_truth,
+            log=log,
+            log_prefix=f"{name}/",
         )
-        batch_size = int(torch.max(batch.batch).detach().cpu().item() + 1)
-        for metric_name, metric_value in metrics_results.items():
-            self.log(f"train/{metric_name}", metric_value, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, batch_size=batch_size)
-        
-        return loss_sum
-    
+
+        # Log metrics
+        if log and metrics is not None:
+            self.log_dict(
+                {
+                    f"{name}/{metric_name}": metric
+                    for metric_name, metric in metrics(prediction, ground_truth).items()
+                }
+            )
+
+        return prediction, loss
+
     @override
-    def on_train_epoch_end(self):
-        self.log("lr", self.trainer.optimizers[0].param_groups[0]["lr"], on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
-        return super().on_train_epoch_end()
-    
+    def training_step(self, batch: TBatch, batch_idx: int):
+        _, loss = self._common_step(batch, "train", self.train_metrics)
+        return loss
+
     @override
-    def validation_step(
-        self,
-        batch: TBatch,
-        batch_idx: int,
-    ):
-        output_head_results = self(batch)
-        metrics_results = self.metrics_module.compute(
-            batch=batch,
-            output_head_results=output_head_results,
-        )
-        batch_size = int(torch.max(batch.batch).detach().cpu().item() + 1)
-        for metric_name, metric_value in metrics_results.items():
-            self.log(f"val/{metric_name}", metric_value, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, batch_size=batch_size)
-            
-        # Track primary metric for early stopping if enabled
-        if self.early_stopping is not None and self.primary_metric_mean is not None:
-            primary_metric_name = self.config.metrics_module.primary_metric.target_name+"-"+self.config.metrics_module.primary_metric.metric_calculator.name
-            if self.config.metrics_module.primary_metric.normalize_by_num_atoms:
-                primary_metric_name += "-peratom"
-            primary_metric_value = metrics_results[primary_metric_name]
-            self.primary_metric_mean.update(primary_metric_value)
-            self.log("val/primary_metric", primary_metric_value, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
-            
+    def validation_step(self, batch: TBatch, batch_idx: int):
+        _ = self._common_step(batch, "val", self.val_metrics)
+
     @override
-    def on_validation_epoch_end(self):
-        # Early stopping check
-        if self.early_stopping is not None and self.primary_metric_mean is not None:
-            primary_metric_avg = self.primary_metric_mean.compute()
-            self.early_stopping.update(primary_metric_avg.detach().cpu().item())
-            self.primary_metric_mean.reset()
-            if self.early_stopping.perform_early_stop:
-                self.trainer.should_stop = True
-        return super().on_validation_epoch_end()
-        
+    def test_step(self, batch: TBatch, batch_idx: int):
+        _ = self._common_step(batch, "test", self.test_metrics)
+
     @override
-    def test_step(
-        self,
-        batch: TBatch,
-        batch_idx: int,
-    ):
-        output_head_results = self(batch)
-        metrics_results = self.metrics_module.compute(
-            batch=batch,
-            output_head_results=output_head_results,
-        )
-        batch_size = int(torch.max(batch.batch).detach().cpu().item() + 1)
-        for metric_name, metric_value in metrics_results.items():
-            self.log(f"test/{metric_name}", metric_value, on_epoch=True, prog_bar=True, logger=True, sync_dist=True, batch_size=batch_size)
-    
-    @override
-    def on_test_epoch_end(self):
-        return super().on_test_epoch_end()
-    
+    def predict_step(self, batch: TBatch, batch_idx: int):
+        prediction, _ = self._common_step(batch, "predict", None, log=False)
+        return prediction
+
     @override
     def configure_optimizers(self):
-        parameters = list(self.backbone.parameters())
-        for output_head_config in self.config.output_heads:
-            target_name = output_head_config.target_name
-            parameters += list(self.output_heads[target_name].parameters())
-        optimizer = self.config.optimizer.construct_optimizer(
-            parameters=parameters,   
+        optimizer = self.config.optimizer.construct_optimizer(self.parameters())
+        lr_scheduler = self.config.lr_scheduler.construct_lr_scheduler(optimizer)
+        return cast(
+            OptimizerLRSchedulerConfig,
+            {"optimizer": optimizer, "lr_scheduler": lr_scheduler},
         )
-        
-        lr_scheduler = self.config.lr_scheduler.construct_lr_scheduler(
-            optimizer=optimizer,
-        )
-        return cast(OptimizerLRSchedulerConfig, {"optimizer": optimizer, "lr_scheduler": lr_scheduler})
-    
-    def _freeze_backbone_and_output_heads(self):
-        if self.config.backbone.freeze:
-            print("Freezing Backbone Model.")
-            self.backbone.eval()
-            for param in self.backbone.parameters():
-                param.requires_grad = False
-        else:
-            print("Unfreezing Backbone Model.")
-            self.backbone.train()
-            for param in self.backbone.parameters():
-                param.requires_grad = True
-        for output_head_config in self.config.output_heads:
-            if output_head_config.freeze:
-                print(f"Freezing Output Head {output_head_config.target_name}.")
-                self.output_heads[output_head_config.target_name].eval()
-                for param in self.output_heads[output_head_config.target_name].parameters():
-                    param.requires_grad = False
-            else:
-                print(f"Unfreezing Output Head {output_head_config.target_name}.")
-                self.output_heads[output_head_config.target_name].train()
-                for param in self.output_heads[output_head_config.target_name].parameters():
-                    param.requires_grad = True
-
-    def predict(self, dataloader: DataLoader) -> dict[str, torch.Tensor]:
-        """
-        Run forward prediction on a given dataloader, with support for multi-GPU and accelerated predictions.
-
-        Args:
-            dataloader (DataLoader): The dataloader containing data for prediction.
-
-        Returns:
-            dict[str, torch.Tensor]: A dictionary where each key is an output head name, and the value is a concatenated tensor of predictions.
-        """
-        device = self.device  # Get the current device (supports multi-GPU setups)
-        all_predictions = {target_name: [] for target_name in self.output_heads.keys()}
-
-        for batch in dataloader:
-            batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}  # Move batch to appropriate device
-            output_head_results = self(batch)
-            for target_name, prediction in output_head_results.items():
-                all_predictions[target_name].append(prediction.cpu())
-
-        # Concatenate predictions for each output head
-        concatenated_predictions = {
-            target_name: torch.cat(predictions, dim=0)
-            for target_name, predictions in all_predictions.items()
-        }
-        return concatenated_predictions
-
-    def predict_distributed(self, dataloader: DataLoader) -> dict[str, torch.Tensor]:
-        """
-        Run forward prediction on a given dataloader with multi-GPU support using PyTorch Lightning's distributed prediction capabilities.
-
-        Args:
-            dataloader (DataLoader): The dataloader containing data for prediction.
-
-        Returns:
-            dict[str, torch.Tensor]: A dictionary where each key is an output head name, and the value is a concatenated tensor of predictions.
-        """
-        outputs = self.trainer.predict(self, dataloaders=dataloader)
-        all_predictions = {target_name: [] for target_name in self.output_heads.keys()}
-
-        # Collect predictions from all devices
-        for output in outputs:
-            for target_name, prediction in output.items():
-                all_predictions[target_name].append(prediction.cpu())
-
-        # Ensure predictions from all GPUs are combined correctly
-        concatenated_predictions = {
-            target_name: torch.cat([pred for pred_list in all_predictions[target_name] for pred in pred_list], dim=0).to(torch.float32)
-            for target_name in all_predictions.keys()
-        }
-        return concatenated_predictions

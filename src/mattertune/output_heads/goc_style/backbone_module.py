@@ -1,9 +1,9 @@
-from abc import abstractmethod, ABC
-from typing import TypedDict, Generic
+from __future__ import annotations
+
+from typing import TypedDict
+
 import jaxtyping as jt
 import torch
-import torch.nn as nn
-from mattertune.protocol import TBatch, BackBoneBaseOutput
 
 
 class GOCStyleBackBoneOutput(TypedDict):

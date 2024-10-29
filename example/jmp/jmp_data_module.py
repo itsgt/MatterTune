@@ -1,18 +1,27 @@
-from torch.utils.data import Dataset, DataLoader, DistributedSampler
+from __future__ import annotations
+
+import random
+
+import numpy as np
+import torch
 from ase import Atoms
 from ase.io import read
-from typing_extensions import override
-from torch_geometric.data import Data, Batch
+from torch_geometric.data import Batch, Data
 from torch_geometric.data.data import BaseData
-from mattertune.finetune.data_module import MatterTuneDataModuleBase, MatterTuneDatasetBase, ReferenceConfig
-import torch
-import numpy as np
-import random
+from typing_extensions import override
+
+from mattertune.finetune.data_module import (
+    MatterTuneDataModuleBase,
+    MatterTuneDatasetBase,
+    ReferenceConfig,
+)
+
 
 class JMPDataset(MatterTuneDatasetBase):
     """
     Custom Dataset for JMP FineTune task.
     """
+
     def __init__(
         self,
         xyz_path: str,
@@ -33,15 +42,18 @@ class JMPDataset(MatterTuneDatasetBase):
         self.atoms_list: list[Atoms] = read(self.xyz_path, index=":")
         # Filter atoms_list based on indices
         self.atoms_list = [self.atoms_list[i] for i in self.indices]
-        
+
         ## Compute atom references
         def get_chemical_composition(atoms: Atoms) -> np.ndarray:
             chemical_numbers = np.array(atoms.get_atomic_numbers()) - 1
             return np.bincount(chemical_numbers, minlength=120)
+
         self.atom_references: dict[str, np.ndarray] = {}
         for key, reference_config in self.references.items():
             self.atom_references[key] = reference_config.compute_references(
-                np.array([get_chemical_composition(atoms) for atoms in self.atoms_list]),
+                np.array(
+                    [get_chemical_composition(atoms) for atoms in self.atoms_list]
+                ),
                 np.array([atoms.get_total_energy() for atoms in self.atoms_list]),
             )
 
@@ -57,21 +69,33 @@ class JMPDataset(MatterTuneDatasetBase):
                 "pos": torch.tensor(raw_data.get_positions()).float(),
                 "num_atoms": torch.tensor([len(raw_data)]).long(),
                 "cell_displacement": None,
-                "cell": torch.tensor(np.array(raw_data.get_cell()), dtype=torch.float).unsqueeze(dim=0),
+                "cell": torch.tensor(
+                    np.array(raw_data.get_cell()), dtype=torch.float
+                ).unsqueeze(dim=0),
                 "natoms": torch.tensor(len(raw_data)).long(),
                 "tags": 2 * torch.ones(len(raw_data), dtype=torch.long),
-                "fixed": torch.zeros_like(torch.tensor(np.array(raw_data.get_atomic_numbers())), dtype=torch.bool),
-                "force": torch.tensor(np.array(raw_data.get_forces()), dtype=torch.float),
-                "stress": torch.tensor(np.array(raw_data.get_stress(voigt=False)), dtype=torch.float).unsqueeze(dim=0),
+                "fixed": torch.zeros_like(
+                    torch.tensor(np.array(raw_data.get_atomic_numbers())),
+                    dtype=torch.bool,
+                ),
+                "force": torch.tensor(
+                    np.array(raw_data.get_forces()), dtype=torch.float
+                ),
+                "stress": torch.tensor(
+                    np.array(raw_data.get_stress(voigt=False)), dtype=torch.float
+                ).unsqueeze(dim=0),
                 "energy": torch.tensor(raw_data.get_total_energy(), dtype=torch.float),
-                "cell_displacement": torch.zeros((len(raw_data), 3, 3), dtype=torch.float),
+                "cell_displacement": torch.zeros(
+                    (len(raw_data), 3, 3), dtype=torch.float
+                ),
             }
             for key, reference in self.atom_references.items():
                 if (unreferenced_value := data_dict.get(key)) is None:
                     raise ValueError(f"Missing key {key} in data_dict")
 
                 data_dict[key] = (
-                    unreferenced_value - reference[data_dict["atomic_numbers"]].sum().item()
+                    unreferenced_value
+                    - reference[data_dict["atomic_numbers"]].sum().item()
                 )
 
             data = Data.from_dict(data_dict)
@@ -89,6 +113,7 @@ class JMPDataModule(MatterTuneDataModuleBase):
     """
     DataModule for JMP FineTune task using small batch data loading.
     """
+
     def __init__(
         self,
         batch_size: int,
@@ -112,7 +137,7 @@ class JMPDataModule(MatterTuneDataModuleBase):
         self.references = references
 
     @override
-    def setup(self, stage: str|None = None) -> None:
+    def setup(self, stage: str | None = None) -> None:
         # Set random seed to ensure consistency across different GPUs
         torch.manual_seed(42)
         random.seed(42)
@@ -154,7 +179,7 @@ class JMPDataModule(MatterTuneDataModuleBase):
             training=False,
             references=self.references,
         )
-        
+
     @override
     def collate_fn(self, data_list: list[BaseData]) -> Batch:
         # Remove None data (if any errors occurred and ignore_data_errors=True)

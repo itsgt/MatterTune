@@ -1,20 +1,24 @@
-from typing import Literal, TypeAlias, Annotated
-from collections.abc import Iterable
-from pydantic import BaseModel, PositiveFloat, NonNegativeFloat, Field
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
+from typing import Annotated, Literal, TypeAlias
+
 import torch
+from pydantic import BaseModel, Field, NonNegativeFloat, PositiveFloat
 
 
 class OptimizerBaseConfig(BaseModel, ABC):
     lr: PositiveFloat
     """Learning rate."""
+
     @abstractmethod
     def construct_optimizer(
         self,
         parameters: Iterable[torch.nn.Parameter],
     ) -> torch.optim.Optimizer: ...
-    
-    
+
+
 class AdamConfig(OptimizerBaseConfig):
     name: Literal["Adam"] = "Adam"
     """Name of the optimizer."""
@@ -26,7 +30,7 @@ class AdamConfig(OptimizerBaseConfig):
     """Weight decay."""
     amsgrad: bool = False
     """Whether to use AMSGrad variant of Adam."""
-    
+
     def construct_optimizer(
         self,
         parameters: Iterable[torch.nn.Parameter],
@@ -39,7 +43,8 @@ class AdamConfig(OptimizerBaseConfig):
             weight_decay=self.weight_decay,
             amsgrad=self.amsgrad,
         )
-        
+
+
 class AdamWConfig(OptimizerBaseConfig):
     name: Literal["AdamW"] = "AdamW"
     """Name of the optimizer."""
@@ -51,7 +56,7 @@ class AdamWConfig(OptimizerBaseConfig):
     """Weight decay."""
     amsgrad: bool = False
     """Whether to use AMSGrad variant of Adam."""
-    
+
     def construct_optimizer(
         self,
         parameters: Iterable[torch.nn.Parameter],
@@ -64,8 +69,8 @@ class AdamWConfig(OptimizerBaseConfig):
             weight_decay=self.weight_decay,
             amsgrad=self.amsgrad,
         )
-        
-        
+
+
 class SGDConfig(OptimizerBaseConfig):
     name: Literal["SGD"] = "SGD"
     """Name of the optimizer."""
@@ -75,7 +80,7 @@ class SGDConfig(OptimizerBaseConfig):
     """Weight decay."""
     nestrov: bool = False
     """Whether to use nestrov."""
-    
+
     def construct_optimizer(
         self,
         parameters: Iterable[torch.nn.Parameter],
@@ -87,8 +92,8 @@ class SGDConfig(OptimizerBaseConfig):
             weight_decay=self.weight_decay,
             nesterov=self.nestrov,
         )
-        
-        
+
+
 OptimizerConfig: TypeAlias = Annotated[
     AdamConfig | AdamWConfig | SGDConfig,
     Field(
