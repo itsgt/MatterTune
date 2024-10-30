@@ -21,7 +21,6 @@ einops = "*"
 e3nn = "*"
 wandb = "*"
 
-
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
@@ -33,6 +32,10 @@ strictListInference = true
 strictDictionaryInference = true
 strictSetInference = true
 reportPrivateImportUsage = false
+reportUnnecessaryTypeIgnoreComment = "warning"
+reportMatchNotExhaustive = "error"
+reportImplicitOverride = "warning"
+reportShadowedImports = "warning"
 
 [tool.ruff.lint]
 select = ["FA102", "FA100"]

@@ -20,12 +20,13 @@ class MetricBase(nn.Module, ABC):
         self.property_name = property_name
 
     @abstractmethod
+    @override
     def forward(
         self, prediction: dict[str, Any], ground_truth: dict[str, Any]
     ) -> Mapping[str, torchmetrics.Metric]: ...
 
 
-class GraphPropertyMetrics(MetricBase):
+class PropertyMetrics(MetricBase):
     @override
     def __init__(self, property_name: str):
         super().__init__(property_name)

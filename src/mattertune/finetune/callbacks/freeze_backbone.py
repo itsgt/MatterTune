@@ -25,7 +25,7 @@ class FreezeBackboneCallback(Callback):
 
         # Freeze the backbone
         num_backbone_params = 0
-        for backbone_param in pl_module.backbone_parameters():
+        for backbone_param in pl_module.pretrained_backbone_parameters():
             backbone_param.requires_grad = False
             num_backbone_params += len(backbone_param)
 
