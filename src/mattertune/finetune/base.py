@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Generic
 
 import torch
@@ -288,10 +288,7 @@ class FinetuneModuleBase(
             return _zero_loss()
 
         # Extract labels from the batch
-        labels = self.batch_to_labels(
-            batch,
-            self.hparams.properties,
-        )
+        labels = self.batch_to_labels(batch)
 
         # Compute loss
         loss = self._compute_loss(
@@ -338,3 +335,9 @@ class FinetuneModuleBase(
             OptimizerLRSchedulerConfig,
             {"optimizer": optimizer, "lr_scheduler": lr_scheduler},
         )
+
+    def to_ase_calculator(self):
+        raise NotImplementedError("Implement this!")
+
+    def to_potential(self):
+        raise NotImplementedError("Implement this!")
