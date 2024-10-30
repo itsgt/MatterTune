@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, cast, final
+from typing import TYPE_CHECKING, Literal, cast
 
 import nshconfig_extra as CE
 import torch
@@ -25,16 +25,21 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-@final
 class JMPBackboneConfig(FinetuneModuleBaseConfig):
+    type: Literal["jmp"] = "jmp"
+    """The type of the backbone."""
+
     ckpt_path: Path | CE.CachedPath
     """The path to the pre-trained model checkpoint."""
 
     graph_computer: GraphComputerConfig
     """The configuration for the graph computer."""
 
+    @override
+    def create_backbone(self):
+        return JMPBackboneModule(self)
 
-@final
+
 class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
     @override
     def create_model(self):

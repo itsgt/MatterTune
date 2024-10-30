@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Annotated, Literal, TypeAlias
 
 import numpy as np
@@ -69,8 +70,6 @@ class GraphPropertyConfig(PropertyConfigBase):
 
     @override
     def from_ase_atoms(self, atoms):
-        # properties: Properties = atoms.get_properties([self.name])
-        # return properties[self.name]
         return atoms.info[self.name]
 
 
@@ -86,7 +85,6 @@ class EnergyPropertyConfig(PropertyConfigBase):
 
     @override
     def from_ase_atoms(self, atoms):
-        # @lingyukong677 Should this be get_potential_energy() or get_total_energy()?
         return atoms.get_total_energy()
 
 
@@ -99,6 +97,15 @@ class ForcesPropertyConfig(PropertyConfigBase):
 
     dtype: DType = "float"
     """The type of the property values."""
+
+    conservative: bool
+    """
+    Whether the forces are energy conserving.
+    This is used by the backbone to decide the type of output head to use for
+        this property. Conservative force predictions are computed by taking the
+        negative gradient of the energy with respect to the atomic positions, whereas
+        non-conservative forces may be computed by other means.
+    """
 
     @override
     def from_ase_atoms(self, atoms):
@@ -115,6 +122,12 @@ class StressesPropertyConfig(PropertyConfigBase):
     dtype: DType = "float"
     """The type of the property values."""
 
+    conservative: bool
+    """
+    Similar to the `conservative` parameter in `ForcesPropertyConfig`, this parameter
+        specifies whether the stresses should be computed in a conservative manner.
+    """
+
     @override
     def from_ase_atoms(self, atoms):
         return atoms.get_stress()
@@ -125,5 +138,11 @@ PropertyConfig: TypeAlias = Annotated[
     | EnergyPropertyConfig
     | ForcesPropertyConfig
     | StressesPropertyConfig,
-    Field(discriminator="type"),
+    Field(
+        description="The configuration for the property.",
+        discriminator="type",
+    ),
 ]
+
+PropertyConfigs: TypeAlias = Sequence[PropertyConfig]
+"""A sequence of property configurations."""

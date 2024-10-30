@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import final
+from typing import Literal
 
 import ase
 from fairchem.core.datasets import AseDBDataset
@@ -13,11 +13,16 @@ from .base import DatasetProtocol
 
 
 class OMAT24DatasetConfig(BaseModel):
+    type: Literal["omat24"] = "omat24"
+    """Discriminator for the OMAT24 dataset."""
+
     src: Path
     """The path to the OMAT24 dataset."""
 
+    def create_dataset(self):
+        return OMAT24Dataset(self)
 
-@final
+
 class OMAT24Dataset(DatasetProtocol, Dataset[ase.Atoms]):
     def __init__(self, config: OMAT24DatasetConfig):
         super().__init__()

@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class FinetuneModuleBaseConfig(BaseModel):
+class FinetuneModuleBaseConfig(BaseModel, ABC):
     properties: Sequence[PropertyConfig]
     """Properties to predict."""
 
@@ -39,6 +39,9 @@ class FinetuneModuleBaseConfig(BaseModel):
 
     ignore_gpu_batch_transform_error: bool = True
     """Whether to ignore data processing errors during training."""
+
+    @abstractmethod
+    def create_backbone(self) -> FinetuneModuleBase: ...
 
 
 TFinetuneModuleConfig = TypeVar("TFinetuneModuleConfig", bound=FinetuneModuleBaseConfig)
@@ -192,7 +195,10 @@ class FinetuneModuleBase(
     hparams: TFinetuneModuleConfig  # pyright: ignore[reportIncompatibleMethodOverride]
     hparams_initial: TFinetuneModuleConfig  # pyright: ignore[reportIncompatibleMethodOverride]
 
-    def __init__(self, hparams: TFinetuneModuleConfig):
+    def __init__(
+        self,
+        hparams: TFinetuneModuleConfig,
+    ):
         super().__init__()
 
         # Save the hyperparameters
