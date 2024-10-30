@@ -60,6 +60,8 @@ class PerSplitDataConfig(C.Config):
 
 
 class MatterTunerConfig(C.Config):
+    model_config = {"write_schema_to_file": True}
+
     data: PerSplitDataConfig
     """The configuration for the data."""
 

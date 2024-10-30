@@ -1,17 +1,20 @@
-backbone: jmp
+# yaml-language-server: $schema=file:///workspaces/MatterTune/src/mattertune/finetune/main.MatterTunerConfig.schema.json
 
 data:
-    train: data/train.csv
-    val: data/val.csv
-    test: data/test.csv
+    train:
+        src:
+    batch_size: 0
+model:
+    type: jmp
+    properties:
+      - type: energy
+        loss:
+            name: mae
+      - type: forces
+        loss:
+            name: mae
 
-# Schema of what we're predicting
-properties:
-    - energy
-    - force
-    - stress
-
-# labels: dict[str, torch.Tensor]
-
-recipes:
-    -
+    optimizer
+    lr_scheduler
+    ckpt_path:
+    graph_computer

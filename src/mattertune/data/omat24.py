@@ -29,7 +29,7 @@ class OMAT24Dataset(DatasetProtocol, Dataset[ase.Atoms]):
 
         self.config = config
         self.dataset = AseDBDataset(
-            config={"src": config.src},
+            config={"src": str(config.src)},
         )
 
     @override

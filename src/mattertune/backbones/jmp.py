@@ -3,24 +3,24 @@ from __future__ import annotations
 import contextlib
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast
+from typing import Literal, cast
 
 import nshconfig_extra as CE
+import numpy as np
 import torch
 import torch.nn as nn
 from jmp.models.gemnet.graph import GraphComputer, GraphComputerConfig
 from torch_geometric.data import Batch, Data
+from torch_geometric.data.data import BaseData
 from typing_extensions import override
 
 from ..finetune import properties as props
 from ..finetune.base import (
     FinetuneModuleBase,
     FinetuneModuleBaseConfig,
-    ModelPrediction,
+    ModelOutput,
 )
-
-if TYPE_CHECKING:
-    from torch_geometric.data.data import BaseData
+from ..output_heads.layers.activation import get_activation_cls
 
 log = logging.getLogger(__name__)
 
@@ -63,14 +63,19 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
         )
 
         # Create the output heads
-        # raise NotImplementedError("Implement this!")
         self.output_heads = nn.ModuleDict()
         for prop in self.hparams.properties:
             match prop:
-                case props.GraphPropertyConfig():
-                    self.output_heads[prop.name] = nn.Linear()
-                case props.ForcesPropertyConfig():
-                    self.output_heads[prop.name] = nn.Linear()
+                case props.EnergyPropertyConfig():
+                    from jmp.nn.energy_head import EnergyTargetConfig
+
+                    self.output_heads[prop.name] = EnergyTargetConfig(
+                        max_atomic_number=self.backbone.hparams.num_elements
+                    ).create_model(
+                        self.backbone.hparams.emb_size_atom,
+                        self.backbone.hparams.emb_size_edge,
+                        get_activation_cls(self.backbone.hparams.activation),
+                    )
                 case _:
                     raise ValueError(
                         f"Unsupported property config: {prop}. "
@@ -89,10 +94,12 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
 
         # Feed the backbone output to the output heads
         predicted_properties: dict[str, torch.Tensor] = {}
-        for name, head in self.output_heads.items():
-            predicted_properties[name] = head(batch, backbone_output)
 
-        pred: ModelPrediction = {"predicted_properties": predicted_properties}
+        head_input = {"data": batch, "backbone_output": backbone_output}
+        for name, head in self.output_heads.items():
+            predicted_properties[name] = head(head_input)
+
+        pred: ModelOutput = {"predicted_properties": predicted_properties}
         if return_backbone_output:
             pred["backbone_output"] = backbone_output
         return pred
@@ -137,12 +144,18 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
         # - fixed: Boolean tensor indicating whether an atom is fixed
         #       in the relaxation (shape: (N,)), set this to False
         #       if you don't have this information.
+        # - cell: The cell vectors (shape: (1, 3, 3))
+        # - pbc: The periodic boundary conditions (shape: (1, 3))
         data_dict: dict[str, torch.Tensor] = {
             "pos": torch.tensor(atoms.positions, dtype=torch.float32),
             "atomic_numbers": torch.tensor(atoms.numbers, dtype=torch.long),
             "natoms": torch.tensor(len(atoms), dtype=torch.long),
             "tags": torch.full((len(atoms),), 2, dtype=torch.long),
             "fixed": torch.zeros(len(atoms), dtype=torch.bool),
+            "cell": torch.from_numpy(np.array(atoms.cell, dtype=np.float32))
+            .float()
+            .unsqueeze(0),
+            "pbc": torch.tensor(atoms.pbc, dtype=torch.bool).unsqueeze(0),
         }
 
         # Also, pass along any other targets/properties.

@@ -35,7 +35,7 @@ class FinetuneModuleBaseConfig(C.Config, ABC):
     optimizer: OptimizerConfig
     """Optimizer."""
 
-    lr_scheduler: LRSchedulerConfig
+    lr_scheduler: LRSchedulerConfig | None = None
     """Learning Rate Scheduler"""
 
     ignore_gpu_batch_transform_error: bool = True
@@ -70,7 +70,7 @@ class _SkipBatchError(Exception):
     pass
 
 
-class ModelPrediction(TypedDict):
+class ModelOutput(TypedDict):
     predicted_properties: dict[str, torch.Tensor]
     """Predicted properties. This dictionary should be exactly
         in the same shape/format  as the output of `batch_to_labels`."""
@@ -119,7 +119,7 @@ class FinetuneModuleBase(
         self,
         batch: TBatch,
         return_backbone_output: bool = False,
-    ) -> ModelPrediction:
+    ) -> ModelOutput:
         """
         Forward pass of the model.
 
@@ -209,7 +209,7 @@ class FinetuneModuleBase(
         self.create_metrics()
 
         # Ensure that some parameters require gradients
-        if not any(p for p in self.parameters() if p.requires_grad):
+        if not any(p.requires_grad for p in self.parameters()):
             raise ValueError(
                 "No parameters require gradients. "
                 "Please ensure that some parts of the model are trainable."
@@ -225,7 +225,7 @@ class FinetuneModuleBase(
         self,
         batch: TBatch,
         return_backbone_output: bool = False,
-    ) -> ModelPrediction:
+    ) -> ModelOutput:
         with self.model_forward_context(batch):
             # Generate graph/etc
             if self.hparams.ignore_gpu_batch_transform_error:
@@ -279,7 +279,7 @@ class FinetuneModuleBase(
         log: bool = True,
     ):
         try:
-            predictions = self(batch)
+            output: ModelOutput = self(batch)
         except _SkipBatchError:
 
             def _zero_loss():
@@ -292,6 +292,7 @@ class FinetuneModuleBase(
 
         # Extract labels from the batch
         labels = self.batch_to_labels(batch)
+        predictions = output["predicted_properties"]
 
         # Compute loss
         loss = self._compute_loss(
@@ -310,7 +311,7 @@ class FinetuneModuleBase(
                 }
             )
 
-        return predictions, loss
+        return output, loss
 
     @override
     def training_step(self, batch: TBatch, batch_idx: int):
@@ -336,12 +337,16 @@ class FinetuneModuleBase(
 
     @override
     def configure_optimizers(self):
-        optimizer = self.hparams.optimizer.construct_optimizer(self.parameters())
-        lr_scheduler = self.hparams.lr_scheduler.construct_lr_scheduler(optimizer)
-        return cast(
-            OptimizerLRSchedulerConfig,
-            {"optimizer": optimizer, "lr_scheduler": lr_scheduler},
-        )
+        return_config: OptimizerLRSchedulerConfig = {
+            "optimizer": self.hparams.optimizer.construct_optimizer(self.parameters())
+        }
+
+        if (lr_scheduler := self.hparams.lr_scheduler) is not None:
+            return_config["lr_scheduler"] = lr_scheduler.construct_lr_scheduler(
+                return_config["optimizer"]
+            )
+
+        return return_config
 
     def create_dataloader(
         self,

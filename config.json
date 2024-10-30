@@ -1,41 +1,34 @@
 {
-    "backbone": "jmp",
-    "data": {
-        "train": "data/train.csv",
-        "val": "data/val.csv",
-        "test": "data/test.csv"
+    "$schema": "file:///workspaces/MatterTune/src/mattertune/finetune/main.MatterTunerConfig.schema.json",
+    "model": {
+        "type": "jmp",
+        "ckpt_path": "/mnt/shared/checkpoints/jmp-l.pt",
+        "graph_computer": {
+            "pbc": true
+        },
+        "ignore_gpu_batch_transform_error": true,
+        "optimizer": {
+            "name": "AdamW",
+            "lr": 1.0e-4
+        },
+        "properties": [
+            {
+                "type": "energy",
+                "loss": {
+                    "name": "mae"
+                }
+            }
+        ]
     },
-    "properties": [
-        {
-            "type": "energy",
-            "extensive": true
-        },
-        {
-            "type": "force",
-            "gradient": true
-        },
-        {
-            "type": "bandgap",
-            "method": ""
-        },
-        {
-            "type": "adsorption_energy"
-        },
-        {
-            "type": "custom_node_property",
-            "shape": [
-                "natoms",
-                "density_vector_size"
-            ]
+    "data": {
+        "batch_size": 8,
+        "num_workers": 0,
+        "train": {
+            "type": "omat24",
+            "src": "/mnt/datasets/salex/val/"
         }
-    ],
-    "recipes": [
-        {
-            "name": "skiplayers",
-            "layers": [
-                1,
-                2
-            ]
-        }
-    ]
+    },
+    "lightning_trainer_kwargs": {
+        "fast_dev_run": true
+    }
 }
