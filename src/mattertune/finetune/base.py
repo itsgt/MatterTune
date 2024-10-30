@@ -13,6 +13,8 @@ from lightning.pytorch.utilities.types import OptimizerLRSchedulerConfig
 from pydantic import BaseModel
 from typing_extensions import NotRequired, TypedDict, TypeVar, cast, override
 
+from ..data.loader import DataLoaderKwargs, create_dataloader
+from .loss import compute_loss
 from .lr_scheduler import LRSchedulerConfig
 from .metrics import FinetuneMetrics
 from .optimizer import OptimizerConfig
@@ -254,7 +256,7 @@ class FinetuneModuleBase(
             label = labels[prop.name]
 
             # Compute the loss
-            loss = prop.loss.compute_loss(prediction, label) * prop.loss_coefficient
+            loss = compute_loss(prop.loss, prediction, label) * prop.loss_coefficient
 
             # Log the loss
             if log:
