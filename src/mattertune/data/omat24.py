@@ -4,15 +4,15 @@ from pathlib import Path
 from typing import Literal
 
 import ase
+import nshconfig as C
 from fairchem.core.datasets import AseDBDataset
-from pydantic import BaseModel
 from torch.utils.data import Dataset
 from typing_extensions import override
 
 from .base import DatasetProtocol
 
 
-class OMAT24DatasetConfig(BaseModel):
+class OMAT24DatasetConfig(C.Config):
     type: Literal["omat24"] = "omat24"
     """Discriminator for the OMAT24 dataset."""
 

@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, TypeAlias
 
+import nshconfig as C
 import torch
 import torch.nn.functional as F
-from pydantic import BaseModel, Field
 from typing_extensions import assert_never
 
 
-class MAELossConfig(BaseModel):
+class MAELossConfig(C.Config):
     name: Literal["mae"] = "mae"
     reduction: Literal["mean", "sum"] = "mean"
     """How to reduce the loss values across the batch.
@@ -18,7 +18,7 @@ class MAELossConfig(BaseModel):
     """
 
 
-class MSELossConfig(BaseModel):
+class MSELossConfig(C.Config):
     name: Literal["mse"] = "mse"
     reduction: Literal["mean", "sum"] = "mean"
     """How to reduce the loss values across the batch.
@@ -28,7 +28,7 @@ class MSELossConfig(BaseModel):
     """
 
 
-class HuberLossConfig(BaseModel):
+class HuberLossConfig(C.Config):
     name: Literal["huber"] = "huber"
     delta: float = 1.0
     """The threshold value for the Huber loss function."""
@@ -40,7 +40,7 @@ class HuberLossConfig(BaseModel):
     """
 
 
-class L2MAELossConfig(BaseModel):
+class L2MAELossConfig(C.Config):
     name: Literal["l2_mae"] = "l2_mae"
     reduction: Literal["mean", "sum"] = "mean"
     """How to reduce the loss values across the batch.
@@ -69,7 +69,7 @@ def l2_mae_loss(
 
 LossConfig: TypeAlias = Annotated[
     MAELossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig,
-    Field(discriminator="name"),
+    C.Field(discriminator="name"),
 ]
 
 

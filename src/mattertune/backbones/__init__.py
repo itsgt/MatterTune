@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from typing import Annotated, TypeAlias
 
-from pydantic import Field
+import nshconfig as C
 
 from .jmp import JMPBackboneConfig as JMPBackboneConfig
 from .jmp import JMPBackboneModule as JMPBackboneModule
 
 BackboneConfig: TypeAlias = Annotated[
     JMPBackboneConfig,
-    Field(
+    C.Field(
         description="The configuration for the backbone.",
         discriminator="type",
     ),

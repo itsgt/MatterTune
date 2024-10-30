@@ -4,10 +4,10 @@ import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Annotated, Literal, TypeAlias
 
+import nshconfig as C
 import numpy as np
 import torch
 from ase import Atoms
-from pydantic import BaseModel, Field
 from typing_extensions import assert_never, override
 
 from .loss import LossConfig
@@ -23,7 +23,7 @@ DType: TypeAlias = Literal["int", "float"]
 """The type of the property values."""
 
 
-class PropertyConfigBase(BaseModel, ABC):
+class PropertyConfigBase(C.Config, ABC):
     name: str
     """The name of the property.
     This is the key that will be used to access the property in the output of the model.
@@ -137,7 +137,7 @@ PropertyConfig: TypeAlias = Annotated[
     | EnergyPropertyConfig
     | ForcesPropertyConfig
     | StressesPropertyConfig,
-    Field(
+    C.Field(
         description="The configuration for the property.",
         discriminator="type",
     ),

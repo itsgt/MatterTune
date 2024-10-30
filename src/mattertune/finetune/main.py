@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
 
+import nshconfig as C
 from lightning.pytorch import Trainer
-from pydantic import BaseModel
 
 from ..backbones import BackboneConfig
 from ..data import DatasetConfig
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from ..data.loader import DataLoaderKwargs
 
 
-class PerSplitDataConfig(BaseModel):
+class PerSplitDataConfig(C.Config):
     train: DatasetConfig
     """The configuration for the training data."""
 
@@ -59,7 +59,7 @@ class PerSplitDataConfig(BaseModel):
         }
 
 
-class MatterTunerConfig(BaseModel):
+class MatterTunerConfig(C.Config):
     data: PerSplitDataConfig
     """The configuration for the data."""
 

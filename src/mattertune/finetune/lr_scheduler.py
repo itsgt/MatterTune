@@ -3,12 +3,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Annotated, Literal, TypeAlias
 
+import nshconfig as C
 import torch
-from pydantic import BaseModel, Field
 from typing_extensions import override
 
 
-class LRSchedulerBaseConfig(BaseModel, ABC):
+class LRSchedulerBaseConfig(C.Config, ABC):
     @abstractmethod
     def construct_lr_scheduler(
         self,
@@ -19,8 +19,8 @@ class LRSchedulerBaseConfig(BaseModel, ABC):
 
 
 class StepLRConfig(LRSchedulerBaseConfig):
-    name: Literal["StepLR"] = "StepLR"
-    """Name of the learning rate scheduler."""
+    type: Literal["StepLR"] = "StepLR"
+    """Type of the learning rate scheduler."""
     step_size: int
     """Period of learning rate decay."""
     gamma: float
@@ -39,8 +39,8 @@ class StepLRConfig(LRSchedulerBaseConfig):
 
 
 class MultiStepLRConfig(LRSchedulerBaseConfig):
-    name: Literal["MultiStepLR"] = "MultiStepLR"
-    """Name of the learning rate scheduler."""
+    type: Literal["MultiStepLR"] = "MultiStepLR"
+    """Type of the learning rate scheduler."""
     milestones: list[int]
     """List of epoch indices. Must be increasing."""
     gamma: float
@@ -59,8 +59,8 @@ class MultiStepLRConfig(LRSchedulerBaseConfig):
 
 
 class ExponentialConfig(LRSchedulerBaseConfig):
-    name: Literal["ExponentialLR"] = "ExponentialLR"
-    """Name of the learning rate scheduler."""
+    type: Literal["ExponentialLR"] = "ExponentialLR"
+    """Type of the learning rate scheduler."""
     gamma: float
     """Multiplicative factor of learning rate decay."""
 
@@ -76,8 +76,8 @@ class ExponentialConfig(LRSchedulerBaseConfig):
 
 
 class ReduceOnPlateauConfig(LRSchedulerBaseConfig):
-    name: Literal["ReduceLROnPlateau"] = "ReduceLROnPlateau"
-    """Name of the learning rate scheduler."""
+    type: Literal["ReduceLROnPlateau"] = "ReduceLROnPlateau"
+    """Type of the learning rate scheduler."""
     mode: str
     """One of {"min", "max"}. Determines when to reduce the learning rate."""
     factor: float
@@ -114,8 +114,8 @@ class ReduceOnPlateauConfig(LRSchedulerBaseConfig):
 
 
 class CosineAnnealingLRConfig(LRSchedulerBaseConfig):
-    name: Literal["CosineAnnealingLR"] = "CosineAnnealingLR"
-    """Name of the learning rate scheduler."""
+    type: Literal["CosineAnnealingLR"] = "CosineAnnealingLR"
+    """Type of the learning rate scheduler."""
     T_max: int
     """Maximum number of iterations."""
     eta_min: float = 0
@@ -142,5 +142,5 @@ LRSchedulerConfig: TypeAlias = Annotated[
     | ExponentialConfig
     | ReduceOnPlateauConfig
     | CosineAnnealingLRConfig,
-    Field(discriminator="name"),
+    C.Field(discriminator="type"),
 ]

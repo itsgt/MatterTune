@@ -7,11 +7,11 @@ from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Generic
 
 import ase
+import nshconfig as C
 import torch
 import torch.nn as nn
 from lightning.pytorch import LightningModule
 from lightning.pytorch.utilities.types import OptimizerLRSchedulerConfig
-from pydantic import BaseModel
 from torch.utils.data import Dataset
 from typing_extensions import NotRequired, TypedDict, TypeVar, Unpack, cast, override
 
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class FinetuneModuleBaseConfig(BaseModel, ABC):
+class FinetuneModuleBaseConfig(C.Config, ABC):
     properties: Sequence[PropertyConfig]
     """Properties to predict."""
 

@@ -4,13 +4,13 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import Annotated, Literal, TypeAlias
 
+import nshconfig as C
 import torch
-from pydantic import BaseModel, Field, NonNegativeFloat, PositiveFloat
 from typing_extensions import override
 
 
-class OptimizerBaseConfig(BaseModel, ABC):
-    lr: PositiveFloat
+class OptimizerBaseConfig(C.Config, ABC):
+    lr: C.PositiveFloat
     """Learning rate."""
 
     @abstractmethod
@@ -23,11 +23,11 @@ class OptimizerBaseConfig(BaseModel, ABC):
 class AdamConfig(OptimizerBaseConfig):
     name: Literal["Adam"] = "Adam"
     """Name of the optimizer."""
-    eps: NonNegativeFloat = 1e-8
+    eps: C.NonNegativeFloat = 1e-8
     """Epsilon."""
-    betas: tuple[PositiveFloat, PositiveFloat] = (0.9, 0.999)
+    betas: tuple[C.PositiveFloat, C.PositiveFloat] = (0.9, 0.999)
     """Betas."""
-    weight_decay: NonNegativeFloat = 0.0
+    weight_decay: C.NonNegativeFloat = 0.0
     """Weight decay."""
     amsgrad: bool = False
     """Whether to use AMSGrad variant of Adam."""
@@ -50,11 +50,11 @@ class AdamConfig(OptimizerBaseConfig):
 class AdamWConfig(OptimizerBaseConfig):
     name: Literal["AdamW"] = "AdamW"
     """Name of the optimizer."""
-    eps: NonNegativeFloat = 1e-8
+    eps: C.NonNegativeFloat = 1e-8
     """Epsilon."""
-    betas: tuple[PositiveFloat, PositiveFloat] = (0.9, 0.999)
+    betas: tuple[C.PositiveFloat, C.PositiveFloat] = (0.9, 0.999)
     """Betas."""
-    weight_decay: NonNegativeFloat = 0.01
+    weight_decay: C.NonNegativeFloat = 0.01
     """Weight decay."""
     amsgrad: bool = False
     """Whether to use AMSGrad variant of Adam."""
@@ -77,9 +77,9 @@ class AdamWConfig(OptimizerBaseConfig):
 class SGDConfig(OptimizerBaseConfig):
     name: Literal["SGD"] = "SGD"
     """Name of the optimizer."""
-    momentum: NonNegativeFloat = 0.0
+    momentum: C.NonNegativeFloat = 0.0
     """Momentum."""
-    weight_decay: NonNegativeFloat = 0.0
+    weight_decay: C.NonNegativeFloat = 0.0
     """Weight decay."""
     nestrov: bool = False
     """Whether to use nestrov."""
@@ -100,7 +100,7 @@ class SGDConfig(OptimizerBaseConfig):
 
 OptimizerConfig: TypeAlias = Annotated[
     AdamConfig | AdamWConfig | SGDConfig,
-    Field(
+    C.Field(
         discriminator="name",
     ),
 ]
