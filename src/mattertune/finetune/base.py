@@ -11,7 +11,8 @@ import torch.nn as nn
 from lightning.pytorch import LightningModule
 from lightning.pytorch.utilities.types import OptimizerLRSchedulerConfig
 from pydantic import BaseModel
-from typing_extensions import NotRequired, TypedDict, TypeVar, cast, override
+from torch.utils.data import Dataset
+from typing_extensions import NotRequired, TypedDict, TypeVar, Unpack, cast, override
 
 from ..data.loader import DataLoaderKwargs, create_dataloader
 from .loss import compute_loss
@@ -203,32 +204,27 @@ class FinetuneModuleBase(
         # Create metrics
         self.create_metrics()
 
-    def create_metrics(self):
-        self.train_metrics = FinetuneMetrics(self.hparams.properties)
-        self.val_metrics = FinetuneMetrics(self.hparams.properties)
-        self.test_metrics = FinetuneMetrics(self.hparams.properties)
-
+        # Ensure that some parameters require gradients
         if not any(p for p in self.parameters() if p.requires_grad):
             raise ValueError(
                 "No parameters require gradients. "
                 "Please ensure that some parts of the model are trainable."
             )
 
+    def create_metrics(self):
+        self.train_metrics = FinetuneMetrics(self.hparams.properties)
+        self.val_metrics = FinetuneMetrics(self.hparams.properties)
+        self.test_metrics = FinetuneMetrics(self.hparams.properties)
+
     @override
     def forward(
         self,
         batch: TBatch,
         return_backbone_output: bool = False,
-        ignore_gpu_batch_transform_error: bool | None = None,
     ) -> ModelPrediction:
-        if ignore_gpu_batch_transform_error is None:
-            ignore_gpu_batch_transform_error = (
-                self.hparams.ignore_gpu_batch_transform_error
-            )
-
         with self.model_forward_context(batch):
             # Generate graph/etc
-            if ignore_gpu_batch_transform_error:
+            if self.hparams.ignore_gpu_batch_transform_error:
                 try:
                     batch = self.gpu_batch_transform(batch)
                 except Exception as e:
@@ -342,6 +338,19 @@ class FinetuneModuleBase(
             OptimizerLRSchedulerConfig,
             {"optimizer": optimizer, "lr_scheduler": lr_scheduler},
         )
+
+    def create_dataloader(
+        self,
+        dataset: Dataset[TData],
+        **kwargs: Unpack[DataLoaderKwargs],
+    ):
+        """
+        Creates a wrapped DataLoader for the given dataset.
+
+        This will wrap the dataset with the CPU data transform and the model's
+            collate function.
+        """
+        return create_dataloader(dataset, lightning_module=self, **kwargs)
 
     def to_ase_calculator(self):
         raise NotImplementedError("Implement this!")

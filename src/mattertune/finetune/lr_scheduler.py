@@ -46,6 +46,7 @@ class MultiStepLRConfig(LRSchedulerBaseConfig):
     gamma: float
     """Multiplicative factor of learning rate decay."""
 
+    @override
     def construct_lr_scheduler(
         self,
         optimizer: torch.optim.Optimizer,
@@ -63,6 +64,7 @@ class ExponentialConfig(LRSchedulerBaseConfig):
     gamma: float
     """Multiplicative factor of learning rate decay."""
 
+    @override
     def construct_lr_scheduler(
         self,
         optimizer: torch.optim.Optimizer,
@@ -93,6 +95,7 @@ class ReduceOnPlateauConfig(LRSchedulerBaseConfig):
     eps: float = 1e-8
     """Threshold for testing the new optimum."""
 
+    @override
     def construct_lr_scheduler(
         self,
         optimizer: torch.optim.Optimizer,
@@ -120,6 +123,7 @@ class CosineAnnealingLRConfig(LRSchedulerBaseConfig):
     last_epoch: int = -1
     """The index of last epoch."""
 
+    @override
     def construct_lr_scheduler(
         self,
         optimizer: torch.optim.Optimizer,

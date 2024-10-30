@@ -6,6 +6,7 @@ from typing import Annotated, Literal, TypeAlias
 
 import torch
 from pydantic import BaseModel, Field, NonNegativeFloat, PositiveFloat
+from typing_extensions import override
 
 
 class OptimizerBaseConfig(BaseModel, ABC):
@@ -31,6 +32,7 @@ class AdamConfig(OptimizerBaseConfig):
     amsgrad: bool = False
     """Whether to use AMSGrad variant of Adam."""
 
+    @override
     def construct_optimizer(
         self,
         parameters: Iterable[torch.nn.Parameter],
@@ -57,6 +59,7 @@ class AdamWConfig(OptimizerBaseConfig):
     amsgrad: bool = False
     """Whether to use AMSGrad variant of Adam."""
 
+    @override
     def construct_optimizer(
         self,
         parameters: Iterable[torch.nn.Parameter],
@@ -81,6 +84,7 @@ class SGDConfig(OptimizerBaseConfig):
     nestrov: bool = False
     """Whether to use nestrov."""
 
+    @override
     def construct_optimizer(
         self,
         parameters: Iterable[torch.nn.Parameter],

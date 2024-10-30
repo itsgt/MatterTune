@@ -13,7 +13,7 @@ from typing_extensions import final, override
 
 from mattertune.protocol import TBatch, TData
 
-from .data.util import IterableDatasetWrapper, MapDatasetWrapper
+from ..data.util import IterableDatasetWrapper, MapDatasetWrapper
 
 log = logging.getLogger(__name__)
 
