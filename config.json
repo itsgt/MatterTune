@@ -1,0 +1,32 @@
+{
+    "backbone": "jmp",
+    "data": {
+        "train": "data/train.csv",
+        "val": "data/val.csv",
+        "test": "data/test.csv"
+    },
+    "properties": [
+        {
+            "type": "energy",
+            "extensive": true
+        },
+        {
+            "type": "force",
+            "gradient": true
+        },
+        {
+            "type": "bandgap",
+            "method": ""
+        },
+        {
+            "type": "adsorption_energy"
+        },
+        {
+            "type": "custom_node_property",
+            "shape": [
+                "natoms",
+                "density_vector_size"
+            ]
+        }
+    ]
+}

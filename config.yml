@@ -1,0 +1,14 @@
+backbone: jmp
+
+data:
+    train: data/train.csv
+    val: data/val.csv
+    test: data/test.csv
+
+# Schema of what we're predicting
+properties:
+    - energy
+    - force
+    - stress
+
+# labels: dict[str, torch.Tensor]
