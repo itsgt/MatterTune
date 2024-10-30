@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import torch.nn as nn
@@ -60,28 +60,25 @@ class PropertyMetrics(MetricBase):
 class FinetuneMetrics(nn.Module):
     def __init__(
         self,
-        properties: Mapping[str, PropertyConfig],
+        properties: Sequence[PropertyConfig],
         metric_prefix: str = "",
     ):
         super().__init__()
 
-        self.metric_modules = nn.ModuleDict(
-            {
-                property_name: property_config.metric_cls()(property_name)
-                for property_name, property_config in properties.items()
-            }
+        self.metric_modules = nn.ModuleList(
+            [prop.metric_cls()(prop.name) for prop in properties]
         )
 
         self.metric_prefix = metric_prefix
 
     @override
     def forward(
-        self, prediction: dict[str, Any], ground_truth: dict[str, Any]
+        self, predictions: dict[str, Any], labels: dict[str, Any]
     ) -> Mapping[str, torchmetrics.Metric]:
         metrics = {}
 
-        for property_name, metric_module in self.metric_modules.items():
-            metrics.update(metric_module(prediction, ground_truth))
+        for metric_module in self.metric_modules:
+            metrics.update(metric_module(predictions, labels))
 
         return {
             f"{self.metric_prefix}{metric_name}": metric

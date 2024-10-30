@@ -47,7 +47,8 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
 
         self.backbone = GemNetOCBackbone.from_pretrained_ckpt(ckpt_path)
         log.info(
-            f"Loaded the model from the checkpoint at {ckpt_path}. The model has {sum(p.numel() for p in self.backbone.parameters()):,} parameters."
+            f"Loaded the model from the checkpoint at {ckpt_path}. The model "
+            f"has {sum(p.numel() for p in self.backbone.parameters()):,} parameters."
         )
 
         # Create the graph computer
@@ -108,8 +109,8 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
     @override
     def batch_to_labels(self, batch):
         labels: dict[str, torch.Tensor] = {}
-        for name in self.hparams.properties.keys():
-            labels[name] = getattr(batch, name)
+        for prop in self.hparams.properties:
+            labels[prop.name] = getattr(batch, prop.name)
         return labels
 
     @override
@@ -138,7 +139,7 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
         # - forces: The forces on each atom
         # - stress: The stress tensor of the system
         # - anything else you want to predict
-        for name, config in self.hparams.properties.items():
-            data_dict[]
+        for prop in self.hparams.properties:
+            data_dict[prop.name] = prop._from_ase_atoms_to_torch(atoms)
 
         return Data.from_dict(data_dict)

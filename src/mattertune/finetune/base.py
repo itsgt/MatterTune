@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Generic
 
 import torch
@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 
 
 class FinetuneModuleBaseConfig(BaseModel):
-    properties: Mapping[str, PropertyConfig]
+    properties: Sequence[PropertyConfig]
     """Properties to predict."""
 
     optimizer: OptimizerConfig
@@ -244,20 +244,20 @@ class FinetuneModuleBase(
         log_prefix: str = "",
     ):
         losses: list[torch.Tensor] = []
-        for target_name, head_config in self.hparams.properties.items():
+        for prop in self.hparams.properties:
             # Get the target and prediction
-            prediction = predictions[target_name]
-            label = labels[target_name]
+            prediction = predictions[prop.name]
+            label = labels[prop.name]
 
             # Compute the loss
             loss = (
-                self._compute_loss_for_head(head_config, prediction, label)
-                * head_config.loss_coefficient
+                self._compute_loss_for_head(prop, prediction, label)
+                * prop.loss_coefficient
             )
 
             # Log the loss
             if log:
-                self.log(f"{log_prefix}{target_name}_loss", loss)
+                self.log(f"{log_prefix}{prop.name}_loss", loss)
             losses.append(loss)
 
         # Sum the losses

@@ -6,20 +6,33 @@ from typing import TYPE_CHECKING, Annotated, Literal, TypeAlias
 
 import numpy as np
 import torch
+from ase import Atoms
 from pydantic import BaseModel, Field
-from typing_extensions import override
+from typing_extensions import assert_never, override
 
 from .loss import LossConfig
 
 if TYPE_CHECKING:
     from ase import Atoms
+    from ase.outputs import Properties
 
     from .metrics import MetricBase
 
 log = logging.getLogger(__name__)
 
+DType: TypeAlias = Literal["int", "float"]
+"""The type of the property values."""
+
 
 class PropertyConfigBase(BaseModel, ABC):
+    name: str
+    """The name of the property.
+    This is the key that will be used to access the property in the output of the model.
+    This is also the key that will be used to access the property in the ASE Atoms object."""
+
+    dtype: DType
+    """The type of the property values."""
+
     loss: LossConfig
     """The loss function to use when training the model on this property."""
 
@@ -36,18 +49,29 @@ class PropertyConfigBase(BaseModel, ABC):
 
         return PropertyMetrics
 
+    def _torch_dtype(self) -> torch.dtype:
+        """Internal helper to convert the dtype to a torch dtype."""
+        match self.dtype:
+            case "int":
+                return torch.long
+            case "float":
+                return torch.float
+            case _:
+                assert_never(self.dtype)
+
+    def _from_ase_atoms_to_torch(self, atoms: Atoms) -> torch.Tensor:
+        """Internal helper to convert the property value from an ASE Atoms object to a torch tensor."""
+        value = self.from_ase_atoms(atoms)
+        return torch.tensor(value, dtype=self._torch_dtype())
+
 
 class GraphPropertyConfig(PropertyConfigBase):
     type: Literal["graph_property"] = "graph_property"
 
-    name: str
-    """The name of the property.
-    This is the key that will be used to access the property in the output of the model.
-    This is also the key that will be used to access the property in the ASE Atoms object."""
-
     @override
-    def from_ase_atoms(self, atoms: Atoms) -> np.ndarray:
-        return atoms.get_properties([self.name])
+    def from_ase_atoms(self, atoms):
+        properties: Properties = atoms.get_properties([self.name])
+        return properties[self.name]
 
 
 class EnergyPropertyConfig(PropertyConfigBase):
@@ -57,6 +81,11 @@ class EnergyPropertyConfig(PropertyConfigBase):
     """The name of the property.
     This is the key that will be used to access the property in the output of the model."""
 
+    @override
+    def from_ase_atoms(self, atoms):
+        # @lingyukong677 Should this be get_potential_energy() or get_total_energy()?
+        return atoms.get_total_energy()
+
 
 class ForcesPropertyConfig(PropertyConfigBase):
     type: Literal["forces"] = "forces"
@@ -65,6 +94,10 @@ class ForcesPropertyConfig(PropertyConfigBase):
     """The name of the property.
     This is the key that will be used to access the property in the output of the model."""
 
+    @override
+    def from_ase_atoms(self, atoms):
+        return atoms.get_forces()
+
 
 class StressesPropertyConfig(PropertyConfigBase):
     type: Literal["stresses"] = "stresses"
@@ -72,6 +105,10 @@ class StressesPropertyConfig(PropertyConfigBase):
     name: str = "stresses"
     """The name of the property.
     This is the key that will be used to access the property in the output of the model."""
+
+    @override
+    def from_ase_atoms(self, atoms):
+        return atoms.get_stress()
 
 
 PropertyConfig: TypeAlias = Annotated[
