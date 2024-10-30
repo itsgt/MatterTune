@@ -8,19 +8,11 @@ from typing import TYPE_CHECKING, Any, Generic
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from lightning.pytorch import LightningModule
 from lightning.pytorch.utilities.types import OptimizerLRSchedulerConfig
 from pydantic import BaseModel
 from typing_extensions import NotRequired, TypedDict, TypeVar, cast, override
 
-from .loss import (
-    HuberLossConfig,
-    L2MAELossConfig,
-    MAELossConfig,
-    MSELossConfig,
-    l2_mae_loss,
-)
 from .lr_scheduler import LRSchedulerConfig
 from .metrics import FinetuneMetrics
 from .optimizer import OptimizerConfig
@@ -50,6 +42,24 @@ TFinetuneModuleConfig = TypeVar("TFinetuneModuleConfig", bound=FinetuneModuleBas
 
 
 class _SkipBatchError(Exception):
+    """
+    Exception to skip a batch in the forward pass. This is not a real error and
+        should not be logged.
+
+    Instead, this is basically a control flow mechanism to skip a batch
+        if an error occurs during the forward pass. This is useful for
+        handling edge cases where a batch may be invalid or cause an error
+        during the forward pass. In this case, we can throw this exception
+        anywhere in the forward pas and then catch it in the `_common_step`
+        method. If this exception is caught, we can just skip the batch
+        instead of logging an error.
+
+    This is primarily used to skip graph generation errors in messy data. E.g.,
+        if our dataset contains materials with so little atoms that we cannot
+        generate a graph, we can just skip these materials instead of
+        completely failing the training run.
+    """
+
     pass
 
 
@@ -218,24 +228,6 @@ class FinetuneModuleBase(
                 batch, return_backbone_output=return_backbone_output
             )
 
-    def _compute_loss_for_head(
-        self,
-        hparams: PropertyConfig,
-        prediction: torch.Tensor,
-        target: torch.Tensor,
-    ):
-        match hparams.loss:
-            case MAELossConfig():
-                return F.l1_loss(prediction, target)
-            case MSELossConfig():
-                return F.mse_loss(prediction, target)
-            case HuberLossConfig():
-                return F.huber_loss(prediction, target, delta=hparams.loss.delta)
-            case L2MAELossConfig():
-                return l2_mae_loss(prediction, target)
-            case _:
-                raise ValueError(f"Unknown loss function: {hparams.loss}")
-
     def _compute_loss(
         self,
         predictions: dict[str, torch.Tensor],
@@ -250,10 +242,7 @@ class FinetuneModuleBase(
             label = labels[prop.name]
 
             # Compute the loss
-            loss = (
-                self._compute_loss_for_head(prop, prediction, label)
-                * prop.loss_coefficient
-            )
+            loss = prop.loss.compute_loss(prediction, label) * prop.loss_coefficient
 
             # Log the loss
             if log:
