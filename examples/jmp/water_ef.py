@@ -94,6 +94,7 @@ def main(args_dict: dict):
         run_name="jmp-water-ef",
         backbone=backbone,
         output_heads=output_heads,
+        raw_data_provider=data_provider,
         metrics_module=metrics_module,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
@@ -102,7 +103,7 @@ def main(args_dict: dict):
         ignore_data_errors = False,
         early_stopping_patience=200,
     )
-    finetune_model = FinetuneModuleBase(finetune_config, raw_data_provider=data_provider)
+    finetune_model = FinetuneModuleBase(finetune_config)
     
     ## Fit the model
     wandb_logger = WandbLogger(project=finetune_config.project, name=finetune_config.run_name)
@@ -116,18 +117,36 @@ def main(args_dict: dict):
         precision="bf16-mixed",
         logger=[wandb_logger],
         default_root_dir="./checkpoints/water_ef",
+        inference_mode=finetune_model.inference_mode,
     )
     trainer.fit(finetune_model)
-    trainer.test(finetune_model)
+    
+    from pytorch_lightning.callbacks import ModelCheckpoint
+            
+    best_checkpoint_callback = None
+    for callback in trainer.checkpoint_callbacks:
+        if isinstance(callback, ModelCheckpoint):
+            best_checkpoint_callback = callback
+            break
+
+    if best_checkpoint_callback:
+        best_checkpoint_path = best_checkpoint_callback.best_model_path
+        # Load the best checkpoint
+        model = FinetuneModuleBase.load_from_checkpoint(best_checkpoint_path)
+        model.raw_data_provider = data_provider
+    else:
+        raise ValueError("No checkpoint callback found in the trainer.")
+    
+    trainer.test(model)
     
 if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--max_epochs", type=int, default=2000)
+    parser.add_argument("--max_epochs", type=int, default=1000)
     parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--xyz_path", type=str, default="./data/water_processed.xyz")
-    parser.add_argument("--gpus", type=int, nargs="+", default=[0,2,3])
+    parser.add_argument("--xyz_path", type=str, default="../data/water_processed.xyz")
+    parser.add_argument("--gpus", type=int, nargs="+", default=[0,3])
     parser.add_argument("--train_split", type=float, default=0.03)
     args_dict = vars(parser.parse_args())
     main(args_dict)

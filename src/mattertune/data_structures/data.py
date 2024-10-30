@@ -10,7 +10,8 @@ from torch.utils.data import Dataset
 class MatterTuneDataProtocol(Protocol):
     r"""
     Base class for single strcucture objects used for forward pass.
-    Two conponents are required:
+    Three conponents are required:
+    - idx: the index of the strcucture in the dataset, should be a torch.Tensor of shape (1,)
     - backbone_input: the input to the backbone model, can be any type
     - labels: the labels of the strcucture, should be a dictionary of torch.Tensor
     """
@@ -80,7 +81,8 @@ TMatterTuneData = TypeVar("TMatterTuneData", bound=MatterTuneDataProtocol, infer
 class MatterTuneBatchProtocol(Protocol):
     r"""
     Base class for batched strcucture objects used for forward pass.
-    Two conponents are required:
+    Three conponents are required:
+    - idx: the index of the strcucture in the dataset
     - backbone_input: the input to the backbone model, can be any type
     - labels: the labels of the strcuctures, should be a dictionary of torch.Tensor
     """

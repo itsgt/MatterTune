@@ -29,6 +29,8 @@ class FinetuneModuleBaseConfig(BaseModel):
     """Backbone model configuration."""
     output_heads: Sequence[OutputHeadBaseConfig]
     """Output heads configurations."""
+    raw_data_provider: RawDataProviderBaseConfig|None = None
+    """Raw data provider configuration."""
     metrics_module: MetricsModuleConfig
     """Metrics module configuration."""
     optimizer: OptimizerConfig
@@ -61,11 +63,11 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TMatterTuneBatch, TFinetune
     def __init__(
         self,
         config: TFinetuneModuleConfig,
-        raw_data_provider: RawDataProviderBaseConfig|None = None,
     ):
         super().__init__()
         self.config = config
-        self.raw_data_provider = raw_data_provider
+        self.raw_data_provider = config.raw_data_provider
+        config.raw_data_provider = None ## We don't want to save raw_data_provider in the checkpoint
         self.backbone = config.backbone.construct_backbone()
         
         assert len(config.output_heads) > 0, "At least one output head is required."
@@ -74,6 +76,7 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TMatterTuneBatch, TFinetune
         force_output_heads = []
         stress_output_heads = []
         other_output_heads = []
+        self.compel_grad_enabled = False
         for output_head_config in config.output_heads:
             if "energy" in output_head_config.target_name:
                 energy_output_heads.append(output_head_config)
@@ -83,6 +86,8 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TMatterTuneBatch, TFinetune
                 force_output_heads.append(output_head_config)
             else:
                 other_output_heads.append(output_head_config)
+            compel_grad_enabled_i = output_head_config.compel_grad_enabled
+            self.compel_grad_enabled = self.compel_grad_enabled or compel_grad_enabled_i
         config.output_heads = energy_output_heads + stress_output_heads + force_output_heads + other_output_heads
         self.output_heads = nn.ModuleDict()
         for output_head_config in config.output_heads:
@@ -95,38 +100,44 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TMatterTuneBatch, TFinetune
         trainable_params = [p for p in self.parameters() if p.requires_grad]
         if len(trainable_params) == 0:
             raise ValueError("No parameters require gradients. Please ensure that some parts of the model are trainable.")
-        
+        self.enable_callbacks = True
         self.save_hyperparameters(ignore=["raw_data_provider"])
+        
+    def disable_callbacks(self):
+        """
+        Disable all callbacks.
+        """
+        self.enable_callbacks = False
         
     def configure_callbacks(self) -> list[pl.Callback]:
         """
         Configure callbacks for the trainer.
         """
         callbacks = []
-        primary_metric_name = self.metrics_module.get_primary_metric_name()
-        
-        # Setup checkpoint callback
-        checkpoint_callback = ModelCheckpoint(
-            dirpath=self.trainer.default_root_dir,  # use default root dir
-            filename=f"best-{self.config.run_name}-{{epoch:02d}}-{{val_loss:.2f}}",
-            save_top_k=1,
-            monitor=f"val/{primary_metric_name}",  # monitor primary metric
-            mode=self.config.early_stopping_mode,
-            save_last=True,  # always save the last checkpoint
-        )
-        callbacks.append(checkpoint_callback)
-        
-        # Setup early stopping callback if enabled
-        if self.config.early_stopping_patience is not None:
-            early_stopping_callback = EarlyStopping(
-                monitor=f"val/{primary_metric_name}",
-                min_delta=self.config.early_stopping_min_delta,
-                patience=self.config.early_stopping_patience,
+        if self.enable_callbacks:
+            primary_metric_name = self.metrics_module.get_primary_metric_name()
+            
+            # Setup checkpoint callback
+            checkpoint_callback = ModelCheckpoint(
+                dirpath=self.trainer.default_root_dir,  # use default root dir
+                filename=f"best-{self.config.run_name}-{{epoch:02d}}-{{val_loss:.2f}}",
+                save_top_k=1,
+                monitor=f"val/{primary_metric_name}",  # monitor primary metric
                 mode=self.config.early_stopping_mode,
-                verbose=True
+                save_last=True,  # always save the last checkpoint
             )
-            callbacks.append(early_stopping_callback)
-        
+            callbacks.append(checkpoint_callback)
+            
+            # Setup early stopping callback if enabled
+            if self.config.early_stopping_patience is not None:
+                early_stopping_callback = EarlyStopping(
+                    monitor=f"val/{primary_metric_name}",
+                    min_delta=self.config.early_stopping_min_delta,
+                    patience=self.config.early_stopping_patience,
+                    mode=self.config.early_stopping_mode,
+                    verbose=False,
+                )
+                callbacks.append(early_stopping_callback)
         return callbacks
         
             
@@ -363,3 +374,8 @@ class FinetuneModuleBase(pl.LightningModule, Generic[TMatterTuneBatch, TFinetune
                 self.output_heads[output_head_config.target_name].train()
                 for param in self.output_heads[output_head_config.target_name].parameters():
                     param.requires_grad = True
+        
+    @property
+    def inference_mode(self) -> bool:
+        # Return False when compel_grad_enabled is True
+        return not self.compel_grad_enabled

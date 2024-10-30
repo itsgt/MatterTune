@@ -86,6 +86,7 @@ def main(args_dict:dict):
                 run_name="jmp-matbench-bandgap",
                 backbone=backbone,
                 output_heads=output_heads,
+                raw_data_provider=data_provider,
                 metrics_module=metrics_module,
                 optimizer=optimizer,
                 lr_scheduler=lr_scheduler,
@@ -94,7 +95,7 @@ def main(args_dict:dict):
                 ignore_data_errors = False,
                 early_stopping_patience=200,
             )
-            finetune_model = FinetuneModuleBase(finetune_config, data_provider)
+            finetune_model = FinetuneModuleBase(finetune_config)
             
             ## Fit the model
             simplified_config = {
@@ -137,7 +138,7 @@ def main(args_dict:dict):
             
             test_inputs = task.get_test_data(fold, include_target=False)
             atoms_list = [AseAtomsAdaptor.get_atoms(struct) for struct in test_inputs]
-            potential = MatterTunePotential(model, trainer, args_dict["batch_size"])
+            potential = MatterTunePotential(model = model, trainer = trainer, batch_size=args_dict["batch_size"], print_log=True)
             predictions_dict: dict[str, torch.Tensor] = potential.predict(atoms_list)
             predictions = predictions_dict["band_gap"].detach().to(dtype=torch.float32).cpu().numpy().reshape(-1)
             task.record(fold, predictions)
@@ -147,9 +148,9 @@ def main(args_dict:dict):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--max_epochs", type=int, default=2000)
+    parser.add_argument("--max_epochs", type=int, default=1000)
     parser.add_argument("--batch_size", type=int, default=64)
-    parser.add_argument("--gpus", type=int, nargs="+", default=[0,2,3])
+    parser.add_argument("--gpus", type=int, nargs="+", default=[0,1,2])
     parser.add_argument("--val_split", type=float, default=0.1)
     args = parser.parse_args()
     

@@ -24,6 +24,8 @@ class OutputHeadBaseConfig(BaseModel, ABC, Generic[TMatterTuneBatch]):
     """The coefficient of the loss function"""
     freeze: bool = False
     """Whether to freeze the output head"""
+    compel_grad_enabled: bool = False
+    """Whether to force grad enabled during the forward pass"""
     
     @abstractmethod
     def construct_output_head(

@@ -73,6 +73,9 @@ class GradientStressOutputHeadConfig(OutputHeadBaseConfig, Generic[TMatterTuneBa
     forces: bool = False
     """Whether to compute the forces as well"""
     energy_target_name: str
+    """The name of the energy target output by the energy head"""
+    compel_grad_enabled: bool = True
+    """For the gradient stress head, grad must be enabled during the forward pass"""
 
     @override
     def is_classification(self) -> bool:

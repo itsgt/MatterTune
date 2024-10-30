@@ -29,6 +29,9 @@ class GradientForceOutputHeadConfig(OutputHeadBaseConfig, Generic[TMatterTuneBat
     loss: LossConfig = L2MAELossConfig()
     """The loss configuration for the target."""
     energy_target_name: str
+    """The name of the energy target output by the energy head"""
+    compel_grad_enabled: bool = True
+    """For the gradient force head, grad must be enabled during the forward pass"""
     
     @override
     def is_classification(self) -> bool:

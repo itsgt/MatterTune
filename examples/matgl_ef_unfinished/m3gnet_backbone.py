@@ -107,7 +107,7 @@ class M3GNetBackbone(BackBoneBaseModule, M3GNet):
         strain = batch["cell_displacement"]
         lattice = lat @ (torch.eye(3, device=lat.device) + strain)
         g.edata["lattice"] = torch.repeat_interleave(lattice, g.batch_num_edges(), dim=0)
-        g.edata["pbc_offshift"] = (g.edata["pbc_offset"].unsqueeze(dim=-1) * g.edata["lattice"]).sum(dim=1)
+        g.edata["pbc_offset"] = (g.edata["pbc_offset"].unsqueeze(dim=-1) * g.edata["lattice"]).sum(dim=1)
         g.ndata["pos"] = (
             g.ndata["frac_coords"].unsqueeze(dim=-1) * torch.repeat_interleave(lattice, g.batch_num_nodes(), dim=0)
         ).sum(dim=1)

@@ -19,7 +19,6 @@ class RawDataProviderBaseConfig(BaseModel, ABC):
 class RawDataProviderBase(ABC):
     """
     Base class for raw data provider.
-    
     """
     @abstractmethod
     def get_train_data(self) -> tuple[list[Atoms], list[dict[str, torch.Tensor]]]: ...

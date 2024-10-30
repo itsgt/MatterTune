@@ -168,6 +168,17 @@ class JMPBackbone(BackBoneBaseModule, nn.Module):
         data = Data.from_dict(data_dict)
         return JMPData(torch.tensor([idx], dtype=torch.long), data, labels)
 
+    @classmethod
+    @override
+    def collate_fn(
+        cls,
+        data_list: list[JMPData],
+    ) -> JMPBatch:
+        idx = torch.cat([d.idx for d in data_list], dim=0)
+        data = Batch.from_data_list([d.backbone_input for d in data_list])
+        labels = {key: torch.cat([d.labels[key] for d in data_list], dim=0) for key in data_list[0].labels}
+        return JMPBatch(idx, data, labels)
+    
     @override
     def process_batch_under_grad(self, batch: JMPBatch, training: bool) -> JMPBatch:
         
@@ -226,17 +237,6 @@ class JMPBackbone(BackBoneBaseModule, nn.Module):
                 graph["id_swap_edge_index"] = graph["id_swap_edge_index"][mask]
 
         return graph
-    
-    @classmethod
-    @override
-    def collate_fn(
-        cls,
-        data_list: list[JMPData],
-    ) -> JMPBatch:
-        idx = torch.cat([d.idx for d in data_list], dim=0)
-        data = Batch.from_data_list([d.backbone_input for d in data_list])
-        labels = {key: torch.cat([d.labels[key] for d in data_list], dim=0) for key in data_list[0].labels}
-        return JMPBatch(idx, data, labels)
         
     @classmethod
     @override

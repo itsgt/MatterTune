@@ -5,9 +5,10 @@ import torch
 from mattertune.finetune.base import FinetuneModuleBase
 from mattertune.data_structures import MatterTuneDataSetBase
 from torch.utils.data import DataLoader, DistributedSampler
-from typing import List, Dict
 from collections import defaultdict
 import torch.distributed as dist
+from typing import Literal
+import logging
 
 class MatterTunePotential():
     """
@@ -18,13 +19,40 @@ class MatterTunePotential():
         self,
         *,
         model: FinetuneModuleBase,
-        trainer: Trainer,
+        trainer: Trainer|None = None,
+        accelator: Literal["cpu", "gpu"] = "gpu",
+        devices: list[int] = [0],
         batch_size: int,
         pin_memory: bool = True,
         num_workers: int = 4,
+        print_log: bool = False,
     ):
         self.model = model
-        self.trainer = trainer
+        self.model.disable_callbacks()
+        self.accelator = accelator
+        if trainer is not None:
+            self.trainer = trainer
+        else:
+            if accelator == "cpu":
+                self.trainer = Trainer(
+                    accelerator=accelator,
+                    precision=None,
+                    inference_mode=model.inference_mode,
+                    enable_model_summary=print_log,
+                    enable_progress_bar=print_log,
+                    logger=False,
+                )
+            elif accelator == "gpu":
+                self.trainer = Trainer(
+                    accelerator=accelator,
+                    devices=devices,
+                    strategy="ddp",
+                    precision="bf16-mixed",
+                    inference_mode=model.inference_mode,
+                    enable_model_summary=print_log,
+                    enable_progress_bar=print_log,
+                    logger=False,
+                )
         self.batch_size = batch_size
         self.pin_memory = pin_memory
         self.num_workers = num_workers
@@ -40,12 +68,14 @@ class MatterTunePotential():
         """
         Predict the properties of atoms list
         """
+        logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
+        
         data_list = [self.model.backbone.process_raw(atoms=atoms, idx=i, labels={}, inference=True) for i, atoms in enumerate(atoms_list)]
         dataset = MatterTuneDataSetBase(data_list)
         
         # Using distributed sampler for multi-device scenarios
-        use_ddp = isinstance(self.trainer.strategy, pl.strategies.DDPStrategy)
-        sampler = DistributedSampler(dataset) if use_ddp else None
+        multi_device: bool = (self.accelator == "gpu") and (self.trainer.num_devices > 1)
+        sampler = DistributedSampler(dataset) if multi_device else None
         
         dataloader = DataLoader(
             dataset,
@@ -54,7 +84,7 @@ class MatterTunePotential():
             sampler=sampler,
             collate_fn=self.model.backbone.collate_fn,
             pin_memory=self.pin_memory,
-            num_workers=self.num_workers
+            num_workers=self.num_workers,
         )
 
         # Running prediction using trainer
@@ -65,7 +95,7 @@ class MatterTunePotential():
             raise ValueError("No predictions were generated. Please check the model and input data.")
 
         # Aggregate predictions across devices (e.g., multiple GPUs)
-        if use_ddp and dist.is_initialized():
+        if multi_device and dist.is_initialized():
             all_predictions = [None for _ in range(dist.get_world_size())]
             dist.all_gather_object(all_predictions, predictions)
             predictions = [pred for device_preds in all_predictions for pred in device_preds]
