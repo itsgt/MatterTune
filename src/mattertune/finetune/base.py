@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Generic
 
+import ase
 import torch
 import torch.nn as nn
 from lightning.pytorch import LightningModule
@@ -195,10 +196,7 @@ class FinetuneModuleBase(
     hparams: TFinetuneModuleConfig  # pyright: ignore[reportIncompatibleMethodOverride]
     hparams_initial: TFinetuneModuleConfig  # pyright: ignore[reportIncompatibleMethodOverride]
 
-    def __init__(
-        self,
-        hparams: TFinetuneModuleConfig,
-    ):
+    def __init__(self, hparams: TFinetuneModuleConfig):
         super().__init__()
 
         # Save the hyperparameters
@@ -347,7 +345,7 @@ class FinetuneModuleBase(
 
     def create_dataloader(
         self,
-        dataset: Dataset[TData],
+        dataset: Dataset[ase.Atoms],
         **kwargs: Unpack[DataLoaderKwargs],
     ):
         """

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
+import ase
 from torch.utils.data import DataLoader, Dataset, IterableDataset, Sampler
 from torch.utils.data.dataloader import _worker_init_fn_t
 from typing_extensions import TypedDict, Unpack
@@ -10,9 +11,7 @@ from typing_extensions import TypedDict, Unpack
 from .util import IterableDatasetWrapper, MapDatasetWrapper
 
 if TYPE_CHECKING:
-    from ..finetune.base import FinetuneModuleBase
-
-TData = TypeVar("TData", covariant=True)
+    from ..finetune.base import FinetuneModuleBase, TBatch, TData, TFinetuneModuleConfig
 
 
 class DataLoaderKwargs(TypedDict, total=False):
@@ -62,17 +61,20 @@ class DataLoaderKwargs(TypedDict, total=False):
 
 
 def create_dataloader(
-    dataset: Dataset[TData],
+    dataset: Dataset[ase.Atoms],
     *,
-    lightning_module: FinetuneModuleBase,
+    lightning_module: FinetuneModuleBase[TData, TBatch, TFinetuneModuleConfig],
     **kwargs: Unpack[DataLoaderKwargs],
 ):
+    def map_fn(data: ase.Atoms):
+        return lightning_module.cpu_data_transform(lightning_module.atoms_to_data(data))
+
     # Wrap the dataset with the CPU data transform
-    dataset = (
-        IterableDatasetWrapper(dataset, lightning_module.cpu_data_transform)
+    dataset_mapped = (
+        IterableDatasetWrapper(dataset, map_fn)
         if isinstance(dataset, IterableDataset)
-        else MapDatasetWrapper(dataset, lightning_module.cpu_data_transform)
+        else MapDatasetWrapper(dataset, map_fn)
     )
     # Create the data loader with the model's collate function
-    dl = DataLoader(dataset, collate_fn=lightning_module.collate_fn, **kwargs)
+    dl = DataLoader(dataset_mapped, collate_fn=lightning_module.collate_fn, **kwargs)
     return dl

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, Annotated, Literal, TypeAlias
 
 import numpy as np
@@ -143,6 +142,3 @@ PropertyConfig: TypeAlias = Annotated[
         discriminator="type",
     ),
 ]
-
-PropertyConfigs: TypeAlias = Sequence[PropertyConfig]
-"""A sequence of property configurations."""
