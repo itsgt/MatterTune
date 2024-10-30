@@ -58,15 +58,17 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
         )
 
         # Create the output heads
-        raise NotImplementedError("Implement this!")
+        # raise NotImplementedError("Implement this!")
         self.output_heads = nn.ModuleDict()
-        for name, config in self.hparams.properties.items():
-            match config:
+        for prop in self.hparams.properties:
+            match prop:
                 case props.GraphPropertyConfig():
-                    pass
+                    self.output_heads[prop.name] = nn.Linear()
+                case props.ForcesPropertyConfig():
+                    self.output_heads[prop.name] = nn.Linear()
                 case _:
                     raise ValueError(
-                        f"Unsupported property config: {config}. "
+                        f"Unsupported property config: {prop}. "
                         "Please ask the maintainers of the JMP backbone to add support for it."
                     )
 
@@ -93,6 +95,11 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
     @override
     def pretrained_backbone_parameters(self):
         return self.backbone.parameters()
+
+    @override
+    def output_head_parameters(self):
+        for head in self.output_heads.values():
+            yield from head.parameters()
 
     @override
     def cpu_data_transform(self, data):

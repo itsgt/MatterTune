@@ -12,3 +12,6 @@ properties:
     - stress
 
 # labels: dict[str, torch.Tensor]
+
+recipes:
+    -

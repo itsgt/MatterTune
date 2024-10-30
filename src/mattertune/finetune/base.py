@@ -65,7 +65,8 @@ class _SkipBatchError(Exception):
 
 class ModelPrediction(TypedDict):
     predicted_properties: dict[str, torch.Tensor]
-    """Predicted properties."""
+    """Predicted properties. This dictionary should be exactly
+        in the same shape/format  as the output of `batch_to_labels`."""
 
     backbone_output: NotRequired[Any]
     """Output of the backbone model. Only set if `return_backbone_output` is True."""
@@ -89,7 +90,10 @@ class FinetuneModuleBase(
     def create_model(self):
         """
         Initialize both the pre-trained backbone and the
-        output heads for the properties to predict.
+            output heads for the properties to predict.
+
+        You should also construct any other ``nn.Module`` instances
+            necessary for the forward pass here.
         """
         ...
 
@@ -125,8 +129,13 @@ class FinetuneModuleBase(
     def pretrained_backbone_parameters(self) -> Iterable[nn.Parameter]:
         """
         Return the parameters of the backbone model.
+        """
+        ...
 
-        Default implementation returns all parameters that are not part of any output head.
+    @abstractmethod
+    def output_head_parameters(self) -> Iterable[nn.Parameter]:
+        """
+        Return the parameters of the output heads.
         """
         ...
 
@@ -151,6 +160,9 @@ class FinetuneModuleBase(
     def gpu_batch_transform(self, batch: TBatch) -> TBatch:
         """
         Transform batch (on the GPU) before being fed to the model.
+
+        This will mainly be used to compute the (radius or knn) graph from
+            the atomic positions.
         """
         ...
 
@@ -158,10 +170,10 @@ class FinetuneModuleBase(
     def batch_to_labels(self, batch: TBatch) -> dict[str, torch.Tensor]:
         """
         Extract ground truth values from a batch. The output of this function
-        should be a dictionary with keys corresponding to the target names
-        and values corresponding to the ground truth values. The values should
-        be torch tensors that match, in shape, the output of the corresponding
-        output head.
+            should be a dictionary with keys corresponding to the target names
+            and values corresponding to the ground truth values. The values should
+            be torch tensors that match, in shape, the output of the corresponding
+            output head.
         """
         ...
 
@@ -300,7 +312,11 @@ class FinetuneModuleBase(
 
     @override
     def training_step(self, batch: TBatch, batch_idx: int):
-        _, loss = self._common_step(batch, "train", self.train_metrics)
+        _, loss = self._common_step(
+            batch,
+            "train",
+            self.train_metrics,
+        )
         return loss
 
     @override

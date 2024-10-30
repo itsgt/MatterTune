@@ -28,5 +28,14 @@
                 "density_vector_size"
             ]
         }
+    ],
+    "recipes": [
+        {
+            "name": "skiplayers",
+            "layers": [
+                1,
+                2
+            ]
+        }
     ]
 }

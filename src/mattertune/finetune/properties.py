@@ -14,7 +14,6 @@ from .loss import LossConfig
 
 if TYPE_CHECKING:
     from ase import Atoms
-    from ase.outputs import Properties
 
     from .metrics import MetricBase
 
@@ -70,8 +69,9 @@ class GraphPropertyConfig(PropertyConfigBase):
 
     @override
     def from_ase_atoms(self, atoms):
-        properties: Properties = atoms.get_properties([self.name])
-        return properties[self.name]
+        # properties: Properties = atoms.get_properties([self.name])
+        # return properties[self.name]
+        return atoms.info[self.name]
 
 
 class EnergyPropertyConfig(PropertyConfigBase):
@@ -80,6 +80,9 @@ class EnergyPropertyConfig(PropertyConfigBase):
     name: str = "energy"
     """The name of the property.
     This is the key that will be used to access the property in the output of the model."""
+
+    dtype: DType = "float"
+    """The type of the property values."""
 
     @override
     def from_ase_atoms(self, atoms):
@@ -94,6 +97,9 @@ class ForcesPropertyConfig(PropertyConfigBase):
     """The name of the property.
     This is the key that will be used to access the property in the output of the model."""
 
+    dtype: DType = "float"
+    """The type of the property values."""
+
     @override
     def from_ase_atoms(self, atoms):
         return atoms.get_forces()
@@ -105,6 +111,9 @@ class StressesPropertyConfig(PropertyConfigBase):
     name: str = "stresses"
     """The name of the property.
     This is the key that will be used to access the property in the output of the model."""
+
+    dtype: DType = "float"
+    """The type of the property values."""
 
     @override
     def from_ase_atoms(self, atoms):
