@@ -30,8 +30,6 @@ class PerSplitDataConfig(C.Config):
     If set to "auto", the number of workers will be automatically
         set based on the number of available CPUs.
     Set to 0 to disable parallelism.
-
-    TODO: Add support for auto-setting this value.
     """
 
     pin_memory: bool = True
