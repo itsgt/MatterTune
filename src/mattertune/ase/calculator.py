@@ -6,6 +6,8 @@ from mattertune.potential import MatterTunePotential
 from typing_extensions import override
 import torch
 
+_defineprop("band_gap", "num_atoms, 3")
+
 
 class MatterTuneASECalculator(Calculator):
     implemented_properties: list[str] = []
@@ -29,6 +31,10 @@ class MatterTuneASECalculator(Calculator):
             self.target_name_map = {prop: prop for prop in self.implemented_properties}
         self.property_name_map = {v: k for k, v in self.target_name_map.items()} ## Reverse mapping from property name to output head target_name
         self.implemented_properties = [self.target_name_map[prop] for prop in self.implemented_properties]
+        
+        for prop in self.implemented_properties:
+            _defineprop(prop, float, shape=("?"))
+        
     
     @override
     def calculate(
