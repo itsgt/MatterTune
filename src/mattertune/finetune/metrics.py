@@ -34,7 +34,7 @@ class PropertyMetrics(MetricBase):
         self.mae = torchmetrics.MeanAbsoluteError()
         self.mse = torchmetrics.MeanSquaredError(squared=True)
         self.rmse = torchmetrics.MeanSquaredError(squared=False)
-        self.r2 = torchmetrics.R2Score()
+        # self.r2 = torchmetrics.R2Score()
 
     @override
     def forward(
@@ -47,13 +47,13 @@ class PropertyMetrics(MetricBase):
         self.mae(y_hat, y)
         self.mse(y_hat, y)
         self.rmse(y_hat, y)
-        self.r2(y_hat, y)
+        # self.r2(y_hat, y)
 
         return {
             f"{self.property_name}_mae": self.mae,
             f"{self.property_name}_mse": self.mse,
             f"{self.property_name}_rmse": self.rmse,
-            f"{self.property_name}_r2": self.r2,
+            # f"{self.property_name}_r2": self.r2,
         }
 
 
