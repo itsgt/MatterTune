@@ -23,19 +23,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class ScaledSiLU(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-        self.scale_factor = 1.0 / 0.6
-        self._activation = nn.SiLU()
-
-    @override
-    def forward(self, x):
-        return self._activation(x) * self.scale_factor
-
-
-def get_activation_cls(activation: str) -> type[nn.Module]:
+def _get_activation_cls(activation: str) -> type[nn.Module]:
     """
     Get the activation class from the activation name
     """
@@ -45,6 +33,8 @@ def get_activation_cls(activation: str) -> type[nn.Module]:
     elif activation == "silu" or activation == "swish":
         return nn.SiLU
     elif activation == "scaled_silu" or activation == "scaled_swish":
+        from jmp.models.gemnet.layers.base_layers import ScaledSiLU
+
         return ScaledSiLU
     elif activation == "tanh":
         return nn.Tanh
@@ -73,7 +63,7 @@ class JMPBackboneConfig(FinetuneModuleBaseConfig):
 
 class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
     def _create_output_head(self, prop: props.PropertyConfig):
-        activation_cls = get_activation_cls(self.backbone.hparams.activation)
+        activation_cls = _get_activation_cls(self.backbone.hparams.activation)
         match prop:
             case props.EnergyPropertyConfig():
                 from jmp.nn.energy_head import EnergyTargetConfig

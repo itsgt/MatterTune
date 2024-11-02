@@ -339,8 +339,8 @@ class FinetuneModuleBase(
 
     @override
     def predict_step(self, batch: TBatch, batch_idx: int):
-        prediction, _ = self._common_step(batch, "predict", None, log=False)
-        return prediction
+        output: ModelOutput = self(batch)
+        return output["predicted_properties"]
 
     @override
     def configure_optimizers(self):
