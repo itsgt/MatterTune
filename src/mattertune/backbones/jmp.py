@@ -224,9 +224,12 @@ def _get_fixed(atoms: Atoms):
 
     from ase.constraints import FixAtoms
 
-    constraint = next((c for c in atoms.constraints if isinstance(c, FixAtoms)), None)
-    if constraint is None:
-        raise ValueError("Atoms object does not have a FixAtoms constraint")
+    if (
+        constraint := next(
+            (c for c in atoms.constraints if isinstance(c, FixAtoms)), None
+        )
+    ) is None:
+        return fixed
 
     fixed[constraint.index] = True
     return fixed
