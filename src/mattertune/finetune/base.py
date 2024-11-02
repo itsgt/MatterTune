@@ -232,10 +232,16 @@ class FinetuneModuleBase(
         self,
         batch: TBatch,
         return_backbone_output: bool = False,
+        ignore_gpu_batch_transform_error: bool | None = None,
     ) -> ModelOutput:
+        if ignore_gpu_batch_transform_error is None:
+            ignore_gpu_batch_transform_error = (
+                self.hparams.ignore_gpu_batch_transform_error
+            )
+
         with self.model_forward_context(batch):
             # Generate graph/etc
-            if self.hparams.ignore_gpu_batch_transform_error:
+            if ignore_gpu_batch_transform_error:
                 try:
                     batch = self.gpu_batch_transform(batch)
                 except Exception as e:
@@ -339,7 +345,7 @@ class FinetuneModuleBase(
 
     @override
     def predict_step(self, batch: TBatch, batch_idx: int):
-        output: ModelOutput = self(batch)
+        output: ModelOutput = self(batch, ignore_gpu_batch_transform_error=False)
         return output["predicted_properties"]
 
     @override
@@ -398,8 +404,8 @@ class FinetuneModuleBase(
         --------
         >>> model = MyModel()
         >>> potential = model.potential()
-        >>> atoms_1 = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]])
-        >>> atoms_2 = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]])
+        >>> atoms_1 = ase.Atoms("H2O", positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0]], cell=[10, 10, 10], pbc=True)
+        >>> atoms_2 = ase.Atoms("H2O", positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0]], cell=[10, 10, 10], pbc=True)
         >>> atoms = [atoms_1, atoms_2]
         >>> predictions = potential.predict(atoms, ["energy", "forces"])
         >>> print("Atoms 1 energy:", predictions[0]["energy"])
@@ -439,7 +445,7 @@ class FinetuneModuleBase(
         --------
         >>> model = MyModel()
         >>> calc = model.ase_calculator()
-        >>> atoms = ase.Atoms('H2', positions=[[0, 0, 0], [0, 0, 0.74]])
+        >>> atoms = ase.Atoms("H2O", positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0]], cell=[10, 10, 10], pbc=True)
         >>> atoms.calc = calc
         >>> energy = atoms.get_potential_energy()
         >>> forces = atoms.get_forces()
