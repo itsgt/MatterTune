@@ -5,20 +5,10 @@ from typing import Annotated, Literal, TypeAlias
 
 import nshconfig as C
 import torch
-from typing_extensions import override
+from typing_extensions import assert_never
 
 
-class LRSchedulerBaseConfig(C.Config, ABC):
-    @abstractmethod
-    def construct_lr_scheduler(
-        self,
-        optimizer: torch.optim.Optimizer,
-    ) -> torch.optim.lr_scheduler.LRScheduler:
-        """Abstract method to construct a learning rate scheduler."""
-        pass
-
-
-class StepLRConfig(LRSchedulerBaseConfig):
+class StepLRConfig(C.Config):
     type: Literal["StepLR"] = "StepLR"
     """Type of the learning rate scheduler."""
     step_size: int
@@ -26,19 +16,8 @@ class StepLRConfig(LRSchedulerBaseConfig):
     gamma: float
     """Multiplicative factor of learning rate decay."""
 
-    @override
-    def construct_lr_scheduler(
-        self,
-        optimizer: torch.optim.Optimizer,
-    ) -> torch.optim.lr_scheduler.StepLR:
-        return torch.optim.lr_scheduler.StepLR(
-            optimizer,
-            step_size=self.step_size,
-            gamma=self.gamma,
-        )
 
-
-class MultiStepLRConfig(LRSchedulerBaseConfig):
+class MultiStepLRConfig(C.Config):
     type: Literal["MultiStepLR"] = "MultiStepLR"
     """Type of the learning rate scheduler."""
     milestones: list[int]
@@ -46,36 +25,15 @@ class MultiStepLRConfig(LRSchedulerBaseConfig):
     gamma: float
     """Multiplicative factor of learning rate decay."""
 
-    @override
-    def construct_lr_scheduler(
-        self,
-        optimizer: torch.optim.Optimizer,
-    ) -> torch.optim.lr_scheduler.MultiStepLR:
-        return torch.optim.lr_scheduler.MultiStepLR(
-            optimizer,
-            milestones=self.milestones,
-            gamma=self.gamma,
-        )
 
-
-class ExponentialConfig(LRSchedulerBaseConfig):
+class ExponentialConfig(C.Config):
     type: Literal["ExponentialLR"] = "ExponentialLR"
     """Type of the learning rate scheduler."""
     gamma: float
     """Multiplicative factor of learning rate decay."""
 
-    @override
-    def construct_lr_scheduler(
-        self,
-        optimizer: torch.optim.Optimizer,
-    ) -> torch.optim.lr_scheduler.ExponentialLR:
-        return torch.optim.lr_scheduler.ExponentialLR(
-            optimizer,
-            gamma=self.gamma,
-        )
 
-
-class ReduceOnPlateauConfig(LRSchedulerBaseConfig):
+class ReduceOnPlateauConfig(C.Config):
     type: Literal["ReduceLROnPlateau"] = "ReduceLROnPlateau"
     """Type of the learning rate scheduler."""
     mode: str
@@ -95,25 +53,8 @@ class ReduceOnPlateauConfig(LRSchedulerBaseConfig):
     eps: float = 1e-8
     """Threshold for testing the new optimum."""
 
-    @override
-    def construct_lr_scheduler(
-        self,
-        optimizer: torch.optim.Optimizer,
-    ) -> torch.optim.lr_scheduler.ReduceLROnPlateau:
-        return torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            mode=self.mode,
-            factor=self.factor,
-            patience=self.patience,
-            threshold=self.threshold,
-            threshold_mode=self.threshold_mode,
-            cooldown=self.cooldown,
-            min_lr=self.min_lr,
-            eps=self.eps,
-        )
 
-
-class CosineAnnealingLRConfig(LRSchedulerBaseConfig):
+class CosineAnnealingLRConfig(C.Config):
     type: Literal["CosineAnnealingLR"] = "CosineAnnealingLR"
     """Type of the learning rate scheduler."""
     T_max: int
@@ -122,18 +63,6 @@ class CosineAnnealingLRConfig(LRSchedulerBaseConfig):
     """Minimum learning rate."""
     last_epoch: int = -1
     """The index of last epoch."""
-
-    @override
-    def construct_lr_scheduler(
-        self,
-        optimizer: torch.optim.Optimizer,
-    ) -> torch.optim.lr_scheduler.CosineAnnealingLR:
-        return torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            T_max=self.T_max,
-            eta_min=self.eta_min,
-            last_epoch=self.last_epoch,
-        )
 
 
 LRSchedulerConfig: TypeAlias = Annotated[
@@ -144,3 +73,50 @@ LRSchedulerConfig: TypeAlias = Annotated[
     | CosineAnnealingLRConfig,
     C.Field(discriminator="type"),
 ]
+
+
+def create_lr_scheduler(
+    config: LRSchedulerConfig,
+    optimizer: torch.optim.Optimizer,
+) -> torch.optim.lr_scheduler.LRScheduler:
+    match config:
+        case StepLRConfig():
+            lr_scheduler = torch.optim.lr_scheduler.StepLR(
+                optimizer,
+                step_size=config.step_size,
+                gamma=config.gamma,
+            )
+        case MultiStepLRConfig():
+            lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
+                optimizer,
+                milestones=config.milestones,
+                gamma=config.gamma,
+            )
+        case ExponentialConfig():
+            lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+                optimizer,
+                gamma=config.gamma,
+            )
+        case ReduceOnPlateauConfig():
+            lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                mode=config.mode,
+                factor=config.factor,
+                patience=config.patience,
+                threshold=config.threshold,
+                threshold_mode=config.threshold_mode,
+                cooldown=config.cooldown,
+                min_lr=config.min_lr,
+                eps=config.eps,
+            )
+        case CosineAnnealingLRConfig():
+            lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=config.T_max,
+                eta_min=config.eta_min,
+                last_epoch=config.last_epoch,
+            )
+        case _:
+            assert_never(config)
+
+    return lr_scheduler

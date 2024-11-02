@@ -1,28 +1,19 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import Annotated, Literal, TypeAlias
 
 import nshconfig as C
 import torch
-from typing_extensions import override
+import torch.nn as nn
+from typing_extensions import assert_never
 
 
-class OptimizerBaseConfig(C.Config, ABC):
-    lr: C.PositiveFloat
-    """Learning rate."""
-
-    @abstractmethod
-    def construct_optimizer(
-        self,
-        parameters: Iterable[torch.nn.Parameter],
-    ) -> torch.optim.Optimizer: ...
-
-
-class AdamConfig(OptimizerBaseConfig):
+class AdamConfig(C.Config):
     name: Literal["Adam"] = "Adam"
     """Name of the optimizer."""
+    lr: C.PositiveFloat
+    """Learning rate."""
     eps: C.NonNegativeFloat = 1e-8
     """Epsilon."""
     betas: tuple[C.PositiveFloat, C.PositiveFloat] = (0.9, 0.999)
@@ -32,24 +23,12 @@ class AdamConfig(OptimizerBaseConfig):
     amsgrad: bool = False
     """Whether to use AMSGrad variant of Adam."""
 
-    @override
-    def construct_optimizer(
-        self,
-        parameters: Iterable[torch.nn.Parameter],
-    ):
-        return torch.optim.Adam(
-            parameters,
-            lr=self.lr,
-            eps=self.eps,
-            betas=self.betas,
-            weight_decay=self.weight_decay,
-            amsgrad=self.amsgrad,
-        )
 
-
-class AdamWConfig(OptimizerBaseConfig):
+class AdamWConfig(C.Config):
     name: Literal["AdamW"] = "AdamW"
     """Name of the optimizer."""
+    lr: C.PositiveFloat
+    """Learning rate."""
     eps: C.NonNegativeFloat = 1e-8
     """Epsilon."""
     betas: tuple[C.PositiveFloat, C.PositiveFloat] = (0.9, 0.999)
@@ -59,24 +38,12 @@ class AdamWConfig(OptimizerBaseConfig):
     amsgrad: bool = False
     """Whether to use AMSGrad variant of Adam."""
 
-    @override
-    def construct_optimizer(
-        self,
-        parameters: Iterable[torch.nn.Parameter],
-    ):
-        return torch.optim.AdamW(
-            parameters,
-            lr=self.lr,
-            eps=self.eps,
-            betas=self.betas,
-            weight_decay=self.weight_decay,
-            amsgrad=self.amsgrad,
-        )
 
-
-class SGDConfig(OptimizerBaseConfig):
+class SGDConfig(C.Config):
     name: Literal["SGD"] = "SGD"
     """Name of the optimizer."""
+    lr: C.PositiveFloat
+    """Learning rate."""
     momentum: C.NonNegativeFloat = 0.0
     """Momentum."""
     weight_decay: C.NonNegativeFloat = 0.0
@@ -84,23 +51,45 @@ class SGDConfig(OptimizerBaseConfig):
     nestrov: bool = False
     """Whether to use nestrov."""
 
-    @override
-    def construct_optimizer(
-        self,
-        parameters: Iterable[torch.nn.Parameter],
-    ):
-        return torch.optim.SGD(
-            parameters,
-            lr=self.lr,
-            momentum=self.momentum,
-            weight_decay=self.weight_decay,
-            nesterov=self.nestrov,
-        )
-
 
 OptimizerConfig: TypeAlias = Annotated[
     AdamConfig | AdamWConfig | SGDConfig,
-    C.Field(
-        discriminator="name",
-    ),
+    C.Field(discriminator="name"),
 ]
+
+
+def create_optimizer(
+    config: OptimizerConfig,
+    parameters: Iterable[nn.Parameter],
+) -> torch.optim.Optimizer:
+    match config:
+        case AdamConfig():
+            optimizer = torch.optim.Adam(
+                parameters,
+                lr=config.lr,
+                eps=config.eps,
+                betas=config.betas,
+                weight_decay=config.weight_decay,
+                amsgrad=config.amsgrad,
+            )
+        case AdamWConfig():
+            optimizer = torch.optim.AdamW(
+                parameters,
+                lr=config.lr,
+                eps=config.eps,
+                betas=config.betas,
+                weight_decay=config.weight_decay,
+                amsgrad=config.amsgrad,
+            )
+        case SGDConfig():
+            optimizer = torch.optim.SGD(
+                parameters,
+                lr=config.lr,
+                momentum=config.momentum,
+                weight_decay=config.weight_decay,
+                nesterov=config.nestrov,
+            )
+        case _:
+            assert_never(optimizer)
+
+    return optimizer

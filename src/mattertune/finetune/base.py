@@ -17,9 +17,9 @@ from typing_extensions import NotRequired, TypedDict, TypeVar, Unpack, cast, ove
 
 from ..data.loader import DataLoaderKwargs, create_dataloader
 from .loss import compute_loss
-from .lr_scheduler import LRSchedulerConfig
+from .lr_scheduler import LRSchedulerConfig, create_lr_scheduler
 from .metrics import FinetuneMetrics
-from .optimizer import OptimizerConfig
+from .optimizer import OptimizerConfig, create_optimizer
 from .properties import PropertyConfig
 
 if TYPE_CHECKING:
@@ -337,14 +337,11 @@ class FinetuneModuleBase(
 
     @override
     def configure_optimizers(self):
-        return_config: OptimizerLRSchedulerConfig = {
-            "optimizer": self.hparams.optimizer.construct_optimizer(self.parameters())
-        }
+        optimizer = create_optimizer(self.hparams.optimizer, self.parameters())
+        return_config: OptimizerLRSchedulerConfig = {"optimizer": optimizer}
 
         if (lr_scheduler := self.hparams.lr_scheduler) is not None:
-            return_config["lr_scheduler"] = lr_scheduler.construct_lr_scheduler(
-                return_config["optimizer"]
-            )
+            return_config["lr_scheduler"] = create_lr_scheduler(lr_scheduler, optimizer)
 
         return return_config
 
