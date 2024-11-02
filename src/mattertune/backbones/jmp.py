@@ -180,7 +180,7 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
         return labels
 
     @override
-    def atoms_to_data(self, atoms):
+    def atoms_to_data(self, atoms, has_labels):
         # For JMP, your PyG object should have the following attributes:
         # - pos: Node positions (shape: (N, 3))
         # - atomic_numbers: Atomic numbers (shape: (N,))
@@ -205,23 +205,23 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
             "pbc": torch.tensor(atoms.pbc, dtype=torch.bool).unsqueeze(0),
         }
 
-        # Also, pass along any other targets/properties.
-        # This includes:
-        # - energy: The total energy of the system
-        # - forces: The forces on each atom
-        # - stress: The stress tensor of the system
-        # - anything else you want to predict
-        for prop in self.hparams.properties:
-            value = prop._from_ase_atoms_to_torch(atoms)
-            # For stress, we should make sure it is (3, 3), not the flattened (6,)
-            #   that ASE returns.
-            if isinstance(prop, props.StressesPropertyConfig):
-                from ase.constraints import voigt_6_to_full_3x3_stress
+        if has_labels:
+            # Also, pass along any other targets/properties. This includes:
+            #   - energy: The total energy of the system
+            #   - forces: The forces on each atom
+            #   - stress: The stress tensor of the system
+            #   - anything else you want to predict
+            for prop in self.hparams.properties:
+                value = prop._from_ase_atoms_to_torch(atoms)
+                # For stress, we should make sure it is (3, 3), not the flattened (6,)
+                #   that ASE returns.
+                if isinstance(prop, props.StressesPropertyConfig):
+                    from ase.constraints import voigt_6_to_full_3x3_stress
 
-                value = voigt_6_to_full_3x3_stress(value.float().numpy())
-                value = torch.from_numpy(value).float().reshape(1, 3, 3)
+                    value = voigt_6_to_full_3x3_stress(value.float().numpy())
+                    value = torch.from_numpy(value).float().reshape(1, 3, 3)
 
-            data_dict[prop.name] = value
+                data_dict[prop.name] = value
 
         return Data.from_dict(data_dict)
 

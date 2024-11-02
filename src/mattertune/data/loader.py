@@ -62,12 +62,15 @@ class DataLoaderKwargs(TypedDict, total=False):
 
 def create_dataloader(
     dataset: Dataset[ase.Atoms],
+    has_labels: bool,
     *,
     lightning_module: FinetuneModuleBase[TData, TBatch, TFinetuneModuleConfig],
     **kwargs: Unpack[DataLoaderKwargs],
 ):
-    def map_fn(data: ase.Atoms):
-        return lightning_module.cpu_data_transform(lightning_module.atoms_to_data(data))
+    def map_fn(ase_data: ase.Atoms):
+        data = lightning_module.atoms_to_data(ase_data, has_labels)
+        data = lightning_module.cpu_data_transform(data)
+        return data
 
     # Wrap the dataset with the CPU data transform
     dataset_mapped = (

@@ -187,9 +187,14 @@ class FinetuneModuleBase(
         ...
 
     @abstractmethod
-    def atoms_to_data(self, atoms: Atoms) -> TData:
+    def atoms_to_data(self, atoms: Atoms, has_labels: bool) -> TData:
         """
-        Convert an ASE atoms object to a data object.
+        Convert an ASE atoms object to a data object. This is used to convert
+            the input data to the format expected by the model.
+
+        Args:
+            atoms: ASE atoms object.
+            has_labels: Whether the atoms object contains labels.
         """
         ...
 
@@ -350,15 +355,26 @@ class FinetuneModuleBase(
     def create_dataloader(
         self,
         dataset: Dataset[ase.Atoms],
+        has_labels: bool,
         **kwargs: Unpack[DataLoaderKwargs],
     ):
         """
         Creates a wrapped DataLoader for the given dataset.
-
         This will wrap the dataset with the CPU data transform and the model's
             collate function.
+
+        NOTE about `has_labels`: This is used to determine whether our data
+            loading pipeline should expect labels in the dataset. This should
+            be `True` for train/val/test datasets (as we compute loss and metrics
+            on these datasets) and `False` for prediction datasets.
+
+        Args:
+            dataset: Dataset to wrap.
+            has_labels: Whether the dataset contains labels. This should be
+                `True` for train/val/test datasets and `False` for prediction datasets.
+            **kwargs: Additional keyword arguments to pass to the DataLoader.
         """
-        return create_dataloader(dataset, lightning_module=self, **kwargs)
+        return create_dataloader(dataset, has_labels, lightning_module=self, **kwargs)
 
     def potential(self, lightning_trainer_kwargs: dict[str, Any] | None = None):
         """Return a wrapper for easy prediction without explicitly setting up a lightning trainer.

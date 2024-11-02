@@ -58,8 +58,6 @@ class PerSplitDataConfig(C.Config):
 
 
 class MatterTunerConfig(C.Config):
-    model_config = {"write_schema_to_file": True}
-
     data: PerSplitDataConfig
     """The configuration for the data."""
 
@@ -85,11 +83,13 @@ class MatterTuner:
         # Create the datasets & wrap them in our dataloader logic
         train_dataloader = lightning_module.create_dataloader(
             self.config.data.train.create_dataset(),
+            has_labels=True,
             **self.config.data.dataloader_kwargs(),
         )
         val_dataloader = (
             lightning_module.create_dataloader(
                 self.config.data.validation.create_dataset(),
+                has_labels=True,
                 **self.config.data.dataloader_kwargs(),
             )
             if self.config.data.validation is not None
@@ -103,3 +103,6 @@ class MatterTuner:
             train_dataloaders=train_dataloader,
             val_dataloaders=val_dataloader,
         )
+
+        # Return the trained model
+        return lightning_module

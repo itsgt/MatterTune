@@ -90,5 +90,9 @@ def _atoms_list_to_dataloader(
             return self.atoms_list[idx]
 
     dataset = AtomsDataset(atoms_list)
-    dataloader = lightning_module.create_dataloader(dataset, batch_size=1)
+    dataloader = lightning_module.create_dataloader(
+        dataset,
+        has_labels=False,
+        batch_size=1,
+    )
     return dataloader
