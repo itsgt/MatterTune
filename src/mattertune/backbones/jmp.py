@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from pathlib import Path
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import nshconfig_extra as CE
 import numpy as np
@@ -16,6 +16,9 @@ from typing_extensions import override
 
 from ..finetune import properties as props
 from ..finetune.base import FinetuneModuleBase, FinetuneModuleBaseConfig, ModelOutput
+
+if TYPE_CHECKING:
+    from ase import Atoms
 
 log = logging.getLogger(__name__)
 
@@ -195,7 +198,7 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
             "atomic_numbers": torch.tensor(atoms.numbers, dtype=torch.long),
             "natoms": torch.tensor(len(atoms), dtype=torch.long),
             "tags": torch.full((len(atoms),), 2, dtype=torch.long),
-            "fixed": torch.zeros(len(atoms), dtype=torch.bool),
+            "fixed": torch.from_numpy(_get_fixed(atoms)).bool(),
             "cell": torch.from_numpy(np.array(atoms.cell, dtype=np.float32))
             .float()
             .unsqueeze(0),
@@ -221,3 +224,19 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
             data_dict[prop.name] = value
 
         return Data.from_dict(data_dict)
+
+
+def _get_fixed(atoms: Atoms):
+    """Gets the fixed atom constraint mask from an Atoms object."""
+    fixed = np.zeros(len(atoms), dtype=np.bool_)
+    if not hasattr(atoms, "constraints"):
+        raise ValueError("Atoms object does not have a constraints attribute")
+
+    from ase.constraints import FixAtoms
+
+    constraint = next((c for c in atoms.constraints if isinstance(c, FixAtoms)), None)
+    if constraint is None:
+        raise ValueError("Atoms object does not have a FixAtoms constraint")
+
+    fixed[constraint.index] = True
+    return fixed
