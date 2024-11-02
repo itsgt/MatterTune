@@ -15,11 +15,7 @@ from torch_geometric.data.data import BaseData
 from typing_extensions import override
 
 from ..finetune import properties as props
-from ..finetune.base import (
-    FinetuneModuleBase,
-    FinetuneModuleBaseConfig,
-    ModelOutput,
-)
+from ..finetune.base import FinetuneModuleBase, FinetuneModuleBaseConfig, ModelOutput
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +69,37 @@ class JMPBackboneConfig(FinetuneModuleBaseConfig):
 
 
 class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
+    def _create_output_head(self, prop: props.PropertyConfig):
+        activation_cls = get_activation_cls(self.backbone.hparams.activation)
+        match prop:
+            case props.EnergyPropertyConfig():
+                from jmp.nn.energy_head import EnergyTargetConfig
+
+                return EnergyTargetConfig(
+                    max_atomic_number=self.backbone.hparams.num_elements
+                ).create_model(
+                    self.backbone.hparams.emb_size_atom,
+                    self.backbone.hparams.emb_size_edge,
+                    activation_cls,
+                )
+            case props.ForcesPropertyConfig(conservative=False):
+                from jmp.nn.force_head import ForceTargetConfig
+
+                return ForceTargetConfig().create_model(
+                    self.backbone.hparams.emb_size_edge, activation_cls
+                )
+            case props.StressesPropertyConfig(conservative=False):
+                from jmp.nn.stress_head import StressTargetConfig
+
+                return StressTargetConfig().create_model(
+                    self.backbone.hparams.emb_size_edge, activation_cls
+                )
+            case _:
+                raise ValueError(
+                    f"Unsupported property config: {prop}. "
+                    "Please ask the maintainers of the JMP backbone to add support for it."
+                )
+
     @override
     def create_model(self):
         # Resolve the checkpoint path
@@ -97,22 +124,7 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
         # Create the output heads
         self.output_heads = nn.ModuleDict()
         for prop in self.hparams.properties:
-            match prop:
-                case props.EnergyPropertyConfig():
-                    from jmp.nn.energy_head import EnergyTargetConfig
-
-                    self.output_heads[prop.name] = EnergyTargetConfig(
-                        max_atomic_number=self.backbone.hparams.num_elements
-                    ).create_model(
-                        self.backbone.hparams.emb_size_atom,
-                        self.backbone.hparams.emb_size_edge,
-                        get_activation_cls(self.backbone.hparams.activation),
-                    )
-                case _:
-                    raise ValueError(
-                        f"Unsupported property config: {prop}. "
-                        "Please ask the maintainers of the JMP backbone to add support for it."
-                    )
+            self.output_heads[prop.name] = self._create_output_head(prop)
 
     @override
     @contextlib.contextmanager
@@ -197,6 +209,15 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
         # - stress: The stress tensor of the system
         # - anything else you want to predict
         for prop in self.hparams.properties:
-            data_dict[prop.name] = prop._from_ase_atoms_to_torch(atoms)
+            value = prop._from_ase_atoms_to_torch(atoms)
+            # For stress, we should make sure it is (3, 3), not the flattened (6,)
+            #   that ASE returns.
+            if isinstance(prop, props.StressesPropertyConfig):
+                from ase.constraints import voigt_6_to_full_3x3_stress
+
+                value = voigt_6_to_full_3x3_stress(value.float().numpy())
+                value = torch.from_numpy(value).float().reshape(1, 3, 3)
+
+            data_dict[prop.name] = value
 
         return Data.from_dict(data_dict)
