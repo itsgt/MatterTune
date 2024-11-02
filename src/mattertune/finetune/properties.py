@@ -19,8 +19,18 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-DType: TypeAlias = Literal["int", "float"]
+DType: TypeAlias = Literal["float"]
 """The type of the property values."""
+
+ASECalculatorPropertyName: TypeAlias = Literal[
+    "energy",
+    "forces",
+    "stress",
+    "dipole",
+    "charges",
+    "magmom",
+    "magmoms",
+]
 
 
 class PropertyConfigBase(C.Config, ABC):
@@ -51,10 +61,16 @@ class PropertyConfigBase(C.Config, ABC):
     def _torch_dtype(self) -> torch.dtype:
         """Internal helper to convert the dtype to a torch dtype."""
         match self.dtype:
-            case "int":
-                return torch.long
             case "float":
                 return torch.float
+            case _:
+                assert_never(self.dtype)
+
+    def _numpy_dtype(self):
+        """Internal helper to convert the dtype to a numpy dtype."""
+        match self.dtype:
+            case "float":
+                return np.float32
             case _:
                 assert_never(self.dtype)
 
@@ -63,6 +79,33 @@ class PropertyConfigBase(C.Config, ABC):
         value = self.from_ase_atoms(atoms)
         return torch.tensor(value, dtype=self._torch_dtype())
 
+    @abstractmethod
+    def ase_calculator_property_name(self) -> ASECalculatorPropertyName | None:
+        """
+        If this property can be calculated by an ASE calculator, returns
+            the name of the property that the ASE calculator uses. Otherwise,
+            returns None.
+
+        This should only return non-None for properties that are supported by
+            the ASE calculator interface, i.e.:
+            - 'energy'
+            - 'forces'
+            - 'stress'
+            - 'dipole'
+            - 'charges'
+            - 'magmom'
+            - 'magmoms'
+
+        Note that this does not refer to the new experimental custom property
+            prediction support feature in ASE, but rather the built-in properties
+            that ASE can calculate in the ``ase.calculators.calculator.Calculator``
+            class.
+        """
+
+    def prepare_value_for_ase_calculator(self, value: float | np.ndarray):
+        """Convert the property value to a format that can be used by the ASE calculator."""
+        return value
+
 
 class GraphPropertyConfig(PropertyConfigBase):
     type: Literal["graph_property"] = "graph_property"
@@ -70,6 +113,10 @@ class GraphPropertyConfig(PropertyConfigBase):
     @override
     def from_ase_atoms(self, atoms):
         return atoms.info[self.name]
+
+    @override
+    def ase_calculator_property_name(self):
+        return None
 
 
 class EnergyPropertyConfig(PropertyConfigBase):
@@ -85,6 +132,16 @@ class EnergyPropertyConfig(PropertyConfigBase):
     @override
     def from_ase_atoms(self, atoms):
         return atoms.get_total_energy()
+
+    @override
+    def ase_calculator_property_name(self):
+        return "energy"
+
+    @override
+    def prepare_value_for_ase_calculator(self, value):
+        if isinstance(value, np.ndarray):
+            return value.item()
+        return value
 
 
 class ForcesPropertyConfig(PropertyConfigBase):
@@ -110,6 +167,10 @@ class ForcesPropertyConfig(PropertyConfigBase):
     def from_ase_atoms(self, atoms):
         return atoms.get_forces()
 
+    @override
+    def ase_calculator_property_name(self):
+        return "forces"
+
 
 class StressesPropertyConfig(PropertyConfigBase):
     type: Literal["stresses"] = "stresses"
@@ -130,6 +191,18 @@ class StressesPropertyConfig(PropertyConfigBase):
     @override
     def from_ase_atoms(self, atoms):
         return atoms.get_stress()
+
+    @override
+    def ase_calculator_property_name(self):
+        return "stress"
+
+    @override
+    def prepare_value_for_ase_calculator(self, value):
+        assert isinstance(value, np.ndarray), "Stress must be a numpy array."
+
+        from ase.constraints import full_3x3_to_voigt_6_stress
+
+        return full_3x3_to_voigt_6_stress(value)
 
 
 PropertyConfig: TypeAlias = Annotated[

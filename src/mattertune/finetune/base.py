@@ -398,3 +398,37 @@ class FinetuneModuleBase(
             self,
             lightning_trainer_kwargs=lightning_trainer_kwargs,
         )
+
+    def ase_calculator(self, lightning_trainer_kwargs: dict[str, Any] | None = None):
+        """Returns an ASE calculator wrapper for the interatomic potential.
+
+        This method creates an ASE (Atomic Simulation Environment) calculator that can be used
+        to compute energies and forces using the trained interatomic potential model.
+        The calculator integrates with ASE's standard interfaces for molecular dynamics
+        and structure optimization.
+
+        Parameters
+        ----------
+        lightning_trainer_kwargs : dict[str, Any] | None, optional
+            Keyword arguments to pass to the PyTorch Lightning trainer used for inference.
+            If None, default trainer settings will be used.
+
+        Returns
+        -------
+        MatterTuneCalculator
+            An ASE calculator wrapper around the trained potential that can be used
+            for energy and force calculations via ASE's interfaces.
+
+        Examples
+        --------
+        >>> model = MyModel()
+        >>> calc = model.ase_calculator()
+        >>> atoms = ase.Atoms('H2', positions=[[0, 0, 0], [0, 0, 0.74]])
+        >>> atoms.calc = calc
+        >>> energy = atoms.get_potential_energy()
+        >>> forces = atoms.get_forces()
+        """
+        from ..wrappers.ase_calculator import MatterTuneCalculator
+
+        potential = self.potential(lightning_trainer_kwargs=lightning_trainer_kwargs)
+        return MatterTuneCalculator(potential)
