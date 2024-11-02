@@ -45,9 +45,6 @@ class FinetuneModuleBaseConfig(C.Config, ABC):
     def create_backbone(self) -> FinetuneModuleBase: ...
 
 
-TFinetuneModuleConfig = TypeVar("TFinetuneModuleConfig", bound=FinetuneModuleBaseConfig)
-
-
 class _SkipBatchError(Exception):
     """
     Exception to skip a batch in the forward pass. This is not a real error and
@@ -81,6 +78,11 @@ class ModelOutput(TypedDict):
 
 TData = TypeVar("TData")
 TBatch = TypeVar("TBatch")
+TFinetuneModuleConfig = TypeVar(
+    "TFinetuneModuleConfig",
+    bound=FinetuneModuleBaseConfig,
+    covariant=True,
+)
 
 
 class FinetuneModuleBase(
@@ -358,8 +360,41 @@ class FinetuneModuleBase(
         """
         return create_dataloader(dataset, lightning_module=self, **kwargs)
 
-    def to_ase_calculator(self):
-        raise NotImplementedError("Implement this!")
+    def potential(self, lightning_trainer_kwargs: dict[str, Any] | None = None):
+        """Return a wrapper for easy prediction without explicitly setting up a lightning trainer.
+        This method provides a high-level interface for making predictions with the trained model.
+        While named 'potential', it can be used for various prediction tasks including but not
+        limited to:
+        - Interatomic potential energy and forces
+        - Material property prediction
+        - Structure-property relationships
+        Parameters
+        ----------
+        lightning_trainer_kwargs : dict[str, Any] | None, optional
+            Additional keyword arguments to pass to the PyTorch Lightning Trainer.
+            If None, default trainer settings will be used.
+        Returns
+        -------
+        MatterTunePotential
+            A wrapper class that provides simplified prediction functionality without requiring
+            direct interaction with the Lightning Trainer.
+        Examples
+        --------
+        >>> model = MyModel()
+        >>> potential = model.potential()
+        >>> atoms_1 = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]])
+        >>> atoms_2 = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]])
+        >>> atoms = [atoms_1, atoms_2]
+        >>> predictions = potential.predict(atoms, ["energy", "forces"])
+        >>> print("Atoms 1 energy:", predictions[0]["energy"])
+        >>> print("Atoms 1 forces:", predictions[0]["forces"])
+        >>> print("Atoms 2 energy:", predictions[1]["energy"])
+        >>> print("Atoms 2 forces:", predictions[1]["forces"])
+        """
 
-    def to_potential(self):
-        raise NotImplementedError("Implement this!")
+        from ..wrappers.potential import MatterTunePotential
+
+        return MatterTunePotential(
+            self,
+            lightning_trainer_kwargs=lightning_trainer_kwargs,
+        )
