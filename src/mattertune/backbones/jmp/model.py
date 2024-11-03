@@ -17,6 +17,7 @@ from typing_extensions import override
 
 from ...finetune import properties as props
 from ...finetune.base import FinetuneModuleBase, FinetuneModuleBaseConfig, ModelOutput
+from ...registry import backbone_registry
 
 if TYPE_CHECKING:
     from ase import Atoms
@@ -119,6 +120,7 @@ class JMPGraphComputerConfig(C.Config):
         )
 
 
+@backbone_registry.register
 class JMPBackboneConfig(FinetuneModuleBaseConfig):
     name: Literal["jmp"] = "jmp"
     """The type of the backbone."""

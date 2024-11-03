@@ -5,8 +5,10 @@ from typing import TYPE_CHECKING, Any, Literal
 import nshconfig as C
 from lightning.pytorch import Trainer
 
-from ..backbones import BackboneConfig
+from ..backbones import ModelConfig
 from ..data import DatasetConfig
+from ..finetune.base import FinetuneModuleBase
+from ..registry import backbone_registry
 
 if TYPE_CHECKING:
     from ..data.loader import DataLoaderKwargs
@@ -57,11 +59,12 @@ class PerSplitDataConfig(C.Config):
         }
 
 
+@backbone_registry.rebuild_on_registers
 class MatterTunerConfig(C.Config):
     data: PerSplitDataConfig
     """The configuration for the data."""
 
-    model: BackboneConfig
+    model: ModelConfig
     """The configuration for the model."""
 
     lightning_trainer_kwargs: dict[str, Any] = {}

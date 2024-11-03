@@ -72,6 +72,8 @@ class GraphComputerConfig(C.Config):
     pre_compute_line_graph: bool = False
     """Whether to pre-compute the line graph for three-body interactions in data preparation."""
 
+
+@backbone_registry.register
 class M3GNetBackboneConfig(FinetuneModuleBaseConfig):
     name: Literal["m3gnet"] = "m3gnet"
     """The type of the backbone."""
