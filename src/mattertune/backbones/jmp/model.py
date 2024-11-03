@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
+import nshconfig as C
 import nshconfig_extra as CE
 import numpy as np
 import torch
@@ -18,7 +19,6 @@ from ...finetune.base import FinetuneModuleBase, FinetuneModuleBaseConfig, Model
 
 if TYPE_CHECKING:
     from ase import Atoms
-    from jmp.models.gemnet.graph import GraphComputerConfig
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +46,78 @@ def _get_activation_cls(activation: str) -> type[nn.Module]:
         raise ValueError(f"Activation {activation} is not supported")
 
 
+class CutoffsConfig(C.Config):
+    main: float
+    aeaint: float
+    qint: float
+    aint: float
+
+    @classmethod
+    def from_constant(cls, value: float):
+        return cls(main=value, aeaint=value, qint=value, aint=value)
+
+
+class MaxNeighborsConfig(C.Config):
+    main: int
+    aeaint: int
+    qint: int
+    aint: int
+
+    @classmethod
+    def from_goc_base_proportions(cls, max_neighbors: int):
+        """
+        GOC base proportions:
+            max_neighbors: 30
+            max_neighbors_qint: 8
+            max_neighbors_aeaint: 20
+            max_neighbors_aint: 1000
+        """
+        return cls(
+            main=max_neighbors,
+            aeaint=int(max_neighbors * 20 / 30),
+            qint=int(max_neighbors * 8 / 30),
+            aint=int(max_neighbors * 1000 / 30),
+        )
+
+
+class JMPGraphComputerConfig(C.Config):
+    pbc: bool
+    """Whether to use periodic boundary conditions."""
+
+    cutoffs: CutoffsConfig = CutoffsConfig.from_constant(12.0)
+    """The cutoff for the radius graph."""
+
+    max_neighbors: MaxNeighborsConfig = MaxNeighborsConfig.from_goc_base_proportions(30)
+    """The maximum number of neighbors for the radius graph."""
+
+    per_graph_radius_graph: bool = False
+    """Whether to compute the radius graph per graph."""
+
+    def _to_jmp_graph_computer_config(self):
+        from jmp.models.gemnet.graph import (
+            CutoffsConfig,
+            GraphComputerConfig,
+            MaxNeighborsConfig,
+        )
+
+        return GraphComputerConfig(
+            pbc=self.pbc,
+            cutoffs=CutoffsConfig(
+                main=self.cutoffs.main,
+                aeaint=self.cutoffs.aeaint,
+                qint=self.cutoffs.qint,
+                aint=self.cutoffs.aint,
+            ),
+            max_neighbors=MaxNeighborsConfig(
+                main=self.max_neighbors.main,
+                aeaint=self.max_neighbors.aeaint,
+                qint=self.max_neighbors.qint,
+                aint=self.max_neighbors.aint,
+            ),
+            per_graph_radius_graph=self.per_graph_radius_graph,
+        )
+
+
 class JMPBackboneConfig(FinetuneModuleBaseConfig):
     name: Literal["jmp"] = "jmp"
     """The type of the backbone."""
@@ -53,7 +125,7 @@ class JMPBackboneConfig(FinetuneModuleBaseConfig):
     ckpt_path: Path | CE.CachedPath
     """The path to the pre-trained model checkpoint."""
 
-    graph_computer: GraphComputerConfig
+    graph_computer: JMPGraphComputerConfig
     """The configuration for the graph computer."""
 
     @override
@@ -129,7 +201,7 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
 
         # Create the graph computer
         self.graph_computer = GraphComputer(
-            self.hparams.graph_computer,
+            self.hparams.graph_computer._to_jmp_graph_computer_config(),
             self.backbone.hparams,
         )
 
