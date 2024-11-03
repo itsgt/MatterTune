@@ -8,3 +8,4 @@ backbone_registry = C.Registry(
     FinetuneModuleBaseConfig,
     discriminator_field="name",
 )
+data_registry = C.Registry(C.Config, discriminator_field="type")

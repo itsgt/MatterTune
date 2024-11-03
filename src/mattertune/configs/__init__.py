@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     )
     from mattertune.backbones.jmp.model import MaxNeighborsConfig as MaxNeighborsConfig
     from mattertune.backbones.m3gnet import GraphComputerConfig as GraphComputerConfig
-    from mattertune.data import DatasetConfig as DatasetConfig
+    from mattertune.data import DatasetConfigBase as DatasetConfigBase
     from mattertune.data import OMAT24DatasetConfig as OMAT24DatasetConfig
     from mattertune.data.xyz import XYZDatasetConfig as XYZDatasetConfig
     from mattertune.finetune.base import LRSchedulerConfig as LRSchedulerConfig
@@ -73,6 +73,8 @@ else:
             return importlib.import_module(
                 "mattertune.backbones.jmp.model"
             ).CutoffsConfig
+        if name == "DatasetConfigBase":
+            return importlib.import_module("mattertune.data").DatasetConfigBase
         if name == "EnergyPropertyConfig":
             return importlib.import_module(
                 "mattertune.finetune.properties"
@@ -149,8 +151,6 @@ else:
             ).StressesPropertyConfig
         if name == "XYZDatasetConfig":
             return importlib.import_module("mattertune.data.xyz").XYZDatasetConfig
-        if name == "DatasetConfig":
-            return importlib.import_module("mattertune.data").DatasetConfig
         if name == "LRSchedulerConfig":
             return importlib.import_module("mattertune.finetune.base").LRSchedulerConfig
         if name == "LossConfig":

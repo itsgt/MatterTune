@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-import ase
+import nshconfig as C
+from torch.utils.data import Dataset
+
+if TYPE_CHECKING:
+    from ase import Atoms
 
 
-@runtime_checkable
-class DatasetProtocol(Protocol):
-    def __getitem__(self, idx: int, /) -> ase.Atoms: ...
-
-    def __len__(self) -> int: ...
+class DatasetConfigBase(C.Config, ABC):
+    @abstractmethod
+    def create_dataset(self) -> Dataset[Atoms]: ...

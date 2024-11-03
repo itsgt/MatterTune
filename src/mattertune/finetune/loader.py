@@ -8,10 +8,10 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset, Sampler
 from torch.utils.data.dataloader import _worker_init_fn_t
 from typing_extensions import TypedDict, Unpack
 
-from .util import IterableDatasetWrapper, MapDatasetWrapper
+from .data_util import IterableDatasetWrapper, MapDatasetWrapper
 
 if TYPE_CHECKING:
-    from ..finetune.base import FinetuneModuleBase, TBatch, TData, TFinetuneModuleConfig
+    from .base import FinetuneModuleBase, TBatch, TData, TFinetuneModuleConfig
 
 
 class DataLoaderKwargs(TypedDict, total=False):

@@ -8,12 +8,13 @@ from lightning.pytorch import Trainer
 from ..backbones import ModelConfig
 from ..data import DatasetConfig
 from ..finetune.base import FinetuneModuleBase
-from ..registry import backbone_registry
+from ..registry import backbone_registry, data_registry
 
 if TYPE_CHECKING:
-    from ..data.loader import DataLoaderKwargs
+    from .loader import DataLoaderKwargs
 
 
+@data_registry.rebuild_on_registers
 class PerSplitDataConfig(C.Config):
     train: DatasetConfig
     """The configuration for the training data."""
@@ -60,6 +61,7 @@ class PerSplitDataConfig(C.Config):
 
 
 @backbone_registry.rebuild_on_registers
+@data_registry.rebuild_on_registers
 class MatterTunerConfig(C.Config):
     data: PerSplitDataConfig
     """The configuration for the data."""
