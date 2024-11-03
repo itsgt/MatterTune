@@ -5,11 +5,10 @@ from typing import Literal
 
 import ase
 from fairchem.core.datasets import AseDBDataset
-from torch.utils.data import Dataset
 from typing_extensions import override
 
 from ..registry import data_registry
-from .base import DatasetConfigBase
+from .base import DatasetBase, DatasetConfigBase
 
 
 @data_registry.register
@@ -25,7 +24,7 @@ class OMAT24DatasetConfig(DatasetConfigBase):
         return OMAT24Dataset(self)
 
 
-class OMAT24Dataset(Dataset[ase.Atoms]):
+class OMAT24Dataset(DatasetBase):
     def __init__(self, config: OMAT24DatasetConfig):
         super().__init__()
 
