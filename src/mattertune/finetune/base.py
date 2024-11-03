@@ -41,8 +41,9 @@ class FinetuneModuleBaseConfig(C.Config, ABC):
     ignore_gpu_batch_transform_error: bool = True
     """Whether to ignore data processing errors during training."""
 
+    @classmethod
     @abstractmethod
-    def create_backbone(self) -> FinetuneModuleBase: ...
+    def model_cls(cls) -> type[FinetuneModuleBase]: ...
 
 
 class _SkipBatchError(Exception):

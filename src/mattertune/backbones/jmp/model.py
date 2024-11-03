@@ -57,8 +57,9 @@ class JMPBackboneConfig(FinetuneModuleBaseConfig):
     """The configuration for the graph computer."""
 
     @override
-    def create_backbone(self):
-        return JMPBackboneModule(self)
+    @classmethod
+    def model_cls(cls):
+        return JMPBackboneModule
 
 
 class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):

@@ -82,8 +82,9 @@ class M3GNetBackboneConfig(FinetuneModuleBaseConfig):
     graph_computer: GraphComputerConfig
 
     @override
-    def create_backbone(self):
-        return M3GNetBackboneModule(self)
+    @classmethod
+    def model_cls(cls):
+        return M3GNetBackboneModule
 
 
 class M3GNetBackboneModule(

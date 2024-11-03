@@ -77,8 +77,14 @@ class MatterTuner:
         self.config = config
 
     def tune(self):
+        # Resolve the model class
+        model_cls = self.config.model.model_cls()
+
         # Create the model
-        lightning_module = self.config.model.create_backbone()
+        lightning_module = model_cls(self.config.model)
+        assert isinstance(
+            lightning_module, FinetuneModuleBase
+        ), f'The backbone model must be a FinetuneModuleBase subclass. Got "{type(lightning_module)}".'
 
         # Create the datasets & wrap them in our dataloader logic
         train_dataloader = lightning_module.create_dataloader(
