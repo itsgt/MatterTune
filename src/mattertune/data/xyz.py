@@ -21,16 +21,16 @@ class XYZDatasetConfig(DatasetConfigBase):
     """The path to the XYZ dataset."""
 
     @override
-    def create_dataset(self):
-        return XYZDataset(self)
+    @classmethod
+    def dataset_cls(cls):
+        return XYZDataset
 
 
-class XYZDataset(DatasetBase):
+class XYZDataset(DatasetBase[XYZDatasetConfig]):
     def __init__(self, config: XYZDatasetConfig):
-        super().__init__()
+        super().__init__(config)
 
-        self.config = config
-        self.atoms_list: list[Atoms] = read(str(config.src), index=":")
+        self.atoms_list: list[Atoms] = read(str(self.config.src), index=":")
 
     @override
     def __getitem__(self, idx: int) -> ase.Atoms:

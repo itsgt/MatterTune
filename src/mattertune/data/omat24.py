@@ -20,18 +20,16 @@ class OMAT24DatasetConfig(DatasetConfigBase):
     """The path to the OMAT24 dataset."""
 
     @override
-    def create_dataset(self):
-        return OMAT24Dataset(self)
+    @classmethod
+    def dataset_cls(cls):
+        return OMAT24Dataset
 
 
-class OMAT24Dataset(DatasetBase):
+class OMAT24Dataset(DatasetBase[OMAT24DatasetConfig]):
     def __init__(self, config: OMAT24DatasetConfig):
-        super().__init__()
+        super().__init__(config)
 
-        self.config = config
-        self.dataset = AseDBDataset(
-            config={"src": str(config.src)},
-        )
+        self.dataset = AseDBDataset(config={"src": str(self.config.src)})
 
     @override
     def __getitem__(self, idx: int) -> ase.Atoms:
