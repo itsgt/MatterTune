@@ -27,7 +27,6 @@ if TYPE_CHECKING:
         ReduceOnPlateauConfig as ReduceOnPlateauConfig,
     )
     from mattertune.finetune.lr_scheduler import StepLRConfig as StepLRConfig
-    from mattertune.finetune.main import BackboneConfig as BackboneConfig
     from mattertune.finetune.main import DatasetConfig as DatasetConfig
     from mattertune.finetune.main import MatterTunerConfig as MatterTunerConfig
     from mattertune.finetune.main import PerSplitDataConfig as PerSplitDataConfig
@@ -118,8 +117,6 @@ else:
             return importlib.import_module(
                 "mattertune.finetune.properties"
             ).StressesPropertyConfig
-        if name == "BackboneConfig":
-            return importlib.import_module("mattertune.finetune.main").BackboneConfig
         if name == "DatasetConfig":
             return importlib.import_module("mattertune.finetune.main").DatasetConfig
         if name == "LRSchedulerConfig":
