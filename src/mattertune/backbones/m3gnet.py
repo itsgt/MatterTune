@@ -73,7 +73,7 @@ class GraphComputerConfig(C.Config):
     """Whether to pre-compute the line graph for three-body interactions in data preparation."""
 
 class M3GNetBackboneConfig(FinetuneModuleBaseConfig):
-    type: Literal["m3gnet"] = "m3gnet"
+    name: Literal["m3gnet"] = "m3gnet"
     """The type of the backbone."""
 
     ckpt_path: str

@@ -47,7 +47,7 @@ def _get_activation_cls(activation: str) -> type[nn.Module]:
 
 
 class JMPBackboneConfig(FinetuneModuleBaseConfig):
-    type: Literal["jmp"] = "jmp"
+    name: Literal["jmp"] = "jmp"
     """The type of the backbone."""
 
     ckpt_path: Path | CE.CachedPath
