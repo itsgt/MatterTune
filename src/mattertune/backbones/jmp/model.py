@@ -9,16 +9,16 @@ import nshconfig_extra as CE
 import numpy as np
 import torch
 import torch.nn as nn
-from jmp.models.gemnet.graph import GraphComputer, GraphComputerConfig
 from torch_geometric.data import Batch, Data
 from torch_geometric.data.data import BaseData
 from typing_extensions import override
 
-from ..finetune import properties as props
-from ..finetune.base import FinetuneModuleBase, FinetuneModuleBaseConfig, ModelOutput
+from ...finetune import properties as props
+from ...finetune.base import FinetuneModuleBase, FinetuneModuleBaseConfig, ModelOutput
 
 if TYPE_CHECKING:
     from ase import Atoms
+    from jmp.models.gemnet.graph import GraphComputerConfig
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +101,7 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
 
         # Load the backbone from the checkpoint
         from jmp.models.gemnet import GemNetOCBackbone
+        from jmp.models.gemnet.graph import GraphComputer
 
         self.backbone = GemNetOCBackbone.from_pretrained_ckpt(ckpt_path)
         log.info(
