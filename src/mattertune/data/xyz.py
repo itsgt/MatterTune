@@ -17,7 +17,7 @@ class XYZDatasetConfig(C.Config):
     type: Literal["xyz"] = "xyz"
     """Discriminator for the XYZ dataset."""
 
-    src: Path
+    src: str
     """The path to the XYZ dataset."""
 
     def create_dataset(self):

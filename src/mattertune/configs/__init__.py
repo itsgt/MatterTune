@@ -9,15 +9,15 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from mattertune import MatterTunerConfig as MatterTunerConfig
     from mattertune.backbones import BackboneConfig as BackboneConfig
+    ## JMP imports
     from mattertune.backbones import JMPBackboneConfig as JMPBackboneConfig
-    from mattertune.backbones.jmp import (
-        FinetuneModuleBaseConfig as FinetuneModuleBaseConfig,
-    )
-    from mattertune.backbones.jmp import GraphComputerConfig as GraphComputerConfig
-    from mattertune.backbones.m3gnet import M3GNetBackboneConfig as M3GNetBackboneConfig
-    from mattertune.backbones.m3gnet import 
+    from mattertune.backbones.jmp import GraphComputerConfig as JMPGraphComputerConfig
+    ## M3GNet imports
+    from mattertune.backbones import M3GNetBackboneConfig as M3GNetBackboneConfig
+    from mattertune.backbones.m3gnet import GraphComputerConfig as M3GNetGraphComputerConfig
     from mattertune.data import DatasetConfig as DatasetConfig
     from mattertune.data import OMAT24DatasetConfig as OMAT24DatasetConfig
+    from mattertune.data.xyz import XYZDatasetConfig as XYZDatasetConfig
     from mattertune.finetune.base import LRSchedulerConfig as LRSchedulerConfig
     from mattertune.finetune.base import OptimizerConfig as OptimizerConfig
     from mattertune.finetune.base import PropertyConfig as PropertyConfig

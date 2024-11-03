@@ -81,10 +81,10 @@ class M3GNetBackboneConfig(FinetuneModuleBaseConfig):
 
     @override
     def create_backbone(self):
-        return M3GNetBackbone(self)
+        return M3GNetBackboneModule(self)
 
 
-class M3GNetBackbone(FinetuneModuleBase[MatGLData, MatGLBatch, M3GNetBackboneConfig]):
+class M3GNetBackboneModule(FinetuneModuleBase[MatGLData, MatGLBatch, M3GNetBackboneConfig]):
     """
     Implementation of the M3GNet backbone that fits into the MatterTune framework.
     Followed the Matgl version of M3GNet.
