@@ -95,6 +95,18 @@ class FinetuneModuleBase(
     Finetune module base class. Inherits ``lightning.pytorch.LightningModule``.
     """
 
+    @classmethod
+    @abstractmethod
+    def ensure_dependencies(cls):
+        """
+        Ensure that all dependencies are installed.
+
+        This method should raise an exception if any dependencies are missing,
+            with a message indicating which dependencies are missing and
+            how to install them.
+        """
+        ...
+
     # region ABC methods for output heads and model forward pass
     @abstractmethod
     def create_model(self):

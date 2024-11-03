@@ -78,7 +78,7 @@ class M3GNetBackboneConfig(FinetuneModuleBaseConfig):
 
     ckpt_path: str
     """The path to the pre-trained model checkpoint."""
-    
+
     graph_computer: GraphComputerConfig
 
     @override
@@ -96,6 +96,22 @@ class M3GNetBackboneModule(
     Paper: https://www.nature.com/articles/s43588-022-00349-3
     Matgl Repo: https://github.com/materialsvirtuallab/matgl
     """
+
+    @override
+    @classmethod
+    def ensure_dependencies(cls):
+        if importlib.util.find_spec("matgl") is None:
+            raise ImportError(
+                "The `matgl` module is not installed. Please install it by running"
+                " `pip install matgl`."
+            )
+
+        if importlib.util.find_spec("dgl") is None:
+            raise ImportError(
+                "The `dgl` module is not installed. Please install it by running"
+                " `pip install dgl`."
+            )
+
     @override
     def create_model(self):
         from matgl.ext.ase import Atoms2Graph

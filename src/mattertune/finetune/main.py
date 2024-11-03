@@ -80,6 +80,9 @@ class MatterTuner:
         # Resolve the model class
         model_cls = self.config.model.model_cls()
 
+        # Make sure all the necessary dependencies are installed
+        model_cls.ensure_dependencies()
+
         # Create the model
         lightning_module = model_cls(self.config.model)
         assert isinstance(

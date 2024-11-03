@@ -63,6 +63,23 @@ class JMPBackboneConfig(FinetuneModuleBaseConfig):
 
 
 class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
+    @override
+    @classmethod
+    def ensure_dependencies(cls):
+        # Make sure the `jmp` module is available
+        if importlib.util.find_spec("jmp") is None:
+            raise ImportError(
+                "The `jmp` module is not installed. Please install it by running"
+                " `pip install jmp`."
+            )
+
+        # Make sure `torch-geometric` is available
+        if importlib.util.find_spec("torch_geometric") is None:
+            raise ImportError(
+                "The `torch-geometric` module is not installed. Please install it by running"
+                " `pip install torch-geometric`."
+            )
+
     def _create_output_head(self, prop: props.PropertyConfig):
         activation_cls = _get_activation_cls(self.backbone.hparams.activation)
         match prop:
