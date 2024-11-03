@@ -14,6 +14,8 @@ if TYPE_CHECKING:
         FinetuneModuleBaseConfig as FinetuneModuleBaseConfig,
     )
     from mattertune.backbones.jmp import GraphComputerConfig as GraphComputerConfig
+    from mattertune.backbones.m3gnet import M3GNetBackboneConfig as M3GNetBackboneConfig
+    from mattertune.backbones.m3gnet import 
     from mattertune.data import DatasetConfig as DatasetConfig
     from mattertune.data import OMAT24DatasetConfig as OMAT24DatasetConfig
     from mattertune.finetune.base import LRSchedulerConfig as LRSchedulerConfig

@@ -89,8 +89,8 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
                 )
             case _:
                 raise ValueError(
-                    f"Unsupported property config: {prop}. "
-                    "Please ask the maintainers of the JMP backbone to add support for it."
+                    f"Unsupported property config: {prop} for JMP"
+                    "Please ask the maintainers of JMP for support"
                 )
 
     @override

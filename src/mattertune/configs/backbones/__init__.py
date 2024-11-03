@@ -13,6 +13,7 @@ if TYPE_CHECKING:
         FinetuneModuleBaseConfig as FinetuneModuleBaseConfig,
     )
     from mattertune.backbones.jmp import GraphComputerConfig as GraphComputerConfig
+    from mattertune.backbones.m3gnet import M3GNetBackboneConfig as M3GNetBackboneConfig
 else:
 
     def __getattr__(name):
