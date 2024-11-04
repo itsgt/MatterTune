@@ -13,10 +13,11 @@ import torch
 from torch.autograd import grad
 from typing_extensions import override
 
-from ..finetune import properties as props
-from ..finetune.base import FinetuneModuleBase, FinetuneModuleBaseConfig, ModelOutput
-from ..registry import backbone_registry
 import mattertune as mt
+
+from ...finetune import properties as props
+from ...finetune.base import FinetuneModuleBase, FinetuneModuleBaseConfig, ModelOutput
+from ...registry import backbone_registry
 
 if TYPE_CHECKING:
     from ase import Atoms
@@ -84,7 +85,6 @@ class M3GNetBackboneConfig(FinetuneModuleBaseConfig):
     """The path to the pre-trained model checkpoint."""
     graph_computer: GraphComputerConfig
     """Configuration for the graph computer."""
-    
 
     @override
     @classmethod
@@ -104,6 +104,11 @@ class M3GNetBackboneModule(
 
     @override
     @classmethod
+    def hparams_cls(cls):
+        return M3GNetBackboneConfig
+
+    @override
+    @classmethod
     def ensure_dependencies(cls):
         if importlib.util.find_spec("matgl") is None:
             raise ImportError(
@@ -117,6 +122,29 @@ class M3GNetBackboneModule(
                 " `pip install dgl`."
             )
 
+    def _should_enable_grad(self):
+        return self.calc_forces or self.calc_stress
+
+    @override
+    def requires_disabled_inference_mode(self):
+        return self._should_enable_grad()
+
+    @override
+    def setup(self, stage: str):
+        super().setup(stage)
+
+        if self._should_enable_grad():
+            for loop in (
+                self.trainer.validate_loop,
+                self.trainer.test_loop,
+                self.trainer.predict_loop,
+            ):
+                if loop.inference_mode:
+                    raise ValueError(
+                        "Cannot run inference mode with forces or stress calculation. "
+                        "Please set `inference_mode` to False in the trainer configuration."
+                    )
+
     @override
     def create_model(self):
         from matgl.ext.ase import Atoms2Graph
@@ -129,6 +157,10 @@ class M3GNetBackboneModule(
         self.backbone = M3GNet.load(fpaths)
 
         ## Build the graph computer
+        if isinstance(self.hparams.graph_computer, dict):
+            self.hparams.graph_computer = GraphComputerConfig(
+                **self.hparams.graph_computer
+            )
         if self.hparams.graph_computer.cutoff is None:
             self.hparams.graph_computer.cutoff = self.backbone.cutoff
         if self.hparams.graph_computer.threebody_cutoff is None:
@@ -170,7 +202,11 @@ class M3GNetBackboneModule(
     @override
     @contextlib.contextmanager
     def model_forward_context(self, data):
-        yield
+        with contextlib.ExitStack() as stack:
+            if self.calc_forces or self.calc_stress:
+                stack.enter_context(torch.enable_grad())
+
+            yield
 
     @override
     def model_forward(
@@ -188,12 +224,16 @@ class M3GNetBackboneModule(
             batch.strain,
         )
         if return_backbone_output:
-            backbone_output = self.backbone(g, state_attr, lg, return_all_layer_output=True)
-            energy:torch.Tensor = torch.squeeze(backbone_output["final"])
+            backbone_output = self.backbone(
+                g, state_attr, lg, return_all_layer_output=True
+            )
+            energy: torch.Tensor = torch.squeeze(backbone_output["final"])
         else:
-            backbone_output = self.backbone(g, state_attr, lg, return_all_layer_output=False)
-            energy:torch.Tensor = backbone_output
-        output_pred:dict[str, torch.Tensor] = {self.energy_prop_name: energy}
+            backbone_output = self.backbone(
+                g, state_attr, lg, return_all_layer_output=False
+            )
+            energy: torch.Tensor = backbone_output
+        output_pred: dict[str, torch.Tensor] = {self.energy_prop_name: energy}
         grad_vars = [g.ndata["pos"], strain] if self.calc_stress else [g.ndata["pos"]]
 
         if self.calc_forces:
@@ -203,6 +243,7 @@ class M3GNetBackboneModule(
                 grad_outputs=torch.ones_like(energy),
                 create_graph=True,
                 retain_graph=True,
+                allow_unused=True,
             )
             forces: torch.Tensor = -grads[0]
             output_pred[self.forces_prop_name] = forces
@@ -215,8 +256,10 @@ class M3GNetBackboneModule(
             )
             sts = -grads[1]
             scale = 1.0 / volume * -160.21766208
-            sts = [i * j for i, j in zip(sts, scale)] if sts.dim() == 3 else [sts * scale]
-            stress:torch.Tensor = torch.cat(sts)
+            sts = (
+                [i * j for i, j in zip(sts, scale)] if sts.dim() == 3 else [sts * scale]
+            )
+            stress: torch.Tensor = torch.cat(sts)
             output_pred[self.stress_prop_name] = stress.reshape(-1, 3, 3)
 
         pred: ModelOutput = {"predicted_properties": output_pred}
@@ -310,9 +353,9 @@ class M3GNetBackboneModule(
             line_graph = None
         graph.ndata.pop("pos")
         graph.edata.pop("pbc_offshift")
-        
+
         state_attr = torch.tensor(state_attr).long()
-        
+
         labels = {}
         if has_labels:
             for prop in self.hparams.properties:

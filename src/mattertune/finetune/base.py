@@ -97,6 +97,12 @@ class FinetuneModuleBase(
 
     @classmethod
     @abstractmethod
+    def hparams_cls(cls) -> type[FinetuneModuleBaseConfig]:
+        """Return the hyperparameters config class for this module."""
+        ...
+
+    @classmethod
+    @abstractmethod
     def ensure_dependencies(cls):
         """
         Ensure that all dependencies are installed.
@@ -126,6 +132,13 @@ class FinetuneModuleBase(
 
         This is used for any setup that needs to be done before the forward pass,
             e.g., setting pos.requires_grad_() for gradient-based force prediction.
+        """
+        ...
+
+    @abstractmethod
+    def requires_disabled_inference_mode(self) -> bool:
+        """
+        Whether the model requires inference mode to be disabled.
         """
         ...
 
@@ -216,7 +229,11 @@ class FinetuneModuleBase(
     hparams: TFinetuneModuleConfig  # pyright: ignore[reportIncompatibleMethodOverride]
     hparams_initial: TFinetuneModuleConfig  # pyright: ignore[reportIncompatibleMethodOverride]
 
-    def __init__(self, hparams: TFinetuneModuleConfig):
+    def __init__(self, hparams: TFinetuneModuleConfig | Mapping[str, Any]):
+        hparams_cls = self.hparams_cls()
+        if not isinstance(hparams, hparams_cls):
+            hparams = hparams_cls.model_validate(hparams)
+
         super().__init__()
 
         # Save the hyperparameters

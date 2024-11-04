@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -14,6 +15,9 @@ if TYPE_CHECKING:
     from ase import Atoms
 
     from ..finetune.base import FinetuneModuleBase, FinetuneModuleBaseConfig
+
+
+log = logging.getLogger(__name__)
 
 
 class MatterTunePotential:
@@ -34,10 +38,11 @@ class MatterTunePotential:
         properties = _resolve_properties(properties, self.lightning_module.hparams)
 
         # Create a trainer instance.
-        trainer = _create_trainer(self._lightning_trainer_kwargs)
+        trainer = _create_trainer(self._lightning_trainer_kwargs, self.lightning_module)
 
         # Create a dataloader from the atoms_list.
         dataloader = _atoms_list_to_dataloader(atoms_list, self.lightning_module)
+
         predictions = trainer.predict(
             self.lightning_module, dataloader, return_predictions=True
         )
@@ -70,8 +75,35 @@ def _resolve_properties(
     return resolved_properties
 
 
-def _create_trainer(trainer_kwargs: dict[str, Any]):
-    return Trainer(**trainer_kwargs)
+def _create_trainer(
+    trainer_kwargs: dict[str, Any],
+    lightning_module: FinetuneModuleBase,
+):
+    # Resolve the full trainer kwargs
+    trainer_kwargs_resolved: dict[str, Any] = {}
+    if lightning_module.requires_disabled_inference_mode():
+        if (
+            user_inference_mode := trainer_kwargs.get("inference_mode")
+        ) is not None and user_inference_mode:
+            raise ValueError(
+                "The model requires inference_mode to be disabled. "
+                "But the provided trainer kwargs have inference_mode=True. "
+                "Please set inference_mode=False.\n"
+                "If you think this is a mistake, please report a bug."
+            )
+
+        log.info(
+            "The model requires inference_mode to be disabled. "
+            "Setting inference_mode=False."
+        )
+        trainer_kwargs_resolved["inference_mode"] = False
+
+    # Update with the user-specified kwargs
+    trainer_kwargs_resolved.update(trainer_kwargs)
+
+    # Create the trainer
+    trainer = Trainer(**trainer_kwargs_resolved)
+    return trainer
 
 
 def _atoms_list_to_dataloader(
@@ -94,5 +126,6 @@ def _atoms_list_to_dataloader(
         dataset,
         has_labels=False,
         batch_size=1,
+        shuffle=False,
     )
     return dataloader

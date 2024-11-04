@@ -11,7 +11,7 @@ from typing_extensions import assert_never
 
 class AdamConfig(C.Config):
     name: Literal["Adam"] = "Adam"
-    """Name of the optimizer."""
+    """name of the optimizer."""
     lr: C.PositiveFloat
     """Learning rate."""
     eps: C.NonNegativeFloat = 1e-8
@@ -26,7 +26,7 @@ class AdamConfig(C.Config):
 
 class AdamWConfig(C.Config):
     name: Literal["AdamW"] = "AdamW"
-    """Name of the optimizer."""
+    """name of the optimizer."""
     lr: C.PositiveFloat
     """Learning rate."""
     eps: C.NonNegativeFloat = 1e-8
@@ -41,7 +41,7 @@ class AdamWConfig(C.Config):
 
 class SGDConfig(C.Config):
     name: Literal["SGD"] = "SGD"
-    """Name of the optimizer."""
+    """name of the optimizer."""
     lr: C.PositiveFloat
     """Learning rate."""
     momentum: C.NonNegativeFloat = 0.0
@@ -52,7 +52,7 @@ class SGDConfig(C.Config):
     """Whether to use nestrov."""
 
 
-OptimizerConfig: TypeAlias = Annotated[
+OptimizerConfig: nameAlias = Annotated[
     AdamConfig | AdamWConfig | SGDConfig,
     C.Field(discriminator="name"),
 ]

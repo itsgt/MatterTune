@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import logging
 from typing import TYPE_CHECKING, Any, Literal
 
 import nshconfig as C
@@ -12,6 +14,8 @@ from ..registry import backbone_registry, data_registry
 
 if TYPE_CHECKING:
     from .loader import DataLoaderKwargs
+
+log = logging.getLogger(__name__)
 
 
 @data_registry.rebuild_on_registers
@@ -112,8 +116,31 @@ class MatterTuner:
             else None
         )
 
+        # Resolve the full trainer kwargs
+        trainer_kwargs: dict[str, Any] = {}
+        if lightning_module.requires_disabled_inference_mode():
+            if (
+                user_inference_mode := self.config.lightning_trainer_kwargs.get(
+                    "inference_mode"
+                )
+            ) is not None and user_inference_mode:
+                raise ValueError(
+                    "The model requires inference_mode to be disabled. "
+                    "But the provided trainer kwargs have inference_mode=True. "
+                    "Please set inference_mode=False.\n"
+                    "If you think this is a mistake, please report a bug."
+                )
+
+            log.info(
+                "The model requires inference_mode to be disabled. "
+                "Setting inference_mode=False."
+            )
+            trainer_kwargs["inference_mode"] = False
+        # Update with the user-specified kwargs
+        trainer_kwargs.update(self.config.lightning_trainer_kwargs)
+
         # Create the trainer
-        trainer = Trainer(**self.config.lightning_trainer_kwargs)
+        trainer = Trainer(**trainer_kwargs)
         trainer.fit(
             lightning_module,
             train_dataloaders=train_dataloader,

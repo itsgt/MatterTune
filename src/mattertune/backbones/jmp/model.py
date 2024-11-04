@@ -11,8 +11,6 @@ import nshconfig_extra as CE
 import numpy as np
 import torch
 import torch.nn as nn
-from torch_geometric.data import Batch, Data
-from torch_geometric.data.data import BaseData
 from typing_extensions import override
 
 from ...finetune import properties as props
@@ -21,6 +19,8 @@ from ...registry import backbone_registry
 
 if TYPE_CHECKING:
     from ase import Atoms
+    from torch_geometric.data import Batch, Data
+    from torch_geometric.data.data import BaseData
 
 log = logging.getLogger(__name__)
 
@@ -141,19 +141,23 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
     @override
     @classmethod
     def ensure_dependencies(cls):
-        # Make sure the `jmp` module is available
+        # Make sure the jmp module is available
         if importlib.util.find_spec("jmp") is None:
             raise ImportError(
-                "The `jmp` module is not installed. Please install it by running"
-                " `pip install jmp`."
+                "The jmp module is not installed. Please install it by running"
+                " pip install jmp."
             )
 
-        # Make sure `torch-geometric` is available
+        # Make sure torch-geometric is available
         if importlib.util.find_spec("torch_geometric") is None:
             raise ImportError(
-                "The `torch-geometric` module is not installed. Please install it by running"
-                " `pip install torch-geometric`."
+                "The torch-geometric module is not installed. Please install it by running"
+                " pip install torch-geometric."
             )
+
+    @override
+    def requires_disabled_inference_mode(self):
+        return False
 
     def _create_output_head(self, prop: props.PropertyConfig):
         activation_cls = _get_activation_cls(self.backbone.hparams.activation)
@@ -250,6 +254,9 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
 
     @override
     def collate_fn(self, data_list):
+        # from torch_geometric.data import Batch
+        # from torch_geometric.data.data import BaseData
+
         return Batch.from_data_list(cast(list[BaseData], data_list))
 
     @override
@@ -265,6 +272,8 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
 
     @override
     def atoms_to_data(self, atoms, has_labels):
+        # from torch_geometric.data import Data
+
         # For JMP, your PyG object should have the following attributes:
         # - pos: Node positions (shape: (N, 3))
         # - atomic_numbers: Atomic numbers (shape: (N,))
