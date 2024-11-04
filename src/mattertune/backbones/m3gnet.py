@@ -69,15 +69,17 @@ class GraphComputerConfig(C.Config):
     """The cutoff distance for the three-body interactions. If None, the cutoff is loaded from the checkpoint."""
     pre_compute_line_graph: bool = False
     """Whether to pre-compute the line graph for three-body interactions in data preparation."""
+    graph_labels: list[int | float] | None = None
+    """The graph labels to consider, default is None."""
 
 class M3GNetBackboneConfig(FinetuneModuleBaseConfig):
     type: Literal["m3gnet"] = "m3gnet"
     """The type of the backbone."""
-
     ckpt_path: str
     """The path to the pre-trained model checkpoint."""
-    
     graph_computer: GraphComputerConfig
+    """Configuration for the graph computer."""
+    
 
     @override
     def create_backbone(self):
@@ -146,10 +148,10 @@ class M3GNetBackboneModule(FinetuneModuleBase[MatGLData, MatGLBatch, M3GNetBackb
     ):
         g, lg, state_attr, lattice, strain = batch.g, batch.lg, batch.state_attr, batch.lattice, batch.strain
         if return_backbone_output:
-            backbone_output = self.backbone(g, lg, state_attr, lattice, return_all_layer_output=True)
+            backbone_output = self.backbone(g, state_attr, lg, return_all_layer_output=True)
             energy:torch.Tensor = torch.squeeze(backbone_output["final"])
         else:
-            backbone_output = self.backbone(g, lg, state_attr, lattice, return_all_layer_output=False)
+            backbone_output = self.backbone(g, state_attr, lg, return_all_layer_output=False)
             energy:torch.Tensor = backbone_output
         output_pred:dict[str, torch.Tensor] = {self.energy_prop_name: energy}
         grad_vars = [g.ndata["pos"], strain] if self.calc_stress else [g.ndata["pos"]]
@@ -175,7 +177,7 @@ class M3GNetBackboneModule(FinetuneModuleBase[MatGLData, MatGLBatch, M3GNetBackb
             scale = 1.0 / volume * -160.21766208
             sts = [i * j for i, j in zip(sts, scale)] if sts.dim() == 3 else [sts * scale]
             stress:torch.Tensor = torch.cat(sts)
-            output_pred[self.stress_prop_name] = stress
+            output_pred[self.stress_prop_name] = stress.reshape(-1, 3, 3)
 
         pred: ModelOutput = {"predicted_properties": output_pred}
         if return_backbone_output:
@@ -197,11 +199,22 @@ class M3GNetBackboneModule(FinetuneModuleBase[MatGLData, MatGLBatch, M3GNetBackb
     @override
     def collate_fn(self, data_list):
         g = dgl.batch([data.g for data in data_list])
-        lg = dgl.batch([data.lg for data in data_list])
-        state_attr = torch.stack([data.state_attr for data in data_list])
-        lattice = torch.stack([data.lattice for data in data_list])
-        strain = torch.zeros_like(lattice)
-        labels = {k: torch.stack([d.labels[k] for d in data_list]) for k in data_list[0].labels}
+        if self.hparams.graph_computer.pre_compute_line_graph:
+            lg = dgl.batch([data.lg for data in data_list if data.lg is not None])
+        else:
+            lg = None
+        if self.hparams.graph_computer.graph_labels is not None:
+            state_attr = torch.tensor(self.hparams.graph_computer.graph_labels).long()
+        else:
+            state_attr = torch.stack([data.state_attr for data in data_list])
+        lattice = torch.concat([data.lattice for data in data_list], dim=0)
+        strain = lattice.new_zeros([g.batch_size, 3, 3])
+        labels = {}
+        for key in data_list[0].labels:
+            try:
+                labels[key] = torch.cat([data.labels[key] for data in data_list], dim=0)
+            except:
+                labels[key] = torch.stack([data.labels[key] for data in data_list])
         return MatGLBatch(g, lg, state_attr, lattice, strain, labels)
     
     @override
@@ -230,17 +243,16 @@ class M3GNetBackboneModule(FinetuneModuleBase[MatGLData, MatGLBatch, M3GNetBackb
         bond_vec, bond_dist = compute_pair_vector_and_distance(graph)
         graph.edata["bond_vec"] = bond_vec
         graph.edata["bond_dist"] = bond_dist
-        graph.ndata.pop("pos")
-        graph.edata.pop("pbc_offshift")
         if self.hparams.graph_computer.pre_compute_line_graph:
             line_graph = create_line_graph(graph, self.hparams.graph_computer.threebody_cutoff, directed=False)  # type: ignore
             for name in ["bond_vec", "bond_dist", "pbc_offset"]:
                 line_graph.ndata.pop(name)
         else:
             line_graph = None
+        graph.ndata.pop("pos")
+        graph.edata.pop("pbc_offshift")
         
-        ## TODO: For now the state_attr is set are [0,0]
-        state_attr = torch.zeros(1, 2, dtype=matgl.float_th)
+        state_attr = torch.tensor(state_attr).long()
         
         labels = {}
         if has_labels:
