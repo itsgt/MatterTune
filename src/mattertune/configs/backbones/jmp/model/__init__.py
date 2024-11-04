@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING
 # Config/alias imports
 
 if TYPE_CHECKING:
-    from mattertune.backbones.jmp import JMPBackboneConfig as JMPBackboneConfig
     from mattertune.backbones.jmp.model import CutoffsConfig as CutoffsConfig
     from mattertune.backbones.jmp.model import (
         FinetuneModuleBaseConfig as FinetuneModuleBaseConfig,
     )
+    from mattertune.backbones.jmp.model import JMPBackboneConfig as JMPBackboneConfig
     from mattertune.backbones.jmp.model import (
         JMPGraphComputerConfig as JMPGraphComputerConfig,
     )
@@ -32,7 +32,9 @@ else:
                 "mattertune.backbones.jmp.model"
             ).FinetuneModuleBaseConfig
         if name == "JMPBackboneConfig":
-            return importlib.import_module("mattertune.backbones.jmp").JMPBackboneConfig
+            return importlib.import_module(
+                "mattertune.backbones.jmp.model"
+            ).JMPBackboneConfig
         if name == "JMPGraphComputerConfig":
             return importlib.import_module(
                 "mattertune.backbones.jmp.model"
@@ -43,6 +45,4 @@ else:
             ).MaxNeighborsConfig
         raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
-
 # Submodule exports
-from . import model as model

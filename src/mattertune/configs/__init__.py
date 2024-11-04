@@ -8,15 +8,16 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mattertune import MatterTunerConfig as MatterTunerConfig
-    from mattertune.backbones import BackboneConfig as BackboneConfig
-    ## JMP imports
-    # from mattertune.backbones import JMPBackboneConfig as JMPBackboneConfig
-    # from mattertune.backbones.jmp import GraphComputerConfig as JMPGraphComputerConfig
-    ## M3GNet imports
+    from mattertune.backbones import JMPBackboneConfig as JMPBackboneConfig
     from mattertune.backbones import M3GNetBackboneConfig as M3GNetBackboneConfig
-    from mattertune.backbones.m3gnet import GraphComputerConfig as M3GNetGraphComputerConfig
-    from mattertune.data import DatasetConfig as DatasetConfig
-    # from mattertune.data import OMAT24DatasetConfig as OMAT24DatasetConfig
+    from mattertune.backbones.jmp.model import CutoffsConfig as CutoffsConfig
+    from mattertune.backbones.jmp.model import (
+        JMPGraphComputerConfig as JMPGraphComputerConfig,
+    )
+    from mattertune.backbones.jmp.model import MaxNeighborsConfig as MaxNeighborsConfig
+    from mattertune.backbones.m3gnet import GraphComputerConfig as GraphComputerConfig
+    from mattertune.data import DatasetConfigBase as DatasetConfigBase
+    from mattertune.data import OMAT24DatasetConfig as OMAT24DatasetConfig
     from mattertune.data.xyz import XYZDatasetConfig as XYZDatasetConfig
     from mattertune.finetune.base import LRSchedulerConfig as LRSchedulerConfig
     from mattertune.finetune.base import OptimizerConfig as OptimizerConfig
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
     from mattertune.finetune.properties import (
         StressesPropertyConfig as StressesPropertyConfig,
     )
+    from mattertune.registry import FinetuneModuleBaseConfig as FinetuneModuleBaseConfig
 else:
 
     def __getattr__(name):
@@ -67,6 +69,12 @@ else:
             return importlib.import_module(
                 "mattertune.finetune.lr_scheduler"
             ).CosineAnnealingLRConfig
+        if name == "CutoffsConfig":
+            return importlib.import_module(
+                "mattertune.backbones.jmp.model"
+            ).CutoffsConfig
+        if name == "DatasetConfigBase":
+            return importlib.import_module("mattertune.data").DatasetConfigBase
         if name == "EnergyPropertyConfig":
             return importlib.import_module(
                 "mattertune.finetune.properties"
@@ -77,7 +85,7 @@ else:
             ).ExponentialConfig
         if name == "FinetuneModuleBaseConfig":
             return importlib.import_module(
-                "mattertune.backbones.jmp"
+                "mattertune.registry"
             ).FinetuneModuleBaseConfig
         if name == "ForcesPropertyConfig":
             return importlib.import_module(
@@ -85,7 +93,7 @@ else:
             ).ForcesPropertyConfig
         if name == "JMPGraphComputerConfig":
             return importlib.import_module(
-                "mattertune.backbones.jmp"
+                "mattertune.backbones.m3gnet"
             ).GraphComputerConfig
         if name == "M3GNetGraphComputerConfig":
             return importlib.import_module(
@@ -97,18 +105,26 @@ else:
             ).GraphPropertyConfig
         if name == "HuberLossConfig":
             return importlib.import_module("mattertune.finetune.loss").HuberLossConfig
-        # if name == "JMPBackboneConfig":
-        #     return importlib.import_module("mattertune.backbones").JMPBackboneConfig
-        if name == "M3GNetBackboneConfig":
-            return importlib.import_module("mattertune.backbones").M3GNetBackboneConfig
+        if name == "JMPBackboneConfig":
+            return importlib.import_module("mattertune.backbones").JMPBackboneConfig
+        if name == "JMPGraphComputerConfig":
+            return importlib.import_module(
+                "mattertune.backbones.jmp.model"
+            ).JMPGraphComputerConfig
         if name == "L2MAELossConfig":
             return importlib.import_module("mattertune.finetune.loss").L2MAELossConfig
+        if name == "M3GNetBackboneConfig":
+            return importlib.import_module("mattertune.backbones").M3GNetBackboneConfig
         if name == "MAELossConfig":
             return importlib.import_module("mattertune.finetune.loss").MAELossConfig
         if name == "MSELossConfig":
             return importlib.import_module("mattertune.finetune.loss").MSELossConfig
         if name == "MatterTunerConfig":
             return importlib.import_module("mattertune").MatterTunerConfig
+        if name == "MaxNeighborsConfig":
+            return importlib.import_module(
+                "mattertune.backbones.jmp.model"
+            ).MaxNeighborsConfig
         if name == "MultiStepLRConfig":
             return importlib.import_module(
                 "mattertune.finetune.lr_scheduler"
@@ -139,10 +155,8 @@ else:
             return importlib.import_module(
                 "mattertune.finetune.properties"
             ).StressesPropertyConfig
-        if name == "BackboneConfig":
-            return importlib.import_module("mattertune.backbones").BackboneConfig
-        if name == "DatasetConfig":
-            return importlib.import_module("mattertune.data").DatasetConfig
+        if name == "XYZDatasetConfig":
+            return importlib.import_module("mattertune.data.xyz").XYZDatasetConfig
         if name == "LRSchedulerConfig":
             return importlib.import_module("mattertune.finetune.base").LRSchedulerConfig
         if name == "LossConfig":
@@ -158,4 +172,5 @@ else:
 from . import backbones as backbones
 from . import data as data
 from . import finetune as finetune
+from . import registry as registry
 from . import wrappers as wrappers

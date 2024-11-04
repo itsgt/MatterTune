@@ -15,7 +15,7 @@ from lightning.pytorch.utilities.types import OptimizerLRSchedulerConfig
 from torch.utils.data import Dataset
 from typing_extensions import NotRequired, TypedDict, TypeVar, Unpack, cast, override
 
-from ..data.loader import DataLoaderKwargs, create_dataloader
+from .loader import DataLoaderKwargs, create_dataloader
 from .loss import compute_loss
 from .lr_scheduler import LRSchedulerConfig, create_lr_scheduler
 from .metrics import FinetuneMetrics
@@ -41,8 +41,9 @@ class FinetuneModuleBaseConfig(C.Config, ABC):
     ignore_gpu_batch_transform_error: bool = True
     """Whether to ignore data processing errors during training."""
 
+    @classmethod
     @abstractmethod
-    def create_backbone(self) -> FinetuneModuleBase: ...
+    def model_cls(cls) -> type[FinetuneModuleBase]: ...
 
 
 class _SkipBatchError(Exception):
@@ -93,6 +94,18 @@ class FinetuneModuleBase(
     """
     Finetune module base class. Inherits ``lightning.pytorch.LightningModule``.
     """
+
+    @classmethod
+    @abstractmethod
+    def ensure_dependencies(cls):
+        """
+        Ensure that all dependencies are installed.
+
+        This method should raise an exception if any dependencies are missing,
+            with a message indicating which dependencies are missing and
+            how to install them.
+        """
+        ...
 
     # region ABC methods for output heads and model forward pass
     @abstractmethod

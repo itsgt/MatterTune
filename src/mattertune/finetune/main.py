@@ -5,13 +5,16 @@ from typing import TYPE_CHECKING, Any, Literal
 import nshconfig as C
 from lightning.pytorch import Trainer
 
-from ..backbones import BackboneConfig
+from ..backbones import ModelConfig
 from ..data import DatasetConfig
+from ..finetune.base import FinetuneModuleBase
+from ..registry import backbone_registry, data_registry
 
 if TYPE_CHECKING:
-    from ..data.loader import DataLoaderKwargs
+    from .loader import DataLoaderKwargs
 
 
+@data_registry.rebuild_on_registers
 class PerSplitDataConfig(C.Config):
     train: DatasetConfig
     """The configuration for the training data."""
@@ -57,11 +60,13 @@ class PerSplitDataConfig(C.Config):
         }
 
 
+@backbone_registry.rebuild_on_registers
+@data_registry.rebuild_on_registers
 class MatterTunerConfig(C.Config):
     data: PerSplitDataConfig
     """The configuration for the data."""
 
-    model: BackboneConfig
+    model: ModelConfig
     """The configuration for the model."""
 
     lightning_trainer_kwargs: dict[str, Any] = {}
@@ -77,20 +82,31 @@ class MatterTuner:
         self.config = config
 
     def tune(self):
+        # Resolve the model class
+        model_cls = self.config.model.model_cls()
+
+        # Make sure all the necessary dependencies are installed
+        model_cls.ensure_dependencies()
+
         # Create the model
-        lightning_module = self.config.model.create_backbone()
+        lightning_module = model_cls(self.config.model)
+        assert isinstance(
+            lightning_module, FinetuneModuleBase
+        ), f'The backbone model must be a FinetuneModuleBase subclass. Got "{type(lightning_module)}".'
 
         # Create the datasets & wrap them in our dataloader logic
-        train_dataloader = lightning_module.create_dataloader(
-            self.config.data.train.create_dataset(),
+        train_dataloader = _create_dataset(
+            lightning_module,
+            self.config.data,
+            self.config.data.train,
             has_labels=True,
-            **self.config.data.dataloader_kwargs(),
         )
         val_dataloader = (
-            lightning_module.create_dataloader(
-                self.config.data.validation.create_dataset(),
+            _create_dataset(
+                lightning_module,
+                self.config.data,
+                self.config.data.validation,
                 has_labels=True,
-                **self.config.data.dataloader_kwargs(),
             )
             if self.config.data.validation is not None
             else None
@@ -106,3 +122,23 @@ class MatterTuner:
 
         # Return the trained model
         return lightning_module
+
+
+def _create_dataset(
+    lightning_module: FinetuneModuleBase,
+    data_hparams: PerSplitDataConfig,
+    dataset_hparams: DatasetConfig,
+    has_labels: bool,
+):
+    # Get the dataset class and ensure all dependencies are installed
+    dataset_cls = dataset_hparams.dataset_cls()
+    dataset_cls.ensure_dependencies()
+
+    # Create the dataset and wrap it in our dataloader logic
+    dataset = dataset_cls(dataset_hparams)
+
+    return lightning_module.create_dataloader(
+        dataset,
+        has_labels=has_labels,
+        **data_hparams.dataloader_kwargs(),
+    )
