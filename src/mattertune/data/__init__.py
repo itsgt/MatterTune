@@ -9,5 +9,5 @@ from .omat24 import OMAT24DatasetConfig as OMAT24DatasetConfig
 
 DatasetConfig: TypeAlias = Annotated[
     DatasetConfigBase,
-    data_registry.RegistryResolution(),
+    data_registry.DynamicResolution(),
 ]

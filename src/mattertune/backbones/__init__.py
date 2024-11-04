@@ -11,5 +11,5 @@ from .m3gnet import M3GNetBackboneModule as M3GNetBackboneModule
 
 ModelConfig: TypeAlias = Annotated[
     FinetuneModuleBaseConfig,
-    backbone_registry.RegistryResolution(),
+    backbone_registry.DynamicResolution(),
 ]
