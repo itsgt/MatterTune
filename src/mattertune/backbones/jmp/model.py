@@ -19,8 +19,8 @@ from ...registry import backbone_registry
 
 if TYPE_CHECKING:
     from ase import Atoms
-    from torch_geometric.data import Batch, Data
-    from torch_geometric.data.data import BaseData
+    # from torch_geometric.data import Batch, Data
+    # from torch_geometric.data.data import BaseData
 
 log = logging.getLogger(__name__)
 
@@ -137,7 +137,11 @@ class JMPBackboneConfig(FinetuneModuleBaseConfig):
         return JMPBackboneModule
 
 
-class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
+class JMPBackboneModule(
+    FinetuneModuleBase[
+        "torch_geometric.data.Data", "torch_geometric.data.Batch", JMPBackboneConfig
+    ]
+):
     @override
     @classmethod
     def ensure_dependencies(cls):
@@ -254,8 +258,8 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
 
     @override
     def collate_fn(self, data_list):
-        # from torch_geometric.data import Batch
-        # from torch_geometric.data.data import BaseData
+        from torch_geometric.data import Batch
+        from torch_geometric.data.data import BaseData
 
         return Batch.from_data_list(cast(list[BaseData], data_list))
 
@@ -272,7 +276,7 @@ class JMPBackboneModule(FinetuneModuleBase[Data, Batch, JMPBackboneConfig]):
 
     @override
     def atoms_to_data(self, atoms, has_labels):
-        # from torch_geometric.data import Data
+        from torch_geometric.data import Data
 
         # For JMP, your PyG object should have the following attributes:
         # - pos: Node positions (shape: (N, 3))
