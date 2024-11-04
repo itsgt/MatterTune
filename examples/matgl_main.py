@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import logging
+import nshutils as nu
+import rich
 import os
 from pathlib import Path
 
 import mattertune.configs as MC
 from mattertune import MatterTuner
 
+logging.basicConfig(level=logging.DEBUG)
+
+nu.pretty()
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 def hparams():

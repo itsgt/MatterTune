@@ -16,6 +16,7 @@ from typing_extensions import override
 from ..finetune import properties as props
 from ..finetune.base import FinetuneModuleBase, FinetuneModuleBaseConfig, ModelOutput
 from ..registry import backbone_registry
+import mattertune as mt
 
 if TYPE_CHECKING:
     from ase import Atoms

@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Literal
 
 import ase
-from fairchem.core.datasets import AseDBDataset
 from typing_extensions import override
 
 from ..registry import data_registry
@@ -28,7 +27,8 @@ class OMAT24DatasetConfig(DatasetConfigBase):
 class OMAT24Dataset(DatasetBase[OMAT24DatasetConfig]):
     def __init__(self, config: OMAT24DatasetConfig):
         super().__init__(config)
-
+        
+        from fairchem.core.datasets import AseDBDataset
         self.dataset = AseDBDataset(config={"src": str(self.config.src)})
 
     @override

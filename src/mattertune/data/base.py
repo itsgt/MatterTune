@@ -7,8 +7,7 @@ import nshconfig as C
 from torch.utils.data import Dataset
 from typing_extensions import override
 
-if TYPE_CHECKING:
-    from ase import Atoms
+from ase import Atoms
 
 
 class DatasetConfigBase(C.Config, ABC):

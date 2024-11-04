@@ -15,7 +15,7 @@ if TYPE_CHECKING:
         JMPGraphComputerConfig as JMPGraphComputerConfig,
     )
     from mattertune.backbones.jmp.model import MaxNeighborsConfig as MaxNeighborsConfig
-    from mattertune.backbones.m3gnet import GraphComputerConfig as GraphComputerConfig
+    from mattertune.backbones.m3gnet import GraphComputerConfig as M3GNetGraphComputerConfig
     from mattertune.data import DatasetConfigBase as DatasetConfigBase
     from mattertune.data import OMAT24DatasetConfig as OMAT24DatasetConfig
     from mattertune.data.xyz import XYZDatasetConfig as XYZDatasetConfig
@@ -93,7 +93,7 @@ else:
             ).ForcesPropertyConfig
         if name == "JMPGraphComputerConfig":
             return importlib.import_module(
-                "mattertune.backbones.m3gnet"
+                "mattertune.backbones.jmp"
             ).GraphComputerConfig
         if name == "M3GNetGraphComputerConfig":
             return importlib.import_module(
@@ -129,8 +129,8 @@ else:
             return importlib.import_module(
                 "mattertune.finetune.lr_scheduler"
             ).MultiStepLRConfig
-        # if name == "OMAT24DatasetConfig":
-        #     return importlib.import_module("mattertune.data").OMAT24DatasetConfig
+        if name == "OMAT24DatasetConfig":
+            return importlib.import_module("mattertune.data").OMAT24DatasetConfig
         if name == "XYZDatasetConfig":
             return importlib.import_module("mattertune.data").XYZDatasetConfig
         if name == "PerSplitDataConfig":
