@@ -5,6 +5,7 @@ __codegen__ = True
 from mattertune.data import DatasetConfigBase as DatasetConfigBase
 from mattertune.data import OMAT24DatasetConfig as OMAT24DatasetConfig
 from mattertune.data import XYZDatasetConfig as XYZDatasetConfig
+from mattertune.data import JSONDatasetConfig as JSONDatasetConfig
 from mattertune.data.datamodule import (
     AutoSplitDataModuleConfig as AutoSplitDataModuleConfig,
 )
@@ -84,4 +85,10 @@ from .XYZDatasetConfig_typed_dict import (
 )
 from .XYZDatasetConfig_typed_dict import (
     XYZDatasetConfigTypedDict as XYZDatasetConfigTypedDict,
+)
+from .JSONDatasetConfig_typed_dict import (
+    CreateJSONDatasetConfig as CreateJSONDatasetConfig,
+)
+from .JSONDatasetConfig_typed_dict import (
+    JSONDatasetConfigTypedDict as JSONDatasetConfigTypedDict,
 )

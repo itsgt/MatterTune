@@ -24,6 +24,7 @@ from mattertune.backbones.orb.model import ORBSystemConfig as ORBSystemConfig
 from mattertune.data import DatasetConfigBase as DatasetConfigBase
 from mattertune.data import OMAT24DatasetConfig as OMAT24DatasetConfig
 from mattertune.data import XYZDatasetConfig as XYZDatasetConfig
+from mattertune.data import JSONDatasetConfig as JSONDatasetConfig
 from mattertune.data.datamodule import (
     AutoSplitDataModuleConfig as AutoSplitDataModuleConfig,
 )
@@ -206,6 +207,12 @@ from .data.XYZDatasetConfig_typed_dict import (
 )
 from .data.XYZDatasetConfig_typed_dict import (
     XYZDatasetConfigTypedDict as XYZDatasetConfigTypedDict,
+)
+from .data.JSONDatasetConfig_typed_dict import (
+    CreateJSONDatasetConfig as CreateJSONDatasetConfig,
+)
+from .data.JSONDatasetConfig_typed_dict import (
+    JSONDatasetConfigTypedDict as JSONDatasetConfigTypedDict,
 )
 from .finetune.loss.HuberLossConfig_typed_dict import (
     CreateHuberLossConfig as CreateHuberLossConfig,
