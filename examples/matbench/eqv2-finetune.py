@@ -103,7 +103,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--ckpt_path",
         type=str,
-        default="./checkpoints/eqV2_31M_mp.pt",
+        default="/net/csefiles/coc-fung-cluster/nima/shared/checkpoints/eqV2_31M_mp.pt",
     )
     parser.add_argument("--task", type=str, default="matbench_log_kvrh")
     parser.add_argument("--train_split", type=float, default=0.9)
