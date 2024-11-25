@@ -311,7 +311,6 @@ class EqV2BackboneModule(FinetuneModuleBase["BaseData", "Batch", EqV2BackboneCon
     @override
     def collate_fn(self, data_list):
         from fairchem.core.datasets import data_list_collater
-
         return cast("Batch", data_list_collater(data_list, otf_graph=True))
 
     @override

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import numpy as np
+import torch
 from pathlib import Path
 from typing import Literal
 
@@ -52,15 +53,15 @@ class JSONDataset(Dataset[Atoms]):
             
             energy, forces, stress = None, None, None
             if 'energy' in self.config.tasks:
-                energy = np.array(entry[self.config.tasks['energy']])
+                energy = torch.tensor(entry[self.config.tasks['energy']])
             if 'forces' in self.config.tasks:
-                forces = np.array(entry[self.config.tasks['forces']])
+                forces = torch.tensor(entry[self.config.tasks['forces']])
             if 'stress' in self.config.tasks:
-                stress = np.array(entry[self.config.tasks['stress']])
+                stress = torch.tensor(entry[self.config.tasks['stress']])
                 # ASE requires stress to be of shape (3, 3) or (6,)
                 # Some datasets store stress with shape (1, 3, 3)
                 if stress.ndim == 3:
-                    stress = stress[0]
+                    stress = stress.squeeze(0)
                 
             single_point_calc = SinglePointCalculator(
                 atoms,
