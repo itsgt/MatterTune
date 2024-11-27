@@ -55,6 +55,8 @@ class MatterTunePropertyPredictor:
         self,
         atoms_list: list[ase.Atoms],
         properties: Sequence[str | PropertyConfig] | None = None,
+        *,
+        batch_size: int = 1,
     ) -> list[dict[str, torch.Tensor]]:
         """
         Predicts properties for a list of atomic systems using the trained model.
@@ -89,8 +91,11 @@ class MatterTunePropertyPredictor:
         trainer = _create_trainer(self._lightning_trainer_kwargs, self.lightning_module)
 
         # Create a dataloader from the atoms_list.
-        dataloader = _atoms_list_to_dataloader(atoms_list, self.lightning_module)
+        dataloader = _atoms_list_to_dataloader(
+            atoms_list, self.lightning_module, batch_size
+        )
 
+        # Make predictions using the trainer.
         predictions = trainer.predict(
             self.lightning_module, dataloader, return_predictions=True
         )
@@ -177,6 +182,7 @@ def _create_trainer(
 def _atoms_list_to_dataloader(
     atoms_list: list[ase.Atoms],
     lightning_module: FinetuneModuleBase,
+    batch_size: int = 1,
 ):
     class AtomsDataset(Dataset):
         def __init__(self, atoms_list: list[ase.Atoms]):
@@ -193,7 +199,7 @@ def _atoms_list_to_dataloader(
     dataloader = lightning_module.create_dataloader(
         dataset,
         has_labels=False,
-        batch_size=1,
+        batch_size=batch_size,
         shuffle=False,
         num_workers=0,
     )
