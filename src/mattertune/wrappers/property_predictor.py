@@ -55,6 +55,8 @@ class MatterTunePropertyPredictor:
         self,
         atoms_list: list[ase.Atoms],
         properties: Sequence[str | PropertyConfig] | None = None,
+        *,
+        batch_size: int = 1,
     ) -> list[dict[str, torch.Tensor]]:
         """
         Predicts properties for a list of atomic systems using the trained model.
@@ -89,14 +91,30 @@ class MatterTunePropertyPredictor:
         trainer = _create_trainer(self._lightning_trainer_kwargs, self.lightning_module)
 
         # Create a dataloader from the atoms_list.
-        dataloader = _atoms_list_to_dataloader(atoms_list, self.lightning_module)
+        dataloader = _atoms_list_to_dataloader(
+            atoms_list, self.lightning_module, batch_size
+        )
 
+        # Make predictions using the trainer.
         predictions = trainer.predict(
             self.lightning_module, dataloader, return_predictions=True
         )
         assert predictions is not None, "Predictions should not be None. Report a bug."
+        predictions = cast(list[dict[str, torch.Tensor]], predictions)
 
-        return cast(list[dict[str, torch.Tensor]], predictions)
+        all_predictions = []
+        for batch_preds in predictions:
+            first_tensor = next(iter(batch_preds.values()))
+            batch_size = len(first_tensor)
+            for idx in range(batch_size):
+                pred_dict = {}
+                for key, value in batch_preds.items():
+                    pred_dict[key] = torch.tensor(value[idx])
+                all_predictions.append(pred_dict)
+        assert len(all_predictions) == len(
+            atoms_list
+        ), "Mismatch in predictions length."
+        return all_predictions
 
 
 def _resolve_properties(
@@ -161,6 +179,7 @@ def _create_trainer(
 def _atoms_list_to_dataloader(
     atoms_list: list[ase.Atoms],
     lightning_module: FinetuneModuleBase,
+    batch_size: int = 1,
 ):
     class AtomsDataset(Dataset):
         def __init__(self, atoms_list: list[ase.Atoms]):
@@ -177,7 +196,7 @@ def _atoms_list_to_dataloader(
     dataloader = lightning_module.create_dataloader(
         dataset,
         has_labels=False,
-        batch_size=1,
+        batch_size=batch_size,
         shuffle=False,
     )
     return dataloader
