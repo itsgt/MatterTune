@@ -9,18 +9,40 @@ import numpy as np
 from ase import Atoms
 from ase.io import read, write
 from ase.md.langevin import Langevin
-from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
-from mattertune.backbones import JMPBackboneModule, M3GNetBackboneModule
+
 from tqdm import tqdm
+
+from mattertune.backbones import (
+    JMPBackboneModule,
+    M3GNetBackboneModule,
+    ORBBackboneModule,
+)
 
 logging.getLogger("lightning.pytorch").setLevel(logging.WARNING)
 
 
 def main(args_dict: dict):
     ## Load Checkpoint and Create ASE Calculator
-    model = M3GNetBackboneModule.load_from_checkpoint(
-        checkpoint_path=args_dict["checkpoint_path"], map_location="cpu"
-    )
+    model_name = args_dict["ckpt_path"].split("/")[-1].replace(".ckpt", "")
+    if "jmp" in args_dict["ckpt_path"]:
+        model_type = "jmp"
+        model = JMPBackboneModule.load_from_checkpoint(
+            checkpoint_path=args_dict["ckpt_path"], map_location="cpu"
+        )
+    elif "orb" in args_dict["ckpt_path"]:
+        model_type = "orb"
+        model = ORBBackboneModule.load_from_checkpoint(
+            checkpoint_path=args_dict["ckpt_path"], map_location="cpu"
+        )
+    elif "m3gnet" in args_dict["ckpt_path"]:
+        model_type = "m3gnet"
+        model = M3GNetBackboneModule.load_from_checkpoint(
+            checkpoint_path=args_dict["ckpt_path"], map_location="cpu"
+        )
+    else:
+        raise ValueError(
+            "Invalid fine-tuning model, must be one of 'jmp', 'orb', or 'm3gnet'."
+        )
     calc = model.ase_calculator(
         lightning_trainer_kwargs={
             "accelerator": "gpu",
@@ -39,74 +61,56 @@ def main(args_dict: dict):
 
     ## Setup directories and remove old trajectory file
     os.makedirs("./md_results", exist_ok=True)
-    if os.path.exists("./md_results/md_traj.xyz"):
-        os.remove("./md_results/md_traj.xyz")
 
     ## Initialize WandB
     import wandb
 
     wandb.init(
         project="MatterTune-Examples",
-        name="Water-NVT-{}".format(
-            args_dict["checkpoint_path"].split("/")[-1].split(".")[0]
-        ),
+        name="Water-NVT-{}".format(model_name),
         save_code=False,
         settings=wandb.Settings(code_dir=None, _disable_stats=True),
     )
     wandb.config.update(args_dict)
 
-    # Define temperature stages for gradual heating
-    temperature_stages = args_dict["temperature_stages"]
-    md_traj = []
+    ## Run Langevin Dynamics
+    dyn = Langevin(
+        atoms,
+        temperature_K=args_dict["temperature"],
+        timestep=args_dict["timestep"] * units.fs,
+        friction=args_dict["friction"],
+    )
 
-    ## MD with multiple temperature stages
-    for stage_idx, target_temp in enumerate(temperature_stages):
-        print(f"Starting MD at {target_temp} K")
-
-        # Re-initialize Langevin dynamics with new target temperature
-        dyn = Langevin(
-            atoms,
-            temperature_K=target_temp,
-            timestep=args_dict["timestep"] * units.fs,
-            friction=args_dict["friction"],
+    # Attach trajectory writing
+    def attach_func():
+        scaled_pos = dyn.atoms.get_scaled_positions()
+        dyn.atoms.set_scaled_positions(np.mod(scaled_pos, 1))
+        temp = dyn.atoms.get_temperature()
+        e = dyn.atoms.get_potential_energy()
+        f = dyn.atoms.get_forces()
+        avg_f = np.mean(np.linalg.norm(f, axis=1))
+        write(
+            f"./md_results/md_traj_fric{args_dict['friction']}_{model_name}.xyz",
+            copy.deepcopy(dyn.atoms),
+            append=True,
+        )
+        wandb.log(
+            {
+                "Temperature (K)": temp,
+                "Energy (eV)": e,
+                "Avg. Force (eV/Ang)": avg_f,
+                "Time (fs)": i * args_dict["timestep"],
+            }
         )
 
-        # Reinitialize velocities for each stage
-        # MaxwellBoltzmannDistribution(atoms, target_temp)
-
-        # Attach trajectory writing
-        def store_traj():
-            md_traj.append(copy.deepcopy(atoms))
-
-        dyn.attach(store_traj, interval=args_dict["interval"])
-
-        # Run MD for this temperature stage
-        steps_per_stage = args_dict["steps"][stage_idx]
-        pbar = tqdm(range(steps_per_stage), desc=f"MD Stage {stage_idx+1}")
-        for i in range(steps_per_stage):
-            dyn.run(1)
-            scaled_pos = atoms.get_scaled_positions()
-            atoms.set_scaled_positions(np.mod(scaled_pos, 1))
-            pbar.set_postfix(
-                {
-                    "Energy": atoms.get_potential_energy(),
-                    "Temperature": atoms.get_temperature(),
-                }
-            )
-            pbar.update(1)
-            temp = atoms.get_temperature()
-            e = atoms.get_potential_energy()
-            wandb.log(
-                {
-                    "Temperature": temp,
-                    "Energy": e,
-                    "Time": (stage_idx * steps_per_stage + i) * args_dict["timestep"],
-                }
-            )
-        pbar.close()
-
-    ## Write trajectory to file
-    write("./md_results/md_traj.xyz", md_traj)
+    dyn.attach(attach_func, interval=args_dict["interval"])
+    pbar = tqdm(
+        range(args_dict["steps"]), desc=f"Langevin at {args_dict['temperature']} K"
+    )
+    for i in range(args_dict["steps"]):
+        dyn.run(1)
+        pbar.update(1)
+    pbar.close()
 
 
 if __name__ == "__main__":
@@ -114,13 +118,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--checkpoint_path", type=str, default="./checkpoints/m3gnet-best.ckpt"
+        "--ckpt_path", type=str, default="./checkpoints/m3gnet-best.ckpt"
     )
     parser.add_argument("--init_struct", type=str, default="./data/H2O.xyz")
-    parser.add_argument("--devices", type=int, nargs="+", default=[0])
-    parser.add_argument(
-        "--temperature_stages", type=float, nargs="+", default=[100, 200, 300]
-    )
+    parser.add_argument("--devices", type=int, nargs="+", default=[1])
+    parser.add_argument("--temperature", type=float, default=300)
     parser.add_argument("--timestep", type=float, default=0.5)
     parser.add_argument("--friction", type=float, default=0.02)
     parser.add_argument("--interval", type=int, default=10)
