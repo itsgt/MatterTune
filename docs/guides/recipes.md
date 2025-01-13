@@ -49,6 +49,37 @@ config = mt.configs.MatterTunerConfig(
 )
 ```
 
+### EMA (Exponential Moving Average)
+
+EMA maintains a moving average of model parameters during training, which often results in better generalization and more stable validation metrics. The EMA model is used during validation and testing.
+
+API Reference: {py:class}`mattertune.configs.EMARecipeConfig`
+
+```python
+import mattertune as mt
+
+config = mt.configs.MatterTunerConfig(
+    model=mt.configs.JMPBackboneConfig(...),
+    data=mt.configs.AutoSplitDataModuleConfig(...),
+    recipes=[
+        mt.configs.EMARecipeConfig(
+            decay=0.9999,  # EMA decay factor (between 0-1)
+            validate_original_weights=False,  # Whether to validate using original weights instead of EMA weights
+            every_n_steps=1,  # Update EMA weights every N steps
+            cpu_offload=False  # Whether to store EMA weights on CPU to save GPU memory
+        )
+    ]
+)
+```
+
+The EMA recipe maintains a shadow copy of model parameters that gets updated using an exponential moving average:
+
+```
+ema_weight = decay * ema_weight + (1 - decay) * training_weight
+```
+
+Higher decay values (closer to 1) result in slower but more stable parameter averaging. Common values are 0.999 or 0.9999.
+
 ## Creating Custom Recipes
 
 A recipe consists of two main components:
