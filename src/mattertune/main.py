@@ -13,6 +13,7 @@ from lightning.pytorch.strategies.strategy import Strategy
 
 from .backbones import ModelConfig
 from .callbacks.early_stopping import EarlyStoppingConfig
+from .callbacks.learning_rate_monitor import LearningRateMonitorConfig
 from .callbacks.model_checkpoint import ModelCheckpointConfig
 from .data import DataModuleConfig, MatterTuneDataModule
 from .finetune.base import FinetuneModuleBase
@@ -127,6 +128,11 @@ class TrainerConfig(C.Config):
     early_stopping: EarlyStoppingConfig | None = None
     """The configuration for early stopping."""
 
+    learning_rate_monitor: LearningRateMonitorConfig | None = (
+        LearningRateMonitorConfig()
+    )
+    """The configuration for the learning rate monitor."""
+
     loggers: Sequence[LoggerConfig] | Literal["default"] = "default"
     """The loggers to use for logging training metrics.
 
@@ -148,6 +154,8 @@ class TrainerConfig(C.Config):
             callbacks.append(self.checkpoint.create_callback())
         if self.early_stopping is not None:
             callbacks.append(self.early_stopping.create_callback())
+        if self.learning_rate_monitor is not None:
+            callbacks.append(self.learning_rate_monitor.create_callback())
 
         loggers = []
         if self.loggers == "default":
