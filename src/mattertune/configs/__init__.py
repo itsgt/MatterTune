@@ -75,6 +75,7 @@ from mattertune.loggers import TensorBoardLoggerConfig as TensorBoardLoggerConfi
 from mattertune.loggers import WandbLoggerConfig as WandbLoggerConfig
 from mattertune.main import CSVLoggerConfig as CSVLoggerConfig
 from mattertune.main import EarlyStoppingConfig as EarlyStoppingConfig
+from mattertune.main import LearningRateMonitorConfig as LearningRateMonitorConfig
 from mattertune.main import LoggerConfig as LoggerConfig
 from mattertune.main import MatterTunerConfig as MatterTunerConfig
 from mattertune.main import ModelCheckpointConfig as ModelCheckpointConfig
@@ -87,6 +88,7 @@ from mattertune.normalization import (
     PerAtomReferencingNormalizerConfig as PerAtomReferencingNormalizerConfig,
 )
 from mattertune.normalization import RMSNormalizerConfig as RMSNormalizerConfig
+from mattertune.recipes import EMARecipeConfig as EMARecipeConfig
 from mattertune.recipes import LoRARecipeConfig as LoRARecipeConfig
 from mattertune.recipes import NoOpRecipeConfig as NoOpRecipeConfig
 from mattertune.recipes import RecipeConfigBase as RecipeConfigBase
@@ -118,6 +120,7 @@ __all__ = [
     "DataModuleConfig",
     "DatasetConfig",
     "DatasetConfigBase",
+    "EMARecipeConfig",
     "EarlyStoppingConfig",
     "EnergyPropertyConfig",
     "EqV2BackboneConfig",
@@ -132,6 +135,7 @@ __all__ = [
     "JSONDatasetConfig",
     "L2MAELossConfig",
     "LRSchedulerConfig",
+    "LearningRateMonitorConfig",
     "LoRARecipeConfig",
     "LoggerConfig",
     "LoraConfig",
