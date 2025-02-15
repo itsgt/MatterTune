@@ -241,13 +241,48 @@ class StressesPropertyConfig(PropertyConfigBase):
         return "system"
 
 
+class AtomInvariantVectorPropertyConfig(PropertyConfigBase):
+    """Configuration class for atom-level vector properties that are invariant to rotations.
+
+    This class handles properties that are associated with individual atoms and remain unchanged
+    under molecular rotations (rotational invariance). Examples include atomic spectra or other
+    per-atom vector quantities that don't transform under rotation.
+
+    This is distinct from equivariant properties like forces, which transform with the rotation
+    of the molecule.
+    """
+
+    type: Literal["atom_invariant_vector"] = "atom_invariant_vector"
+
+    size: C.PositiveInt
+    """The size of the vector property associated with each atom.
+
+    This parameter specifies the dimensionality of the vector property for each atom
+    in the system. For example, if representing atomic spectra, this would be the
+    number of spectral components per atom.
+    """
+
+    @override
+    def from_ase_atoms(self, atoms):
+        return atoms.info[self.name]
+
+    @override
+    def ase_calculator_property_name(self):
+        return None
+
+    @override
+    def property_type(self):
+        return "atom"
+
+
 PropertyConfig = TypeAliasType(
     "PropertyConfig",
     Annotated[
         GraphPropertyConfig
         | EnergyPropertyConfig
         | ForcesPropertyConfig
-        | StressesPropertyConfig,
+        | StressesPropertyConfig
+        | AtomInvariantVectorPropertyConfig,
         C.Field(
             description="The configuration for the property.",
             discriminator="type",

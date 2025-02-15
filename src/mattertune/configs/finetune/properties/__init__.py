@@ -2,6 +2,9 @@ from __future__ import annotations
 
 __codegen__ = True
 
+from mattertune.finetune.properties import (
+    AtomInvariantVectorPropertyConfig as AtomInvariantVectorPropertyConfig,
+)
 from mattertune.finetune.properties import EnergyPropertyConfig as EnergyPropertyConfig
 from mattertune.finetune.properties import ForcesPropertyConfig as ForcesPropertyConfig
 from mattertune.finetune.properties import GraphPropertyConfig as GraphPropertyConfig
@@ -13,6 +16,7 @@ from mattertune.finetune.properties import (
 )
 
 __all__ = [
+    "AtomInvariantVectorPropertyConfig",
     "EnergyPropertyConfig",
     "ForcesPropertyConfig",
     "GraphPropertyConfig",

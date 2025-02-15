@@ -64,6 +64,9 @@ from mattertune.finetune.lr_scheduler import StepLRConfig as StepLRConfig
 from mattertune.finetune.optimizer import AdamConfig as AdamConfig
 from mattertune.finetune.optimizer import AdamWConfig as AdamWConfig
 from mattertune.finetune.optimizer import SGDConfig as SGDConfig
+from mattertune.finetune.properties import (
+    AtomInvariantVectorPropertyConfig as AtomInvariantVectorPropertyConfig,
+)
 from mattertune.finetune.properties import EnergyPropertyConfig as EnergyPropertyConfig
 from mattertune.finetune.properties import ForcesPropertyConfig as ForcesPropertyConfig
 from mattertune.finetune.properties import GraphPropertyConfig as GraphPropertyConfig
@@ -101,6 +104,7 @@ from . import wrappers as wrappers
 __all__ = [
     "AdamConfig",
     "AdamWConfig",
+    "AtomInvariantVectorPropertyConfig",
     "AutoSplitDataModuleConfig",
     "CSVLoggerConfig",
     "CosineAnnealingLRConfig",
