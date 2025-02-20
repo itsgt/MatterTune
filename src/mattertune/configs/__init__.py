@@ -51,6 +51,7 @@ from mattertune.finetune.loss import HuberLossConfig as HuberLossConfig
 from mattertune.finetune.loss import L2MAELossConfig as L2MAELossConfig
 from mattertune.finetune.loss import LossConfig as LossConfig
 from mattertune.finetune.loss import MAELossConfig as MAELossConfig
+from mattertune.finetune.loss import MDNLossConfig as MDNLossConfig
 from mattertune.finetune.loss import MSELossConfig as MSELossConfig
 from mattertune.finetune.lr_scheduler import (
     CosineAnnealingLRConfig as CosineAnnealingLRConfig,
@@ -65,11 +66,23 @@ from mattertune.finetune.optimizer import AdamConfig as AdamConfig
 from mattertune.finetune.optimizer import AdamWConfig as AdamWConfig
 from mattertune.finetune.optimizer import SGDConfig as SGDConfig
 from mattertune.finetune.properties import (
+    AtomDensityHeadConfig as AtomDensityHeadConfig,
+)
+from mattertune.finetune.properties import (
+    AtomDensityPropertyConfig as AtomDensityPropertyConfig,
+)
+from mattertune.finetune.properties import (
     AtomInvariantVectorPropertyConfig as AtomInvariantVectorPropertyConfig,
 )
 from mattertune.finetune.properties import EnergyPropertyConfig as EnergyPropertyConfig
 from mattertune.finetune.properties import ForcesPropertyConfig as ForcesPropertyConfig
 from mattertune.finetune.properties import GraphPropertyConfig as GraphPropertyConfig
+from mattertune.finetune.properties import (
+    MDNAtomDensityHeadConfig as MDNAtomDensityHeadConfig,
+)
+from mattertune.finetune.properties import (
+    MLPAtomDensityHeadConfig as MLPAtomDensityHeadConfig,
+)
 from mattertune.finetune.properties import PropertyConfigBase as PropertyConfigBase
 from mattertune.finetune.properties import (
     StressesPropertyConfig as StressesPropertyConfig,
@@ -104,6 +117,8 @@ from . import wrappers as wrappers
 __all__ = [
     "AdamConfig",
     "AdamWConfig",
+    "AtomDensityHeadConfig",
+    "AtomDensityPropertyConfig",
     "AtomInvariantVectorPropertyConfig",
     "AutoSplitDataModuleConfig",
     "CSVLoggerConfig",
@@ -133,6 +148,9 @@ __all__ = [
     "M3GNetBackboneConfig",
     "M3GNetGraphComputerConfig",
     "MAELossConfig",
+    "MDNAtomDensityHeadConfig",
+    "MDNLossConfig",
+    "MLPAtomDensityHeadConfig",
     "MPDatasetConfig",
     "MPTrajDatasetConfig",
     "MSELossConfig",

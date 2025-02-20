@@ -6,6 +6,7 @@ from mattertune.finetune.loss import HuberLossConfig as HuberLossConfig
 from mattertune.finetune.loss import L2MAELossConfig as L2MAELossConfig
 from mattertune.finetune.loss import LossConfig as LossConfig
 from mattertune.finetune.loss import MAELossConfig as MAELossConfig
+from mattertune.finetune.loss import MDNLossConfig as MDNLossConfig
 from mattertune.finetune.loss import MSELossConfig as MSELossConfig
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "L2MAELossConfig",
     "LossConfig",
     "MAELossConfig",
+    "MDNLossConfig",
     "MSELossConfig",
 ]
