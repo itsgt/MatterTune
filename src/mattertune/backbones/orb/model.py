@@ -25,6 +25,110 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+class MDNHead(nn.Module):
+    @override
+    def __init__(
+        self,
+        latent_dim: int,
+        n_components: int,
+        n_bins: int,
+        bin_range: tuple[float, float],
+    ):
+        super().__init__()
+        self.n_components = n_components
+        self.n_bins = n_bins
+
+        # Network to predict mixture parameters
+        self.mdn = nn.Sequential(
+            nn.Linear(latent_dim, 256),
+            nn.SiLU(),
+            nn.Linear(256, 128),
+            nn.SiLU(),
+            nn.Linear(
+                128, 3 * n_components
+            ),  # Predicts pi, mu, sigma for each component
+        )
+
+        # Create bin positions (assuming linear spacing)
+        self.register_buffer(
+            "bin_positions",
+            torch.linspace(start=bin_range[0], end=bin_range[1], steps=n_bins),
+        )
+
+    @override
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x shape: [n, latent_dim]
+
+        # Predict mixture parameters
+        out = self.mdn(x)  # [n, 3*n_components]
+        pi, mu, sigma = torch.split(out, self.n_components, dim=1)
+
+        # Apply constraints
+        pi = torch.softmax(pi, dim=1)  # Mixing coefficients sum to 1
+        sigma = F.softplus(sigma) + 1e-6  # Positive variance with numerical stability
+
+        # Expand dimensions for broadcasting
+        mu = mu.unsqueeze(-1)  # [n, n_components, 1]
+        sigma = sigma.unsqueeze(-1)  # [n, n_components, 1]
+        bins = self.bin_positions.unsqueeze(0).unsqueeze(0)  # [1, 1, n_bins]
+
+        # Compute Gaussian PDF for each component-bin pair
+        variance = sigma**2
+        z = (bins - mu) / sigma
+        pdf = torch.exp(-0.5 * z**2) / torch.sqrt(2 * torch.pi * variance)
+
+        # Weight by mixture coefficients and sum components
+        weighted_pdf = pi.unsqueeze(-1) * pdf  # [n, n_components, n_bins]
+        spectrum = weighted_pdf.sum(dim=1)  # [n, n_bins]
+
+        return spectrum
+
+
+class _DensityPredictionModule(nn.Module):
+    @override
+    def __init__(
+        self,
+        property_config: props.AtomDensityPropertyConfig,
+    ):
+        super().__init__()
+
+        self.property_config = property_config
+        match property_config.output_head:
+            case props.MLPAtomDensityHeadConfig():
+                self.mlp = nn.Sequential(
+                    nn.Linear(256, 128),
+                    nn.SiLU(),
+                    nn.Linear(128, 64),
+                    nn.SiLU(),
+                    nn.Linear(64, property_config.num_bins),
+                    nn.Softplus(),
+                )
+            case props.MDNAtomDensityHeadConfig():
+                self.mdn = MDNHead(
+                    latent_dim=256,
+                    n_components=property_config.output_head.num_components,
+                    n_bins=property_config.num_bins,
+                    bin_range=property_config.bin_range,
+                )
+            case _:
+                assert_never(property_config.output_head)
+
+    @override
+    def forward(self, batch: "AtomGraphs"):
+        from orb_models.forcefield.gns import _KEY
+
+        x = batch.node_features[_KEY]
+        match self.property_config.output_head:
+            case props.MLPAtomDensityHeadConfig():
+                x = self.mlp(x)
+            case props.MDNAtomDensityHeadConfig():
+                x = self.mdn(x)
+            case _:
+                assert_never(self.property_config.output_head)
+
+        return x
+
+
 class ORBSystemConfig(C.Config):
     """Config controlling how to featurize a system of atoms."""
 
@@ -173,6 +277,9 @@ class ORBBackboneModule(
                     remove_mean=False,
                     remove_torque_for_nonpbc_systems=False,
                 )
+
+            case props.AtomDensityPropertyConfig():
+                return _DensityPredictionModule(prop)
 
             case _:
                 raise ValueError(

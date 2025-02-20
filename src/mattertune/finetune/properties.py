@@ -275,6 +275,70 @@ class AtomInvariantVectorPropertyConfig(PropertyConfigBase):
         return "atom"
 
 
+class MLPAtomDensityHeadConfig(C.Config):
+    type: Literal["mlp"] = "mlp"
+
+    # hidden_sizes: list[C.PositiveInt]
+    # """The sizes of the hidden layers in the MLP."""
+    # TODO: Implement this later
+
+
+class MDNAtomDensityHeadConfig(C.Config):
+    type: Literal["mdn"] = "mdn"
+
+    # hidden_sizes: list[C.PositiveInt]
+    # """The sizes of the hidden layers in the MLP used for the MDN head."""
+    # TODO: Implement this later
+
+    num_components: C.PositiveInt
+    """The number of components in the mixture density network."""
+
+
+AtomDensityHeadConfig = TypeAliasType(
+    "AtomDensityHeadConfig",
+    Annotated[
+        MLPAtomDensityHeadConfig | MDNAtomDensityHeadConfig,
+        C.Field(discriminator="type"),
+    ],
+)
+
+
+class AtomDensityPropertyConfig(PropertyConfigBase):
+    """
+    Configuration class for atom-level density properties.
+
+    This class handles properties that are associated with individual atoms and are
+    density-like in nature. Examples include RDF spectra.
+    """
+
+    type: Literal["atom_density"] = "atom_density"
+
+    num_bins: C.PositiveInt
+    """The number of bins to use for the density histogram."""
+
+    bin_range: tuple[float, float]
+    """The range of the bins to use for the density histogram."""
+
+    output_head: AtomDensityHeadConfig
+    """The configuration for the output head to use for this property.
+
+    - MLPAtomDensityHeadConfig: Configuration for an MLP output head.
+    - MDNAtomDensityHeadConfig: Configuration for a mixture density network output head.
+    """
+
+    @override
+    def from_ase_atoms(self, atoms):
+        return atoms.info[self.name]
+
+    @override
+    def ase_calculator_property_name(self):
+        return None
+
+    @override
+    def property_type(self):
+        return "atom"
+
+
 PropertyConfig = TypeAliasType(
     "PropertyConfig",
     Annotated[
@@ -282,7 +346,8 @@ PropertyConfig = TypeAliasType(
         | EnergyPropertyConfig
         | ForcesPropertyConfig
         | StressesPropertyConfig
-        | AtomInvariantVectorPropertyConfig,
+        | AtomInvariantVectorPropertyConfig
+        | AtomDensityPropertyConfig,
         C.Field(
             description="The configuration for the property.",
             discriminator="type",

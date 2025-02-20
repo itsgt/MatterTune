@@ -67,10 +67,35 @@ def l2_mae_loss(
             assert_never(reduction)
 
 
+class MDNLossConfig(C.Config):
+    name: Literal["mdn"] = "mdn"
+
+    lambda_smooth: float = 0.1
+    """The weight for the smoothness regularization term."""
+
+
+def mdn_loss(
+    predicted: torch.Tensor,
+    target: torch.Tensor,
+    lambda_smooth: float = 0.1,
+):
+    # Standard MSE loss
+    mse_loss = F.mse_loss(predicted, target)
+
+    # Optional smoothness regularization (penalize large differences between adjacent bins)
+    smooth_loss = torch.mean((predicted[:, 1:] - predicted[:, :-1]) ** 2)
+
+    return mse_loss + lambda_smooth * smooth_loss
+
+
 LossConfig = TypeAliasType(
     "LossConfig",
     Annotated[
-        MAELossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig,
+        MAELossConfig
+        | MSELossConfig
+        | HuberLossConfig
+        | L2MAELossConfig
+        | MDNLossConfig,
         C.Field(discriminator="name"),
     ],
 )
@@ -116,6 +141,13 @@ def compute_loss(
 
         case L2MAELossConfig():
             return l2_mae_loss(prediction, label, reduction=config.reduction)
+
+        case MDNLossConfig():
+            return mdn_loss(
+                prediction,
+                label,
+                lambda_smooth=config.lambda_smooth,
+            )
 
         case _:
             assert_never(config)
