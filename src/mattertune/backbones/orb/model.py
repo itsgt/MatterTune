@@ -95,13 +95,23 @@ class _DensityPredictionModule(nn.Module):
         self.property_config = property_config
         match property_config.output_head:
             case props.MLPAtomDensityHeadConfig():
+                match property_config.output_head.final_activation:
+                    case "none":
+                        final_layer_cls = nn.Identity
+                    case "softplus":
+                        final_layer_cls = nn.Softplus
+                    case "relu":
+                        final_layer_cls = nn.ReLU
+                    case _:
+                        assert_never(property_config.output_head.final_activation)
+
                 self.mlp = nn.Sequential(
                     nn.Linear(256, 128),
                     nn.SiLU(),
                     nn.Linear(128, 64),
                     nn.SiLU(),
                     nn.Linear(64, property_config.num_bins),
-                    nn.Softplus(),
+                    final_layer_cls(),
                 )
             case props.MDNAtomDensityHeadConfig():
                 self.mdn = MDNHead(

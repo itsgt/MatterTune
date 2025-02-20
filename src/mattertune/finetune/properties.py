@@ -282,6 +282,13 @@ class MLPAtomDensityHeadConfig(C.Config):
     # """The sizes of the hidden layers in the MLP."""
     # TODO: Implement this later
 
+    final_activation: Literal["none", "softplus", "relu"] = "softplus"
+    """The activation function to use for the final layer of the MLP.
+
+    Ideally, this should be a non-negative activation function, as the output of the
+    MLP is always a non-negative quantity.
+    """
+
 
 class MDNAtomDensityHeadConfig(C.Config):
     type: Literal["mdn"] = "mdn"
