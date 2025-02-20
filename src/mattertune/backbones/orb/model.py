@@ -136,7 +136,8 @@ class _DensityPredictionModule(nn.Module):
             case _:
                 assert_never(self.property_config.output_head)
 
-        return x
+        batch.node_features[self.property_config.name] = x
+        return batch
 
 
 class ORBSystemConfig(C.Config):
