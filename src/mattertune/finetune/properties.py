@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Annotated, Literal
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import nshconfig as C
 import numpy as np
@@ -51,6 +52,12 @@ class PropertyConfigBase(C.Config, ABC):
     loss_coefficient: float = 1.0
     """The coefficient to apply to this property's loss function when training the model."""
 
+    output_head_kwargs: dict[str, Any] = {}
+    """Additional keyword arguments to pass to the constructor of the output head for this property.
+
+    This is useful for setting special parameters for the output head, e.g., the activation function
+    used in the MLP for the output head."""
+
     @abstractmethod
     def from_ase_atoms(self, atoms: Atoms) -> int | float | np.ndarray | torch.Tensor:
         """Extract the property value from an ASE Atoms object."""
@@ -82,6 +89,19 @@ class PropertyConfigBase(C.Config, ABC):
         value = self.from_ase_atoms(atoms)
         return torch.tensor(value, dtype=self._torch_dtype())
 
+    def _output_head_kwargs_with_defaults(
+        self,
+        exclude_keys: Iterable[str] | None = None,
+        **kwargs: Any,
+    ):
+        """Internal helper to merge the output head kwargs with the defaults."""
+        kwargs_out = self.output_head_kwargs.copy()
+        if exclude_keys is not None:
+            for key in exclude_keys:
+                _ = kwargs_out.pop(key, None)
+        kwargs_out.update(kwargs)
+        return kwargs_out
+
     @abstractmethod
     def ase_calculator_property_name(self) -> ASECalculatorPropertyName | None:
         """
@@ -108,7 +128,7 @@ class PropertyConfigBase(C.Config, ABC):
     @abstractmethod
     def property_type(self) -> Literal["system", "atom"]: ...
 
-    def prepare_value_for_ase_calculator(self, value: float | np.ndarray):
+    def prepare_value_for_ase_calculator(self, value: float | np.ndarray) -> Any:
         """Convert the property value to a format that can be used by the ASE calculator."""
         return value
 

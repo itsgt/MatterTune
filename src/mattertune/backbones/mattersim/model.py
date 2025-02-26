@@ -142,19 +142,23 @@ class MatterSimM3GNetBackboneModule(
         self.calc_forces = False
         self.calc_stress = False
         for prop in self.hparams.properties:
+            assert not prop.output_head_kwargs, (
+                "output_head_kwargs is not supported for MatterSim-M3GNet"
+            )
+
             match prop:
                 case props.EnergyPropertyConfig():
                     self.energy_prop_name = prop.name
                 case props.ForcesPropertyConfig():
-                    assert (
-                        prop.conservative
-                    ), "Only conservative forces are supported for MatterSim-M3GNet"
+                    assert prop.conservative, (
+                        "Only conservative forces are supported for MatterSim-M3GNet"
+                    )
                     self.forces_prop_name = prop.name
                     self.calc_forces = True
                 case props.StressesPropertyConfig():
-                    assert (
-                        prop.conservative
-                    ), "Only conservative stress are supported for MatterSim-M3GNet"
+                    assert prop.conservative, (
+                        "Only conservative stress are supported for MatterSim-M3GNet"
+                    )
                     self.stress_prop_name = prop.name
                     self.calc_stress = True
                 case _:

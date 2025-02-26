@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import importlib.util
 import logging
 from typing import TYPE_CHECKING, Literal, cast
@@ -15,7 +16,7 @@ from ...finetune import properties as props
 from ...finetune.base import FinetuneModuleBase, FinetuneModuleBaseConfig, ModelOutput
 from ...normalization import NormalizationContext
 from ...registry import backbone_registry
-from ...util import optional_import_error_message
+from ...util import optional_import_error_message, with_defaults
 from ..util import voigt_6_to_full_3x3_stress_torch
 
 if TYPE_CHECKING:
@@ -98,42 +99,50 @@ class ORBBackboneModule(
         return False
 
     def _create_output_head(self, prop: props.PropertyConfig):
+        oh_kwargs = functools.partial(with_defaults, prop.output_head_kwargs.copy())
+
         match prop:
             case props.EnergyPropertyConfig():
                 with optional_import_error_message("orb-models"):
                     from orb_models.forcefield.graph_regressor import EnergyHead  # type: ignore[reportMissingImports] # noqa
 
                 return EnergyHead(
-                    latent_dim=256,
-                    num_mlp_layers=1,
-                    mlp_hidden_dim=256,
-                    target="energy",
-                    node_aggregation="mean",
-                    reference_energy_name="vasp-shifted",
-                    train_reference=True,
-                    predict_atom_avg=True,
+                    **oh_kwargs(
+                        latent_dim=256,
+                        num_mlp_layers=1,
+                        mlp_hidden_dim=256,
+                        target="energy",
+                        node_aggregation="mean",
+                        reference_energy_name="vasp-shifted",
+                        train_reference=True,
+                        predict_atom_avg=True,
+                    )
                 )
             case props.ForcesPropertyConfig(conservative=False):
                 with optional_import_error_message("orb-models"):
                     from orb_models.forcefield.graph_regressor import NodeHead  # type: ignore[reportMissingImports] # noqa
 
                 return NodeHead(
-                    latent_dim=256,
-                    num_mlp_layers=1,
-                    mlp_hidden_dim=256,
-                    target="forces",
-                    remove_mean=True,
+                    **oh_kwargs(
+                        latent_dim=256,
+                        num_mlp_layers=1,
+                        mlp_hidden_dim=256,
+                        target="forces",
+                        remove_mean=True,
+                    )
                 )
             case props.StressesPropertyConfig(conservative=False):
                 with optional_import_error_message("orb-models"):
                     from orb_models.forcefield.graph_regressor import GraphHead  # type: ignore[reportMissingImports] # noqa
 
                 return GraphHead(
-                    latent_dim=256,
-                    num_mlp_layers=1,
-                    mlp_hidden_dim=256,
-                    target="stress",
-                    compute_stress=True,
+                    **oh_kwargs(
+                        latent_dim=256,
+                        num_mlp_layers=1,
+                        mlp_hidden_dim=256,
+                        target="stress",
+                        compute_stress=True,
+                    )
                 )
 
             case props.GraphPropertyConfig():
@@ -144,15 +153,17 @@ class ORBBackboneModule(
                     )
 
                 return GraphHead(
-                    latent_dim=256,
-                    num_mlp_layers=1,
-                    mlp_hidden_dim=256,
-                    target=PropertyDefinition(
-                        name=prop.name,
-                        dim=1,
-                        domain="real",
-                    ),
-                    compute_stress=False,
+                    **oh_kwargs(
+                        latent_dim=256,
+                        num_mlp_layers=1,
+                        mlp_hidden_dim=256,
+                        target=PropertyDefinition(
+                            name=prop.name,
+                            dim=1,
+                            domain="real",
+                        ),
+                        compute_stress=False,
+                    )
                 )
             case _:
                 raise ValueError(
@@ -182,9 +193,9 @@ class ORBBackboneModule(
         assert backbone is not None, "The pretrained model is not available"
 
         # This should be a `GraphRegressor` object, so we need to extract the backbone.
-        assert isinstance(
-            backbone, GraphRegressor
-        ), f"Expected a GraphRegressor object, but got {type(backbone)}"
+        assert isinstance(backbone, GraphRegressor), (
+            f"Expected a GraphRegressor object, but got {type(backbone)}"
+        )
 
         backbone = backbone.model
 

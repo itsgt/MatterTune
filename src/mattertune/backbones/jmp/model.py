@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import importlib.util
 import logging
 from collections.abc import Iterable
@@ -26,7 +27,7 @@ from ...finetune.base import (
 )
 from ...normalization import NormalizationContext
 from ...registry import backbone_registry
-from ...util import optional_import_error_message
+from ...util import optional_import_error_message, with_defaults
 from .util import get_activation_cls
 
 if TYPE_CHECKING:
@@ -160,58 +161,75 @@ class JMPBackboneModule(FinetuneModuleBase["Data", "Batch", JMPBackboneConfig]):
 
     def _create_output_head(self, prop: props.PropertyConfig):
         activation_cls = get_activation_cls(self.backbone.hparams.activation)
+
+        output_head_kwargs = prop.output_head_kwargs.copy()
+        target_kwargs = functools.partial(
+            with_defaults, output_head_kwargs.pop("target_kwargs", {})
+        )
+        create_model_kwargs = functools.partial(
+            with_defaults, output_head_kwargs.pop("create_model_kwargs", {})
+        )
+
         match prop:
             case props.EnergyPropertyConfig():
                 with optional_import_error_message("jmp"):
                     from jmp.nn.energy_head import EnergyTargetConfig  # type: ignore[reportMissingImports] # noqa
 
                 return EnergyTargetConfig(
-                    max_atomic_number=self.backbone.hparams.num_elements
+                    **target_kwargs(
+                        max_atomic_number=self.backbone.hparams.num_elements
+                    ),
                 ).create_model(
                     self.backbone.hparams.emb_size_atom,
                     self.backbone.hparams.emb_size_edge,
-                    activation_cls,
+                    **create_model_kwargs(activation_cls=activation_cls),
                 )
             case props.ForcesPropertyConfig():
                 if not prop.conservative:
                     with optional_import_error_message("jmp"):
                         from jmp.nn.force_head import ForceTargetConfig  # type: ignore[reportMissingImports] # noqa
 
-                    return ForceTargetConfig().create_model(
-                        self.backbone.hparams.emb_size_edge, activation_cls
+                    return ForceTargetConfig(**target_kwargs()).create_model(
+                        self.backbone.hparams.emb_size_edge,
+                        **create_model_kwargs(activation_cls=activation_cls),
                     )
                 else:
                     with optional_import_error_message("jmp"):
                         from jmp.nn.force_head import ConservativeForceTargetConfig  # type: ignore[reportMissingImports] # noqa
 
-                    force_config = ConservativeForceTargetConfig(
-                        energy_prop_name=self._find_potential_energy_prop_name()
-                    )
-                    return force_config.create_model()
+                    return ConservativeForceTargetConfig(
+                        **target_kwargs(
+                            energy_prop_name=self._find_potential_energy_prop_name()
+                        ),
+                    ).create_model(**create_model_kwargs(activation_cls=activation_cls))
 
             case props.StressesPropertyConfig():
                 if not prop.conservative:
                     with optional_import_error_message("jmp"):
                         from jmp.nn.stress_head import StressTargetConfig  # type: ignore[reportMissingImports] # noqa
 
-                    return StressTargetConfig().create_model(
-                        self.backbone.hparams.emb_size_edge, activation_cls
+                    return StressTargetConfig(**target_kwargs()).create_model(
+                        self.backbone.hparams.emb_size_edge,
+                        **create_model_kwargs(activation_cls=activation_cls),
                     )
                 else:
                     with optional_import_error_message("jmp"):
                         from jmp.nn.stress_head import ConservativeStressTargetConfig  # type: ignore[reportMissingImports] # noqa
 
-                    stress_config = ConservativeStressTargetConfig(
-                        energy_prop_name=self._find_potential_energy_prop_name()
-                    )
-                    return stress_config.create_model()
+                    return ConservativeStressTargetConfig(
+                        **target_kwargs(
+                            energy_prop_name=self._find_potential_energy_prop_name()
+                        ),
+                    ).create_model(**create_model_kwargs(activation_cls=activation_cls))
             case props.GraphPropertyConfig():
                 with optional_import_error_message("jmp"):
                     from jmp.nn.graph_scaler import GraphScalarTargetConfig  # type: ignore[reportMissingImports] # noqa
 
-                return GraphScalarTargetConfig(reduction=prop.reduction).create_model(
+                return GraphScalarTargetConfig(
+                    **target_kwargs(reduction=prop.reduction),
+                ).create_model(
                     self.backbone.hparams.emb_size_atom,
-                    activation_cls,
+                    **create_model_kwargs(activation_cls=activation_cls),
                 )
             case _:
                 raise ValueError(
