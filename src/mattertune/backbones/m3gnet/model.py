@@ -7,22 +7,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-import jaxtyping as jt
 import nshconfig as C
 import torch
+import torch.nn.functional as F
+from ase import Atoms
 from torch.autograd import grad
 from typing_extensions import final, override
-
-import mattertune as mt
 
 from ...finetune import properties as props
 from ...finetune.base import FinetuneModuleBase, FinetuneModuleBaseConfig, ModelOutput
 from ...normalization import NormalizationContext
 from ...registry import backbone_registry
+from ...util import optional_import_error_message
 
 if TYPE_CHECKING:
-    from ase import Atoms
-    from dgl import DGLGraph
+    from dgl import DGLGraph  # type: ignore[reportMissingImports] # noqa
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ class MatGLData:
     """The DGL edge graph for three-body interactions."""
     state_attr: torch.Tensor
     """The global state attributes"""
-    lattice: jt.Float[torch.Tensor, "1 3 3"]
+    lattice: torch.Tensor  # 1 3 3
     """The atomic lattice vectors"""
     labels: dict[str, torch.Tensor]
     """The ground truth labels"""
@@ -49,16 +48,17 @@ class MatGLBatch:
     """The DGL edge graph for three-body interactions."""
     state_attr: torch.Tensor
     """The global state attributes"""
-    lattice: jt.Float[torch.Tensor, "batch_size 3 3"]
+    lattice: torch.Tensor  # batch_size 3 3
     """The atomic lattice vectors"""
-    strain: jt.Float[torch.Tensor, "batch_size 3 3"]
+    strain: torch.Tensor  # batch_size 3 3
     """The strain tensor"""
     labels: dict[str, torch.Tensor]
     """The ground truth labels"""
 
 
 def _default_elements():
-    from matgl.config import DEFAULT_ELEMENTS
+    with optional_import_error_message("matgl"):
+        from matgl.config import DEFAULT_ELEMENTS  # type: ignore[reportMissingImports] # noqa
 
     return DEFAULT_ELEMENTS
 
@@ -148,9 +148,10 @@ class M3GNetBackboneModule(
 
     @override
     def create_model(self):
-        from matgl.ext.ase import Atoms2Graph
-        from matgl.models import M3GNet
-        from matgl.utils.io import _get_file_paths
+        with optional_import_error_message("matgl"):
+            from matgl.ext.ase import Atoms2Graph  # type: ignore[reportMissingImports] # noqa
+            from matgl.models import M3GNet  # type: ignore[reportMissingImports] # noqa
+            from matgl.utils.io import _get_file_paths  # type: ignore[reportMissingImports] # noqa
 
         ## Load the backbone from the checkpoint
         path = Path(self.hparams.ckpt_path)
@@ -208,7 +209,7 @@ class M3GNetBackboneModule(
 
     @override
     @contextlib.contextmanager
-    def model_forward_context(self, data):
+    def model_forward_context(self, data, mode: str):
         with contextlib.ExitStack() as stack:
             if self.calc_forces or self.calc_stress:
                 stack.enter_context(torch.enable_grad())
@@ -219,9 +220,11 @@ class M3GNetBackboneModule(
     def model_forward(
         self,
         batch: MatGLBatch,
+        mode: str,
         return_backbone_output: bool = False,
     ):
-        import matgl
+        with optional_import_error_message("matgl"):
+            import matgl  # type: ignore[reportMissingImports] # noqa
 
         g, lg, state_attr, lattice, strain = (
             batch.g,
@@ -243,6 +246,7 @@ class M3GNetBackboneModule(
         output_pred: dict[str, torch.Tensor] = {self.energy_prop_name: energy}
         grad_vars = [g.ndata["pos"], strain] if self.calc_stress else [g.ndata["pos"]]
 
+        grads = None
         if self.calc_forces:
             grads = grad(
                 energy,
@@ -261,6 +265,7 @@ class M3GNetBackboneModule(
                 if matgl.float_th == torch.float16
                 else torch.abs(torch.det(lattice))
             )
+            assert grads is not None, "Forces must be calculated to compute stress"
             sts = -grads[1]
             scale = 1.0 / volume * -160.21766208
             sts = (
@@ -273,6 +278,10 @@ class M3GNetBackboneModule(
         if return_backbone_output:
             pred["backbone_output"] = backbone_output
         return pred
+
+    @override
+    def apply_callable_to_backbone(self, fn):
+        return fn(self.backbone)
 
     @override
     def pretrained_backbone_parameters(self):
@@ -288,7 +297,8 @@ class M3GNetBackboneModule(
 
     @override
     def collate_fn(self, data_list):
-        import dgl
+        with optional_import_error_message("dgl"):
+            import dgl  # type: ignore[reportMissingImports] # noqa
 
         g = dgl.batch([data.g for data in data_list])
         if self.hparams.graph_computer.pre_compute_line_graph:
@@ -336,11 +346,12 @@ class M3GNetBackboneModule(
 
     @override
     def atoms_to_data(self, atoms: Atoms, has_labels: bool) -> MatGLData:
-        import matgl
-        from matgl.graph.compute import (
-            compute_pair_vector_and_distance,
-            create_line_graph,
-        )
+        with optional_import_error_message("matgl"):
+            import matgl  # type: ignore[reportMissingImports] # noqa
+            from matgl.graph.compute import (  # type: ignore[reportMissingImports] # noqa
+                compute_pair_vector_and_distance,
+                create_line_graph,
+            )
 
         graph, lattice, state_attr = self.graph_computer.get_graph(atoms)
         graph.ndata["pos"] = torch.tensor(atoms.get_positions(), dtype=matgl.float_th)
@@ -379,9 +390,11 @@ class M3GNetBackboneModule(
 
     @override
     def create_normalization_context_from_batch(self, batch):
-        import dgl
-        import torch.nn.functional as F
-        from matgl.config import DEFAULT_ELEMENTS
+        with optional_import_error_message("dgl"):
+            import dgl  # type: ignore[reportMissingImports] # noqa
+
+        with optional_import_error_message("matgl"):
+            from matgl.config import DEFAULT_ELEMENTS  # type: ignore[reportMissingImports] # noqa
 
         g = batch.g
         atomic_numbers: torch.Tensor = g.ndata["node_type"].long()  # (n_atoms,)

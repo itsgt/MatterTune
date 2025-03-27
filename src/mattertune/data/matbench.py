@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import ase
-from pymatgen.core.structure import Structure
-from pymatgen.io.ase import AseAtomsAdaptor
 from torch.utils.data import Dataset
 from typing_extensions import override
 
 from ..registry import data_registry
+from ..util import optional_import_error_message
 from .base import DatasetConfigBase
+
+if TYPE_CHECKING:
+    from pymatgen.core.structure import Structure
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +30,7 @@ class MatbenchDatasetConfig(DatasetConfigBase):
     property_name: str | None = None
     """Assign a property name for the self.task. Must match the property head in the model."""
 
-    fold_idx: Literal[0, 1, 2, 3, 4] = 0
+    fold_idx: int = 0
     """The index of the fold to be used in the dataset."""
 
     @override
@@ -46,7 +48,8 @@ class MatbenchDataset(Dataset[ase.Atoms]):
     def _initialize_benchmark(self) -> None:
         """Initialize the Matbench benchmark and task."""
 
-        from matbench.bench import MatbenchBenchmark
+        with optional_import_error_message("matbench"):
+            from matbench.bench import MatbenchBenchmark  # type: ignore[reportMissingImports] # noqa
 
         if self.config.task is None:
             mb = MatbenchBenchmark(autoload=False)
@@ -59,6 +62,9 @@ class MatbenchDataset(Dataset[ase.Atoms]):
 
     def _load_data(self) -> None:
         """Load and process the dataset split."""
+        assert (
+            self.config.fold_idx >= 0 and self.config.fold_idx < 5
+        ), "Invalid fold index, should be within [0, 1, 2, 3, 4]"
         fold = self._task.folds[self.config.fold_idx]
         inputs_data, outputs_data = self._task.get_train_and_val_data(fold)
 
@@ -81,6 +87,9 @@ class MatbenchDataset(Dataset[ase.Atoms]):
         Returns:
             List of ASE ase.Atoms objects.
         """
+        with optional_import_error_message("pymatgen"):
+            from pymatgen.io.ase import AseAtomsAdaptor  # type: ignore[reportMissingImports] # noqa
+
         adapter = AseAtomsAdaptor()
         atoms_list = []
         prop_name = (
@@ -90,6 +99,7 @@ class MatbenchDataset(Dataset[ase.Atoms]):
         )
         for i, structure in enumerate(structures):
             atoms = adapter.get_atoms(structure)
+            assert isinstance(atoms, ase.Atoms), "Expected an Atoms object"
             if property_values is not None:
                 atoms.info[prop_name] = property_values[i]
             atoms_list.append(atoms)

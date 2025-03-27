@@ -5,11 +5,11 @@ from typing import Literal
 
 import ase
 from ase import Atoms
-from pymatgen.io.ase import AseAtomsAdaptor
 from torch.utils.data import Dataset
 from typing_extensions import override
 
 from ..registry import data_registry
+from ..util import optional_import_error_message
 from .base import DatasetConfigBase
 
 log = logging.getLogger(__name__)
@@ -41,7 +41,8 @@ class MPDataset(Dataset[ase.Atoms]):
         super().__init__()
         self.config = config
 
-        from mp_api.client import MPRester
+        with optional_import_error_message("mp_api"):
+            from mp_api.client import MPRester  # type: ignore[reportMissingImports]
 
         self.mpr = MPRester(config.api)
         if "material_id" not in config.fields:
@@ -50,11 +51,14 @@ class MPDataset(Dataset[ase.Atoms]):
 
     @override
     def __getitem__(self, idx: int) -> Atoms:
+        from pymatgen.io.ase import AseAtomsAdaptor
+
         doc = self.docs[idx]
         mid = doc.material_id
         structure = self.mpr.get_structure_by_material_id(mid)
         adaptor = AseAtomsAdaptor()
-        atoms: Atoms = adaptor.get_atoms(structure)
+        atoms = adaptor.get_atoms(structure)
+        assert isinstance(atoms, Atoms), "Expected an Atoms object"
         doc_labels = dict(doc)
         atoms.info = {
             key: doc_labels[key]

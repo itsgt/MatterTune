@@ -225,3 +225,6 @@ ZnMn2O4_*/
 examples/matbench/data/
 bfg.jar
 .dir2textignore
+docs/_autosummary/
+contents/
+results/

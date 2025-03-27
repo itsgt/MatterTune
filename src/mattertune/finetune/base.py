@@ -3,8 +3,8 @@ from __future__ import annotations
 import contextlib
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Generic
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from typing import Any, Generic, Literal
 
 import ase
 import nshconfig as C
@@ -18,18 +18,31 @@ from typing_extensions import NotRequired, TypedDict, TypeVar, Unpack, cast, ove
 from ..normalization import ComposeNormalizers, NormalizationContext, NormalizerConfig
 from .loader import DataLoaderKwargs, create_dataloader
 from .loss import compute_loss
-from .lr_scheduler import LRSchedulerConfig, create_lr_scheduler
+from .lr_scheduler import LRSchedulerConfig, ReduceOnPlateauConfig, create_lr_scheduler
 from .metrics import FinetuneMetrics
 from .optimizer import OptimizerConfig, create_optimizer
 from .properties import PropertyConfig
-
-if TYPE_CHECKING:
-    from ase import Atoms
 
 log = logging.getLogger(__name__)
 
 
 class FinetuneModuleBaseConfig(C.Config, ABC):
+    
+    reset_backbone: bool = False
+    """Whether to reset the backbone of the model when creating the model."""
+    
+    freeze_backbone: bool = False
+    """Whether to freeze the backbone during training."""
+    
+    reset_output_heads: bool = True
+    """Whether to reset the output heads of the model when creating the model."""
+    
+    use_pretrained_normalizers: bool = False
+    """Whether to use the pretrained normalizers."""
+    
+    output_internal_features: bool = False
+    """If set to True, the model will output the internal features of the backbone model instead of the predicted properties."""
+
     properties: Sequence[PropertyConfig]
     """Properties to predict."""
 
@@ -46,10 +59,10 @@ class FinetuneModuleBaseConfig(C.Config, ABC):
     """Normalizers for the properties.
 
     Any property can be associated with multiple normalizers. This is useful
-        for cases where we want to normalize the same property in different ways.
-        For example, we may want to normalize the energy by subtracting
-        the atomic reference energies, as well as by mean and standard deviation
-        normalization.
+    for cases where we want to normalize the same property in different ways.
+    For example, we may want to normalize the energy by subtracting
+    the atomic reference energies, as well as by mean and standard deviation
+    normalization.
 
     The normalizers are applied in the order they are defined in the list.
     """
@@ -61,8 +74,8 @@ class FinetuneModuleBaseConfig(C.Config, ABC):
         Ensure that all dependencies are installed.
 
         This method should raise an exception if any dependencies are missing,
-            with a message indicating which dependencies are missing and
-            how to install them.
+        with a message indicating which dependencies are missing and
+        how to install them.
         """
         ...
 
@@ -81,25 +94,33 @@ class FinetuneModuleBaseConfig(C.Config, ABC):
                 raise ValueError(
                     f"Key '{key}' in 'normalizers' is not a valid property name."
                 )
+        # if set custom normalizers, then use them, set use_pretrained_normalizers to False
+        if len(self.normalizers) > 0:
+            self.use_pretrained_normalizers = False
+        # else if use pretrained normalizers, then reset_output_heads should be True
+        if self.use_pretrained_normalizers and self.reset_output_heads:
+            log.warning("use_pretrained_normalizers is True, reset_output_heads should be False")
+            log.warning("find reset_output_heads is True, set use_pretrained_normalizers to False")
+            self.use_pretrained_normalizers = False
 
 
 class _SkipBatchError(Exception):
     """
     Exception to skip a batch in the forward pass. This is not a real error and
-        should not be logged.
+    should not be logged.
 
     Instead, this is basically a control flow mechanism to skip a batch
-        if an error occurs during the forward pass. This is useful for
-        handling edge cases where a batch may be invalid or cause an error
-        during the forward pass. In this case, we can throw this exception
-        anywhere in the forward pas and then catch it in the `_common_step`
-        method. If this exception is caught, we can just skip the batch
-        instead of logging an error.
+    if an error occurs during the forward pass. This is useful for
+    handling edge cases where a batch may be invalid or cause an error
+    during the forward pass. In this case, we can throw this exception
+    anywhere in the forward pas and then catch it in the `_common_step`
+    method. If this exception is caught, we can just skip the batch
+    instead of logging an error.
 
     This is primarily used to skip graph generation errors in messy data. E.g.,
-        if our dataset contains materials with so little atoms that we cannot
-        generate a graph, we can just skip these materials instead of
-        completely failing the training run.
+    if our dataset contains materials with so little atoms that we cannot
+    generate a graph, we can just skip these materials instead of
+    completely failing the training run.
     """
 
     pass
@@ -108,7 +129,7 @@ class _SkipBatchError(Exception):
 class ModelOutput(TypedDict):
     predicted_properties: dict[str, torch.Tensor]
     """Predicted properties. This dictionary should be exactly
-        in the same shape/format  as the output of `batch_to_labels`."""
+    in the same shape/format  as the output of `batch_to_labels`."""
 
     backbone_output: NotRequired[Any]
     """Output of the backbone model. Only set if `return_backbone_output` is True."""
@@ -121,6 +142,7 @@ TFinetuneModuleConfig = TypeVar(
     bound=FinetuneModuleBaseConfig,
     covariant=True,
 )
+R = TypeVar("R", infer_variance=True)
 
 
 class FinetuneModuleBase(
@@ -142,21 +164,22 @@ class FinetuneModuleBase(
     @abstractmethod
     def create_model(self):
         """
-        Initialize both the pre-trained backbone and the
-            output heads for the properties to predict.
+        Initialize both the pre-trained backbone and the output heads for the properties to predict.
 
         You should also construct any other ``nn.Module`` instances
-            necessary for the forward pass here.
+        necessary for the forward pass here.
         """
         ...
 
     @abstractmethod
-    def model_forward_context(self, data: TBatch) -> contextlib.AbstractContextManager:
+    def model_forward_context(
+        self, data: TBatch, mode: str
+    ) -> contextlib.AbstractContextManager:
         """
         Context manager for the model forward pass.
 
         This is used for any setup that needs to be done before the forward pass,
-            e.g., setting pos.requires_grad_() for gradient-based force prediction.
+        e.g., setting pos.requires_grad_() for gradient-based force prediction.
         """
         ...
 
@@ -171,6 +194,7 @@ class FinetuneModuleBase(
     def model_forward(
         self,
         batch: TBatch,
+        mode: str,
         return_backbone_output: bool = False,
     ) -> ModelOutput:
         """
@@ -182,6 +206,23 @@ class FinetuneModuleBase(
 
         Returns:
             Prediction of the model.
+        """
+        ...
+
+    @abstractmethod
+    def apply_callable_to_backbone(self, fn: Callable[[nn.Module], R]) -> R:
+        """
+        Apply a callable to the backbone model and return the result.
+
+        This is useful for applying functions to the backbone model that are not
+        part of the standard forward pass. For example, this can be used to
+        update structure or weights of the backbone model, e.g., for LoRA.
+
+        Args:
+            fn: Callable to apply to the backbone model.
+
+        Returns:
+            Result of the callable.
         """
         ...
 
@@ -222,7 +263,7 @@ class FinetuneModuleBase(
         Transform batch (on the GPU) before being fed to the model.
 
         This will mainly be used to compute the (radius or knn) graph from
-            the atomic positions.
+        the atomic positions.
         """
         ...
 
@@ -230,18 +271,18 @@ class FinetuneModuleBase(
     def batch_to_labels(self, batch: TBatch) -> dict[str, torch.Tensor]:
         """
         Extract ground truth values from a batch. The output of this function
-            should be a dictionary with keys corresponding to the target names
-            and values corresponding to the ground truth values. The values should
-            be torch tensors that match, in shape, the output of the corresponding
-            output head.
+        should be a dictionary with keys corresponding to the target names
+        and values corresponding to the ground truth values. The values should
+        be torch tensors that match, in shape, the output of the corresponding
+        output head.
         """
         ...
 
     @abstractmethod
-    def atoms_to_data(self, atoms: Atoms, has_labels: bool) -> TData:
+    def atoms_to_data(self, atoms: ase.Atoms, has_labels: bool) -> TData:
         """
         Convert an ASE atoms object to a data object. This is used to convert
-            the input data to the format expected by the model.
+        the input data to the format expected by the model.
 
         Args:
             atoms: ASE atoms object.
@@ -255,19 +296,19 @@ class FinetuneModuleBase(
     ) -> NormalizationContext:
         """
         Create a normalization context from a batch. This is used to normalize
-            and denormalize the properties.
+        and denormalize the properties.
 
         The normalization context contains all the information required to
-            normalize and denormalize the properties. Currently, this only
-            includes the compositions of the materials in the batch.
-            The compositions should be provided as an integer tensor of shape
-            (batch_size, num_elements), where each row (i.e., `compositions[i]`)
-            corresponds to the composition vector of the `i`-th material in the batch.
+        normalize and denormalize the properties. Currently, this only
+        includes the compositions of the materials in the batch.
+        The compositions should be provided as an integer tensor of shape
+        (batch_size, num_elements), where each row (i.e., `compositions[i]`)
+        corresponds to the composition vector of the `i`-th material in the batch.
 
         The composition vector is a vector that maps each element to the number of
-            atoms of that element in the material. For example, `compositions[:, 1]`
-            corresponds to the number of Hydrogen atoms in each material in the batch,
-            `compositions[:, 2]` corresponds to the number of Helium atoms, and so on.
+        atoms of that element in the material. For example, `compositions[:, 1]`
+        corresponds to the number of Hydrogen atoms in each material in the batch,
+        `compositions[:, 2]` corresponds to the number of Helium atoms, and so on.
 
         Args:
             batch: Input batch.
@@ -387,6 +428,7 @@ class FinetuneModuleBase(
     def forward(
         self,
         batch: TBatch,
+        mode: str,
         return_backbone_output: bool = False,
         ignore_gpu_batch_transform_error: bool | None = None,
     ) -> ModelOutput:
@@ -395,7 +437,7 @@ class FinetuneModuleBase(
                 self.hparams.ignore_gpu_batch_transform_error
             )
 
-        with self.model_forward_context(batch):
+        with self.model_forward_context(batch, mode):
             # Generate graph/etc
             if ignore_gpu_batch_transform_error:
                 try:
@@ -408,14 +450,16 @@ class FinetuneModuleBase(
 
             # Run the model
             model_output = self.model_forward(
-                batch, return_backbone_output=return_backbone_output
+                batch, mode=mode, return_backbone_output=return_backbone_output
             )
-            
-            model_output['predicted_properties'] = {
+
+            model_output["predicted_properties"] = {
                 prop_name: prop_value.contiguous()
-                for prop_name, prop_value in model_output['predicted_properties'].items()
+                for prop_name, prop_value in model_output[
+                    "predicted_properties"
+                ].items()
             }
-            
+
             return model_output
 
     def _compute_loss(
@@ -450,12 +494,12 @@ class FinetuneModuleBase(
     def _common_step(
         self,
         batch: TBatch,
-        name: str,
+        mode: str,
         metrics: FinetuneMetrics | None,
         log: bool = True,
     ):
         try:
-            output: ModelOutput = self(batch)
+            output: ModelOutput = self(batch, mode=mode)
         except _SkipBatchError:
 
             def _zero_output():
@@ -476,28 +520,29 @@ class FinetuneModuleBase(
         labels = self.batch_to_labels(batch)
         predictions = output["predicted_properties"]
 
-        # Create the normalization context required for normalization/referencing.
-        # We only need to create the context once per batch.
-        normalization_ctx = self.create_normalization_context_from_batch(batch)
+        if len(self.normalizers) > 0:
+            # Create the normalization context required for normalization/referencing.
+            # We only need to create the context once per batch.
+            normalization_ctx = self.create_normalization_context_from_batch(batch)
 
-        # Normalize the properties.
-        # NOTE: We normalize the target properties before computing the loss.
-        #   This ensures that the model is effectively learning the normalized
-        #   properties.
-        # NOTE: Some other implementations may instead choose to denormalize
-        #   the predictions before computing the loss. We don't do this because
-        #   it can lead to numerical instability in the loss computation.
-        normalized_labels = self.normalize(labels, normalization_ctx)
+            # Normalize the properties.
+            # NOTE: We normalize the target properties before computing the loss.
+            #   This ensures that the model is effectively learning the normalized
+            #   properties.
+            # NOTE: Some other implementations may instead choose to denormalize
+            #   the predictions before computing the loss. We don't do this because
+            #   it can lead to numerical instability in the loss computation.
+            labels = self.normalize(labels, normalization_ctx)
 
-        for key, value in normalized_labels.items():
-            normalized_labels[key] = value.contiguous()
+        for key, value in labels.items():
+            labels[key] = value.contiguous()
 
         # Compute loss
         loss = self._compute_loss(
             predictions,
-            normalized_labels,
+            labels,
             log=log,
-            log_prefix=f"{name}/",
+            log_prefix=f"{mode}/",
         )
 
         # NOTE: After computing the loss, we denormalize the predictions.
@@ -506,17 +551,20 @@ class FinetuneModuleBase(
         #   denormalized units, which are more interpretable.
         # NOTE: Again, we only denormalize the predictions, not the labels.
         #   This is because the labels are already in the denormalized units.
-        predictions = self.denormalize(predictions, normalization_ctx)
+        if len(self.normalizers) > 0:
+            predictions = self.denormalize(predictions, normalization_ctx) # type: ignore
+            labels = self.denormalize(labels, normalization_ctx) # type: ignore
 
         # Log metrics
-        if log and metrics is not None:
+        if log and (metrics is not None):
             self.log_dict(
                 {
-                    f"{name}/{metric_name}": metric
+                    f"{mode}/{metric_name}": metric
                     for metric_name, metric in metrics(predictions, labels).items()
-                }
+                },
+                on_epoch=True,
+                sync_dist=True,
             )
-
         return output, loss
 
     @override
@@ -526,6 +574,7 @@ class FinetuneModuleBase(
             "train",
             self.train_metrics,
         )
+        self.log("lr", self.trainer.optimizers[0].param_groups[0]["lr"])
         return loss
 
     @override
@@ -538,17 +587,48 @@ class FinetuneModuleBase(
 
     @override
     def predict_step(self, batch: TBatch, batch_idx: int):
-        output: ModelOutput = self(batch, ignore_gpu_batch_transform_error=False)
-        return output["predicted_properties"]
+        if self.hparams.output_internal_features is False:
+            output: ModelOutput = self(
+                batch, mode="predict", ignore_gpu_batch_transform_error=False
+            )
+            predictions = output["predicted_properties"]
+            if len(self.normalizers) > 0:
+                normalization_ctx = self.create_normalization_context_from_batch(batch)
+                predictions = self.denormalize(predictions, normalization_ctx)
+            return predictions
+        else:
+            output: ModelOutput = self(
+                batch,
+                mode="predict",
+                ignore_gpu_batch_transform_error=False,
+                return_backbone_output=True,
+            )
+            assert "backbone_output" in output
+            backbone_output = output["backbone_output"]
+            for key, value in backbone_output.items():
+                if isinstance(value, torch.Tensor):
+                    backbone_output[key] = value.detach().cpu()
+            return backbone_output
+
+    def trainable_parameters(self) -> Iterable[tuple[str, nn.Parameter]]:
+        return self.named_parameters()
 
     @override
     def configure_optimizers(self):
-        optimizer = create_optimizer(self.hparams.optimizer, self.parameters())
-        return_config: OptimizerLRSchedulerConfig = {"optimizer": optimizer}
+        optimizer = create_optimizer(
+            self.hparams.optimizer, self.trainable_parameters()
+        )
+        return_config: OptimizerLRSchedulerConfig = {"optimizer": optimizer} # type: ignore
 
         if (lr_scheduler := self.hparams.lr_scheduler) is not None:
-            return_config["lr_scheduler"] = create_lr_scheduler(lr_scheduler, optimizer)
-
+            scheduler_class = create_lr_scheduler(lr_scheduler, optimizer)
+            if isinstance(lr_scheduler, ReduceOnPlateauConfig):
+                return_config["lr_scheduler"] = {
+                    "scheduler": scheduler_class,
+                    "monitor": lr_scheduler.monitor,
+                }
+            else:
+                return_config["lr_scheduler"] = scheduler_class
         return return_config
 
     def create_dataloader(
@@ -559,13 +639,14 @@ class FinetuneModuleBase(
     ):
         """
         Creates a wrapped DataLoader for the given dataset.
+
         This will wrap the dataset with the CPU data transform and the model's
-            collate function.
+        collate function.
 
         NOTE about `has_labels`: This is used to determine whether our data
-            loading pipeline should expect labels in the dataset. This should
-            be `True` for train/val/test datasets (as we compute loss and metrics
-            on these datasets) and `False` for prediction datasets.
+        loading pipeline should expect labels in the dataset. This should
+        be `True` for train/val/test datasets (as we compute loss and metrics
+        on these datasets) and `False` for prediction datasets.
 
         Args:
             dataset: Dataset to wrap.
@@ -579,7 +660,9 @@ class FinetuneModuleBase(
         self, lightning_trainer_kwargs: dict[str, Any] | None = None
     ):
         """Return a wrapper for easy prediction without explicitly setting up a lightning trainer.
+
         This method provides a high-level interface for making predictions with the trained model.
+
         This can be used for various prediction tasks including but not limited to:
         - Interatomic potential energy and forces
         - Material property prediction
@@ -605,8 +688,6 @@ class FinetuneModuleBase(
         >>> predictions = property_predictor.predict(atoms, ["energy", "forces"])
         >>> print("Atoms 1 energy:", predictions[0]["energy"])
         >>> print("Atoms 1 forces:", predictions[0]["forces"])
-        >>> print("Atoms 2 energy:", predictions[1]["energy"])
-        >>> print("Atoms 2 forces:", predictions[1]["forces"])
         """
 
         from ..wrappers.property_predictor import MatterTunePropertyPredictor
@@ -615,12 +696,29 @@ class FinetuneModuleBase(
             self,
             lightning_trainer_kwargs=lightning_trainer_kwargs,
         )
+        
+    def internal_feature_predictor(
+        self, lightning_trainer_kwargs: dict[str, Any] | None = None
+    ):
+        from ..wrappers.property_predictor import MatterTuneInternalFeaturePredictor
+        
+        return MatterTuneInternalFeaturePredictor(
+            self,
+            lightning_trainer_kwargs=lightning_trainer_kwargs,
+        )
 
-    def ase_calculator(self, lightning_trainer_kwargs: dict[str, Any] | None = None):
+    def ase_calculator(
+        self, 
+        # lightning_trainer_kwargs: dict[str, Any] | None = None,
+        device: str = "cuda:0" if torch.cuda.is_available() else "cpu",
+        intense: bool = True,
+        precision: Literal["32", "16-mixed", "bf16-mixed", "64"] = "32",
+    ):
         """Returns an ASE calculator wrapper for the interatomic potential.
 
         This method creates an ASE (Atomic Simulation Environment) calculator that can be used
         to compute energies and forces using the trained interatomic potential model.
+
         The calculator integrates with ASE's standard interfaces for molecular dynamics
         and structure optimization.
 
@@ -645,9 +743,31 @@ class FinetuneModuleBase(
         >>> energy = atoms.get_potential_energy()
         >>> forces = atoms.get_forces()
         """
-        from ..wrappers.ase_calculator import MatterTuneCalculator
+        
+        from ..wrappers.ase_calculator import MatterTuneCalculator, MatterTuneIntenseCalculator
 
-        property_predictor = self.property_predictor(
-            lightning_trainer_kwargs=lightning_trainer_kwargs
-        )
-        return MatterTuneCalculator(property_predictor)
+        if device == "cpu":
+            accelerator = "cpu"
+            device_idx = 0
+        else:
+            accelerator = "gpu"
+            device_idx = int(device.split(":")[1])
+            assert device.split(":")[0] == "cuda"
+            assert device.split(":")[1].isdigit()
+        
+        if intense:
+            return MatterTuneIntenseCalculator(self, device=torch.device(device))
+        else:
+            lightning_trainer_kwargs={
+                "accelerator": accelerator,
+                "devices": [device_idx],
+                "precision": precision,
+                "inference_mode": False,
+                "enable_progress_bar": False,
+                "enable_model_summary": False,
+                "logger": False,
+            }
+            property_predictor = self.property_predictor(
+                lightning_trainer_kwargs=lightning_trainer_kwargs
+            )
+            return MatterTuneCalculator(property_predictor)

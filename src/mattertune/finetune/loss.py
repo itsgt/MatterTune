@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, TypeAlias
+from typing import Annotated, Literal
 
 import nshconfig as C
 import torch
 import torch.nn.functional as F
-from typing_extensions import assert_never
+from typing_extensions import TypeAliasType, assert_never
 
 
 class MAELossConfig(C.Config):
@@ -67,10 +67,13 @@ def l2_mae_loss(
             assert_never(reduction)
 
 
-LossConfig: TypeAlias = Annotated[
-    MAELossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig,
-    C.Field(discriminator="name"),
-]
+LossConfig = TypeAliasType(
+    "LossConfig",
+    Annotated[
+        MAELossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig,
+        C.Field(discriminator="name"),
+    ],
+)
 
 
 def compute_loss(
@@ -80,7 +83,7 @@ def compute_loss(
 ) -> torch.Tensor:
     """
     Compute the loss value given the model output, ``prediction``,
-        and the target label, ``label``.
+    and the target label, ``label``.
 
     The loss value should be a scalar tensor.
 

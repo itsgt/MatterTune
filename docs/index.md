@@ -7,17 +7,20 @@ MatterTune is a flexible and powerful machine learning library designed specific
 :caption: Getting Started
 
 introduction
+motivation
 installation
-quick_start
 ```
 
 ```{toctree}
 :maxdepth: 2
 :caption: User Guide
 
+guides/datasets
+guides/fine-tuning
 guides/model_usage
 guides/training_config
-guides/data_handling
+guides/normalization
+guides/lightning
 ```
 
 ```{toctree}
@@ -28,12 +31,14 @@ backbones/jmp
 backbones/m3gnet
 backbones/orb
 backbones/eqv2
+backbones/mattersim
 ```
 
 ```{toctree}
 :maxdepth: 1
 :caption: Development
 
+api
 contributing
 license
 ```

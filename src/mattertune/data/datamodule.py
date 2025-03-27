@@ -35,8 +35,10 @@ class DataModuleBaseConfig(C.Config, ABC):
     """The number of workers for the dataloaders.
 
     This is the number of processes that generate batches in parallel.
+
     If set to "auto", the number of workers will be automatically
-        set based on the number of available CPUs.
+    set based on the number of available CPUs.
+
     Set to 0 to disable parallelism.
     """
 
@@ -161,7 +163,6 @@ class AutoSplitDataModuleConfig(DataModuleBaseConfig):
         # Get indices for each split
         train_indices = indices[:train_len]
         validation_indices = indices[train_len : train_len + validation_len]
-
         # Create the training and validation datasets.
         train_dataset = SplitDataset(dataset, train_indices)
         validation_dataset = SplitDataset(dataset, validation_indices)

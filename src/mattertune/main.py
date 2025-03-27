@@ -8,14 +8,17 @@ from typing import Any, Literal, NamedTuple
 import nshconfig as C
 from lightning.fabric.plugins.precision.precision import _PRECISION_INPUT
 from lightning.pytorch import Trainer
+from lightning.pytorch.callbacks import Callback
 from lightning.pytorch.strategies.strategy import Strategy
 
 from .backbones import ModelConfig
 from .callbacks.early_stopping import EarlyStoppingConfig
+from .callbacks.ema import EMAConfig
 from .callbacks.model_checkpoint import ModelCheckpointConfig
 from .data import DataModuleConfig, MatterTuneDataModule
 from .finetune.base import FinetuneModuleBase
 from .loggers import CSVLoggerConfig, LoggerConfig
+from .recipes import RecipeConfig
 from .registry import backbone_registry, data_registry
 
 log = logging.getLogger(__name__)
@@ -125,6 +128,9 @@ class TrainerConfig(C.Config):
     early_stopping: EarlyStoppingConfig | None = None
     """The configuration for early stopping."""
 
+    ema: EMAConfig | None = None
+    """The configuration for the Exponential Moving Average (EMA) callback."""
+
     loggers: Sequence[LoggerConfig] | Literal["default"] = "default"
     """The loggers to use for logging training metrics.
 
@@ -135,8 +141,9 @@ class TrainerConfig(C.Config):
     additional_trainer_kwargs: dict[str, Any] = {}
     """
     Additional keyword arguments for the Lightning Trainer.
+
     This is for advanced users who want to customize the Lightning Trainer,
-        and is not recommended for beginners.
+    and is not recommended for beginners.
     """
 
     def _to_lightning_kwargs(self):
@@ -192,6 +199,27 @@ class MatterTunerConfig(C.Config):
     trainer: TrainerConfig = TrainerConfig()
     """The configuration for the trainer."""
 
+    recipes: Sequence[RecipeConfig] = []
+    """Recipes to modify the training process.
+
+    Recipes are configurable components that can modify how models are trained.
+    Each recipe provides a specific capability like parameter-efficient fine-tuning,
+    regularization, or advanced optimization techniques.
+
+    Recipes are applied in order when training starts. Multiple recipes can be
+    combined to achieve the desired training behavior.
+
+    Examples:
+        ```python
+        # Use LoRA for memory-efficient training
+        recipes=[
+            LoRARecipeConfig(
+                lora=LoraConfig(r=8, target_modules=["linear1"])
+            )
+        ]
+        ```
+    """
+
 
 class MatterTuner:
     def __init__(self, config: MatterTunerConfig):
@@ -203,9 +231,9 @@ class MatterTuner:
 
         # Create the model
         lightning_module = self.config.model.create_model()
-        assert isinstance(
-            lightning_module, FinetuneModuleBase
-        ), f'The backbone model must be a FinetuneModuleBase subclass. Got "{type(lightning_module)}".'
+        assert isinstance(lightning_module, FinetuneModuleBase), (
+            f'The backbone model must be a FinetuneModuleBase subclass. Got "{type(lightning_module)}".'
+        )
 
         # Create the datamodule
         datamodule = MatterTuneDataModule(self.config.data)
@@ -233,6 +261,17 @@ class MatterTuner:
                 "Setting inference_mode=False."
             )
             trainer_kwargs_["inference_mode"] = False
+
+        # Set up the callbacks for recipes
+        callbacks: list[Callback] = trainer_kwargs_.pop("callbacks", [])
+        callbacks.extend(
+            [
+                cb
+                for recipe in self.config.recipes
+                if (cb := recipe.create_lightning_callback()) is not None
+            ]
+        )
+        trainer_kwargs_["callbacks"] = callbacks
 
         # Create the trainer
         trainer = Trainer(**trainer_kwargs_)

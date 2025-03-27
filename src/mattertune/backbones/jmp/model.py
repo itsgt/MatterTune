@@ -3,9 +3,10 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import logging
+from collections.abc import Sequence
 from contextlib import ExitStack
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import nshconfig as C
 import nshconfig_extra as CE
@@ -13,6 +14,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ase import Atoms
 from typing_extensions import final, override
 
 from ...finetune import properties as props
@@ -24,14 +26,23 @@ from ...finetune.base import (
 )
 from ...normalization import NormalizationContext
 from ...registry import backbone_registry
+from ...util import optional_import_error_message
 from .util import get_activation_cls
+from ...finetune.optimizer import PerParamHparamsDict
 
 if TYPE_CHECKING:
-    from ase import Atoms
-    from torch_geometric.data import Batch, Data
-    from torch_geometric.data.data import BaseData
+    from torch_geometric.data import Batch, Data  # type: ignore[reportMissingImports] # noqa
+    from torch_geometric.data.data import BaseData  # type: ignore[reportMissingImports] # noqa
 
 log = logging.getLogger(__name__)
+
+
+MODEL_URLS = {
+    "jmp-s": "https://jmp-iclr-datasets.s3.amazonaws.com/jmp-s.pt",
+    "jmp-l": "https://jmp-iclr-datasets.s3.amazonaws.com/jmp-l.pt",
+}
+CACHE_DIR = Path(torch.hub.get_dir()) / "jmp_checkpoints"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class CutoffsConfig(C.Config):
@@ -82,11 +93,8 @@ class JMPGraphComputerConfig(C.Config):
     """Whether to compute the radius graph per graph."""
 
     def _to_jmp_graph_computer_config(self):
-        from jmp.models.gemnet.graph import (
-            CutoffsConfig,
-            GraphComputerConfig,
-            MaxNeighborsConfig,
-        )
+        with optional_import_error_message("jmp"):
+            from jmp.models.gemnet.graph import CutoffsConfig, GraphComputerConfig, MaxNeighborsConfig  # type: ignore[reportMissingImports] # noqa # fmt: skip
 
         return GraphComputerConfig(
             pbc=self.pbc,
@@ -111,8 +119,8 @@ class JMPBackboneConfig(FinetuneModuleBaseConfig):
     name: Literal["jmp"] = "jmp"
     """The type of the backbone."""
 
-    ckpt_path: Path | CE.CachedPath
-    """The path to the pre-trained model checkpoint."""
+    pretrained_model: str
+    """pretrained model name"""
 
     graph_computer: JMPGraphComputerConfig
     """The configuration for the graph computer."""
@@ -160,7 +168,8 @@ class JMPBackboneModule(FinetuneModuleBase["Data", "Batch", JMPBackboneConfig]):
         activation_cls = get_activation_cls(self.backbone.hparams.activation)
         match prop:
             case props.EnergyPropertyConfig():
-                from jmp.nn.energy_head import EnergyTargetConfig
+                with optional_import_error_message("jmp"):
+                    from jmp.nn.energy_head import EnergyTargetConfig  # type: ignore[reportMissingImports] # noqa
 
                 return EnergyTargetConfig(
                     max_atomic_number=self.backbone.hparams.num_elements
@@ -171,13 +180,15 @@ class JMPBackboneModule(FinetuneModuleBase["Data", "Batch", JMPBackboneConfig]):
                 )
             case props.ForcesPropertyConfig():
                 if not prop.conservative:
-                    from jmp.nn.force_head import ForceTargetConfig
+                    with optional_import_error_message("jmp"):
+                        from jmp.nn.force_head import ForceTargetConfig  # type: ignore[reportMissingImports] # noqa
 
                     return ForceTargetConfig().create_model(
                         self.backbone.hparams.emb_size_edge, activation_cls
                     )
                 else:
-                    from jmp.nn.force_head import ConservativeForceTargetConfig
+                    with optional_import_error_message("jmp"):
+                        from jmp.nn.force_head import ConservativeForceTargetConfig  # type: ignore[reportMissingImports] # noqa
 
                     force_config = ConservativeForceTargetConfig(
                         energy_prop_name=self._find_potential_energy_prop_name()
@@ -186,20 +197,23 @@ class JMPBackboneModule(FinetuneModuleBase["Data", "Batch", JMPBackboneConfig]):
 
             case props.StressesPropertyConfig():
                 if not prop.conservative:
-                    from jmp.nn.stress_head import StressTargetConfig
+                    with optional_import_error_message("jmp"):
+                        from jmp.nn.stress_head import StressTargetConfig  # type: ignore[reportMissingImports] # noqa
 
                     return StressTargetConfig().create_model(
                         self.backbone.hparams.emb_size_edge, activation_cls
                     )
                 else:
-                    from jmp.nn.stress_head import ConservativeStressTargetConfig
+                    with optional_import_error_message("jmp"):
+                        from jmp.nn.stress_head import ConservativeStressTargetConfig  # type: ignore[reportMissingImports] # noqa
 
                     stress_config = ConservativeStressTargetConfig(
                         energy_prop_name=self._find_potential_energy_prop_name()
                     )
                     return stress_config.create_model()
             case props.GraphPropertyConfig():
-                from jmp.nn.graph_scaler import GraphScalarTargetConfig
+                with optional_import_error_message("jmp"):
+                    from jmp.nn.graph_scaler import GraphScalarTargetConfig  # type: ignore[reportMissingImports] # noqa
 
                 return GraphScalarTargetConfig(reduction=prop.reduction).create_model(
                     self.backbone.hparams.emb_size_atom,
@@ -214,14 +228,36 @@ class JMPBackboneModule(FinetuneModuleBase["Data", "Batch", JMPBackboneConfig]):
     @override
     def create_model(self):
         # Resolve the checkpoint path
-        if isinstance(ckpt_path := self.hparams.ckpt_path, CE.CachedPath):
-            ckpt_path = ckpt_path.resolve()
+        pretrained_model = self.hparams.pretrained_model
+        if pretrained_model in MODEL_URLS:
+            cached_ckpt_path = CACHE_DIR / f"{pretrained_model}.pt"
+            if not cached_ckpt_path.exists():
+                log.info(
+                    f"Downloading the pretrained model from {MODEL_URLS[pretrained_model]}"
+                )
+                torch.hub.download_url_to_file(
+                    MODEL_URLS[pretrained_model], str(cached_ckpt_path)
+                )
+            ckpt_path = cached_ckpt_path
+        else:
+            ckpt_path = None
+            raise ValueError(
+                f"Unknown pretrained model: {pretrained_model}, available models: {MODEL_URLS.keys()}"
+            )
 
         # Load the backbone from the checkpoint
-        from jmp.models.gemnet import GemNetOCBackbone
-        from jmp.models.gemnet.graph import GraphComputer
+        with optional_import_error_message("jmp"):
+            from jmp.models.gemnet import GemNetOCBackbone  # type: ignore[reportMissingImports] # noqa
+            from jmp.models.gemnet.graph import GraphComputer  # type: ignore[reportMissingImports] # noqa
 
+        assert ckpt_path is not None
         self.backbone = GemNetOCBackbone.from_pretrained_ckpt(ckpt_path)
+        
+        if self.hparams.reset_backbone:
+            for module in self.backbone.modules():
+                if hasattr(module, "reset_parameters"):
+                    module.reset_parameters()
+        
         log.info(
             f"Loaded the model from the checkpoint at {ckpt_path}. The model "
             f"has {sum(p.numel() for p in self.backbone.parameters()):,} parameters."
@@ -247,8 +283,15 @@ class JMPBackboneModule(FinetuneModuleBase["Data", "Batch", JMPBackboneConfig]):
             self.output_heads[prop.name] = self._create_output_head(prop)
 
     @override
+    def trainable_parameters(self):
+        if not self.hparams.freeze_backbone:
+            yield from self.backbone.named_parameters()
+        for head in self.output_heads.values():
+            yield from head.named_parameters()
+
+    @override
     @contextlib.contextmanager
-    def model_forward_context(self, data):
+    def model_forward_context(self, data, mode: str):
         with ExitStack() as stack:
             for head in self.output_heads.values():
                 stack.enter_context(head.forward_context(data))
@@ -256,14 +299,19 @@ class JMPBackboneModule(FinetuneModuleBase["Data", "Batch", JMPBackboneConfig]):
             yield
 
     @override
-    def model_forward(self, batch, return_backbone_output=False):
+    def model_forward(self, batch, mode: str, return_backbone_output=False):
         # Run the backbone
-        backbone_output = self.backbone(batch)
+        if return_backbone_output:
+            backbone_output, intermediate = self.backbone(
+                batch, return_intermediate=True
+            )
+        else:
+            backbone_output = self.backbone(batch)
 
         # Feed the backbone output to the output heads
         predicted_properties: dict[str, torch.Tensor] = {}
 
-        head_input = {
+        head_input: dict[str, Any] = {
             "data": batch,
             "backbone_output": backbone_output,
             "predicted_props": predicted_properties,
@@ -276,8 +324,12 @@ class JMPBackboneModule(FinetuneModuleBase["Data", "Batch", JMPBackboneConfig]):
 
         pred: ModelOutput = {"predicted_properties": predicted_properties}
         if return_backbone_output:
-            pred["backbone_output"] = backbone_output
+            pred["backbone_output"] = intermediate # type: ignore[assignment]
         return pred
+
+    @override
+    def apply_callable_to_backbone(self, fn):
+        return fn(self.backbone)
 
     @override
     def pretrained_backbone_parameters(self):
@@ -294,7 +346,8 @@ class JMPBackboneModule(FinetuneModuleBase["Data", "Batch", JMPBackboneConfig]):
 
     @override
     def collate_fn(self, data_list):
-        from torch_geometric.data import Batch
+        with optional_import_error_message("torch_geometric"):
+            from torch_geometric.data import Batch  # type: ignore[reportMissingImports] # noqa
 
         return Batch.from_data_list(cast("list[BaseData]", data_list))
 
@@ -311,7 +364,8 @@ class JMPBackboneModule(FinetuneModuleBase["Data", "Batch", JMPBackboneConfig]):
 
     @override
     def atoms_to_data(self, atoms, has_labels):
-        from torch_geometric.data import Data
+        with optional_import_error_message("torch_geometric"):
+            from torch_geometric.data import Data  # type: ignore[reportMissingImports] # noqa
 
         # For JMP, your PyG object should have the following attributes:
         # - pos: Node positions (shape: (N, 3))
@@ -359,10 +413,11 @@ class JMPBackboneModule(FinetuneModuleBase["Data", "Batch", JMPBackboneConfig]):
 
     @override
     def create_normalization_context_from_batch(self, batch):
-        from torch_scatter import scatter
+        with optional_import_error_message("torch_scatter"):
+            from torch_scatter import scatter  # type: ignore[reportMissingImports] # noqa
 
-        atomic_numbers: torch.Tensor = batch.atomic_numbers.long()  # (n_atoms,)
-        batch_idx: torch.Tensor = batch.batch  # (n_atoms,)
+        atomic_numbers: torch.Tensor = batch["atomic_numbers"].long()  # (n_atoms,)
+        batch_idx: torch.Tensor = batch["batch"]  # (n_atoms,)
 
         # Convert atomic numbers to one-hot encoding
         atom_types_onehot = F.one_hot(atomic_numbers, num_classes=120)  # (n_atoms, 120)
@@ -392,3 +447,86 @@ def _get_fixed(atoms: Atoms):
         fixed[constraint.index] = True
 
     return fixed
+
+
+def get_jmp_s_lr_decay(lr: float):
+    per_parameter_hparams = [
+        {
+            "patterns": ["embedding.*"],
+            "hparams": {
+                "lr": 0.3 * lr,
+            },
+        },
+        {
+            "patterns": ["int_blocks.0.*"],
+            "hparams": {
+                "lr": 0.3 * lr,
+            },
+        },
+        {
+            "patterns": ["int_blocks.1.*"],
+            "hparams": {
+                "lr": 0.4 * lr,
+            },
+        },
+        {
+            "patterns": ["int_blocks.2.*"],
+            "hparams": {
+                "lr": 0.55 * lr,
+            },
+        },
+        {
+            "patterns": ["int_blocks.3.*"],
+            "hparams": {
+                "lr": 0.625 * lr,
+            },
+        },
+    ]
+    return cast(Sequence[PerParamHparamsDict], per_parameter_hparams)
+
+def get_jmp_l_lr_decay(lr: float):
+    per_parameter_hparams = [
+        {
+            "patterns": ["embedding.*"],
+            "hparams": {
+                "lr": 0.3 * lr,
+            },
+        },
+        {
+            "patterns": ["int_blocks.0.*"],
+            "hparams": {
+                "lr": 0.55 * lr,
+            },
+        },
+        {
+            "patterns": ["int_blocks.1.*"],
+            "hparams": {
+                "lr": 0.4 * lr,
+            },
+        },
+        {
+            "patterns": ["int_blocks.2.*"],
+            "hparams": {
+                "lr": 0.3 * lr,
+            },
+        },
+        {
+            "patterns": ["int_blocks.3.*"],
+            "hparams": {
+                "lr": 0.4 * lr,
+            },
+        },
+        {
+            "patterns": ["int_blocks.4.*"],
+            "hparams": {
+                "lr": 0.55 * lr,
+            },
+        },
+        {
+            "patterns": ["int_blocks.5.*"],
+            "hparams": {
+                "lr": 0.625 * lr,
+            },
+        },
+    ]
+    return cast(Sequence[PerParamHparamsDict], per_parameter_hparams)

@@ -4,6 +4,8 @@ import ase.neighborlist as nl
 import numpy as np
 from ase import Atoms
 from ase.io import read
+from scipy.ndimage import gaussian_filter1d
+from tqdm import tqdm
 
 
 def rdf_compute(atoms: Atoms, r_max, n_bins, elements=None):
@@ -35,7 +37,7 @@ def rdf_compute(atoms: Atoms, r_max, n_bins, elements=None):
         density = num_atoms / volume
 
     hist, bin_edges = np.histogram(distances, range=(0, r_max), bins=n_bins)
-    rdf_x = 0.5 * (bin_edges[1:] + bin_edges[:-1])
+    rdf_x = 0.5 * (bin_edges[1:] + bin_edges[:-1]) + 0.5 * r_max / n_bins
     bin_volume = (4 / 3) * np.pi * (bin_edges[1:] ** 3 - bin_edges[:-1] ** 3)
     rdf_y = hist / (bin_volume * density * num_atoms)
 
@@ -45,6 +47,7 @@ def rdf_compute(atoms: Atoms, r_max, n_bins, elements=None):
 
 def main(args_dict: dict):
     md_traj = read(args_dict["md_traj"], ":")
+    assert isinstance(md_traj, list), "Expected a list of Atoms objects"
     md_traj = md_traj[-args_dict["n_frames"] :]
     r_max = args_dict["r_max"]
     n_bins = int(args_dict["r_max"] / args_dict["r_step"])
@@ -53,7 +56,7 @@ def main(args_dict: dict):
     if not args_dict["load"]:
         rdf_ys = []
         rdf_xs = []
-        for atoms in md_traj:
+        for atoms in tqdm(md_traj):
             rdf = rdf_compute(atoms, r_max, n_bins, elements)
             rdf_ys.append(rdf[0, 0])
             rdf_xs.append(rdf[0, 1])
@@ -65,10 +68,11 @@ def main(args_dict: dict):
     data = np.load(f"./plots/rdf-{elements[0]}-{elements[1]}.npz")
     rdf_x = data["rdf_x"]
     rdf_y = data["rdf_y"]
-    sigma = 1.0
-    smoothed_rdf_y = gaussian_filter1d(rdf_y, sigma=sigma)
+    sigma = args_dict["smear_sigma"]
+    if sigma > 0:
+        rdf_y = gaussian_filter1d(rdf_y, sigma=sigma)
     plt.figure(figsize=(6, 3))
-    plt.plot(rdf_x, smoothed_rdf_y, color="green", linewidth=2)
+    plt.plot(rdf_x, rdf_y, color="green", linewidth=2)
     plt.ylim(0, 3)
     plt.xlim(0.5, 6.2)
     plt.yticks([0, 1, 2, 3])
@@ -78,8 +82,13 @@ def main(args_dict: dict):
         plt.axis("off")
         plt.gca().set_facecolor("none")
         plt.gcf().set_facecolor("none")
+    fig_name = (
+        f"./plots/rdf-{elements[0]}-{elements[1]}.png"
+        if not args_dict["transparent"]
+        else f"./plots/rdf-{elements[0]}-{elements[1]}-transparent.png"
+    )
     plt.savefig(
-        f"./plots/rdf-{elements[0]}-{elements[1]}.png",
+        fig_name,
         dpi=300,
         transparent=args_dict["transparent"],
     )
@@ -100,10 +109,11 @@ def main(args_dict: dict):
     data = np.load(f"./plots/rdf-{elements[0]}-{elements[1]}.npz")
     rdf_x = data["rdf_x"]
     rdf_y = data["rdf_y"]
-    sigma = 2.0
-    smoothed_rdf_y = gaussian_filter1d(rdf_y, sigma=sigma)
+    sigma = args_dict["smear_sigma"]
+    if sigma > 0:
+        rdf_y = gaussian_filter1d(rdf_y, sigma=sigma)
     plt.figure(figsize=(6, 3))
-    plt.plot(rdf_x, smoothed_rdf_y, color="green", linewidth=2)
+    plt.plot(rdf_x, rdf_y, color="green", linewidth=2)
     plt.ylim(0, 2.5)
     plt.xlim(0.5, 6.2)
     plt.yticks([0, 1, 2])
@@ -113,8 +123,13 @@ def main(args_dict: dict):
         plt.axis("off")
         plt.gca().set_facecolor("none")
         plt.gcf().set_facecolor("none")
+    fig_name = (
+        f"./plots/rdf-{elements[0]}-{elements[1]}.png"
+        if not args_dict["transparent"]
+        else f"./plots/rdf-{elements[0]}-{elements[1]}-transparent.png"
+    )
     plt.savefig(
-        f"./plots/rdf-{elements[0]}-{elements[1]}.png",
+        fig_name,
         dpi=300,
         transparent=args_dict["transparent"],
     )
@@ -135,10 +150,11 @@ def main(args_dict: dict):
     data = np.load(f"./plots/rdf-{elements[0]}-{elements[1]}.npz")
     rdf_x = data["rdf_x"]
     rdf_y = data["rdf_y"]
-    sigma = 1.0
-    smoothed_rdf_y = gaussian_filter1d(rdf_y, sigma=sigma)
+    sigma = args_dict["smear_sigma"]
+    if sigma > 0:
+        rdf_y = gaussian_filter1d(rdf_y, sigma=sigma)
     plt.figure(figsize=(6, 3))
-    plt.plot(rdf_x, smoothed_rdf_y, color="green", linewidth=2)
+    plt.plot(rdf_x, rdf_y, color="green", linewidth=2)
     plt.ylim(0, 2.2)
     plt.xlim(0.5, 6.2)
     plt.yticks([0, 1, 2])
@@ -148,8 +164,13 @@ def main(args_dict: dict):
         plt.axis("off")
         plt.gca().set_facecolor("none")
         plt.gcf().set_facecolor("none")
+    fig_name = (
+        f"./plots/rdf-{elements[0]}-{elements[1]}.png"
+        if not args_dict["transparent"]
+        else f"./plots/rdf-{elements[0]}-{elements[1]}-transparent.png"
+    )
     plt.savefig(
-        f"./plots/rdf-{elements[0]}-{elements[1]}.png",
+        fig_name,
         dpi=300,
         transparent=args_dict["transparent"],
     )
@@ -160,12 +181,14 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--md_traj", type=str, default="./md_results/md_traj_fric0.05_orb-best-0.03.xyz"
+        "--md_traj",
+        type=str,
     )
-    parser.add_argument("--n_frames", type=int, default=2000)
+    parser.add_argument("--n_frames", type=int, default=150000)
     parser.add_argument("--r_max", type=float, default=6.0)
     parser.add_argument("--r_step", type=float, default=0.06)
     parser.add_argument("--transparent", action="store_true")
     parser.add_argument("--load", action="store_true")
+    parser.add_argument("--smear_sigma", type=float, default=0.0)
     args_dict = vars(parser.parse_args())
     main(args_dict)
