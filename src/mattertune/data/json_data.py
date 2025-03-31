@@ -49,6 +49,7 @@ class JSONDataset(Dataset[Atoms]):
                 positions=np.array(entry["positions"]),
                 cell=np.array(entry["cell"]),
                 pbc=True,
+                info={'spectra': np.array(entry["spectra"])} if "spectra" in entry.keys else {},
             )
 
             energy, forces, stress = None, None, None
