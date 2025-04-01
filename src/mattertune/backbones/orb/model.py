@@ -154,6 +154,24 @@ class ORBBackboneModule(
                     ),
                     compute_stress=False,
                 )
+            case props.GraphVectorPropertyConfig():
+                with optional_import_error_message("orb-models"):
+                    from orb_models.forcefield.graph_regressor import GraphHead  # type: ignore[reportMissingImports] # noqa
+                    from orb_models.forcefield.property_definitions import (  # type: ignore[reportMissingImports] # noqa
+                        PropertyDefinition,
+                    )
+
+                return GraphHead(
+                    latent_dim=256,
+                    num_mlp_layers=1,
+                    mlp_hidden_dim=256,
+                    target=PropertyDefinition(
+                        name=prop.name,
+                        dim=prop.size,
+                        domain="real",
+                    ),
+                    compute_stress=False,
+                )
             case props.AtomInvariantVectorPropertyConfig():
                 with optional_import_error_message("orb-models"):
                     from orb_models.forcefield.graph_regressor import NodeHead  # type: ignore[reportMissingImports] # noqa
