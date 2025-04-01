@@ -138,6 +138,31 @@ class GraphPropertyConfig(PropertyConfigBase):
     def property_type(self):
         return "system"
 
+class GraphVectorPropertyConfig(PropertyConfigBase):
+    type: Literal["graph_property_vector"] = "graph_property_vector"
+    size: C.PositiveInt
+    reduction: Literal["mean", "sum", "max"]
+    """The reduction to use for the output.
+    - "sum": Sum the property values for all atoms in the system.
+    This is optimal for extensive properties (e.g. energy).
+    - "mean": Take the mean of the property values for all atoms in the system.
+    This is optimal for intensive properties (e.g. density).
+    - "max": Take the maximum of the property values for all atoms in the system.
+    This is optimal for properties like the `last phdos peak` of Matbench's phonons dataset.
+    """
+
+    @override
+    def from_ase_atoms(self, atoms):
+        return atoms.info[self.name]
+
+    @override
+    def ase_calculator_property_name(self):
+        return None
+
+    @override
+    def property_type(self):
+        return "system"
+
 
 class EnergyPropertyConfig(PropertyConfigBase):
     type: Literal["energy"] = "energy"
