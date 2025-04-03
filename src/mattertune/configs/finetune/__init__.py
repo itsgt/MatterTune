@@ -10,7 +10,7 @@ from mattertune.finetune.base import FinetuneModuleBaseConfig as FinetuneModuleB
 from mattertune.finetune.properties import ForcesPropertyConfig as ForcesPropertyConfig
 from mattertune.finetune.properties import GraphPropertyConfig as GraphPropertyConfig
 from mattertune.finetune.properties import GraphVectorPropertyConfig as GraphVectorPropertyConfig
-from mattertune.finetune.properties import NodeInvariantVectorProperty as NodeInvariantVectorProperty
+from mattertune.finetune.properties import AtomInvariantVectorPropertyConfig as AtomInvariantVectorPropertyConfig
 from mattertune.finetune.loss import HuberLossConfig as HuberLossConfig
 from mattertune.finetune.loss import L2MAELossConfig as L2MAELossConfig
 from mattertune.finetune.lr_scheduler import LinearLRConfig as LinearLRConfig
@@ -69,7 +69,7 @@ __all__ = [
     "ForcesPropertyConfig",
     "GraphPropertyConfig",
     "GraphVectorPropertyConfig",
-    "NodeInvariantVectorPropertyConfig",
+    "AtomInvariantVectorPropertyConfig",
     "HuberLossConfig",
     "L2MAELossConfig",
     "LinearLRConfig",
