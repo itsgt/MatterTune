@@ -22,7 +22,7 @@ from mattertune.registry import FinetuneModuleBaseConfig as FinetuneModuleBaseCo
 from mattertune.finetune.properties import ForcesPropertyConfig as ForcesPropertyConfig
 from mattertune.finetune.properties import GraphPropertyConfig as GraphPropertyConfig
 from mattertune.finetune.properties import GraphVectorPropertyConfig as GraphVectorPropertyConfig
-from mattertune.finetune.properties import NodeInvariantVectorPropertyConfig as NodeInvariantVectorPropertyConfig
+from mattertune.finetune.properties import AtomInvariantVectorPropertyConfig as AtomInvariantVectorPropertyConfig
 from mattertune.finetune.loss import HuberLossConfig as HuberLossConfig
 from mattertune.backbones import JMPBackboneConfig as JMPBackboneConfig
 from mattertune.backbones.jmp.model import JMPGraphComputerConfig as JMPGraphComputerConfig
@@ -180,7 +180,7 @@ __all__ = [
     "ForcesPropertyConfig",
     "GraphPropertyConfig",
     "GraphVectorPropertyConfig",
-    "NodeInvariantVectorPropertyConfig",
+    "AtomInvariantVectorPropertyConfig",
     "HuberLossConfig",
     "JMPBackboneConfig",
     "JMPGraphComputerConfig",
