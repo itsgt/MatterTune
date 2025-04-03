@@ -21,6 +21,8 @@ from mattertune.backbones.eqV2.model import FAIRChemAtomsToGraphSystemConfig as 
 from mattertune.registry import FinetuneModuleBaseConfig as FinetuneModuleBaseConfig
 from mattertune.finetune.properties import ForcesPropertyConfig as ForcesPropertyConfig
 from mattertune.finetune.properties import GraphPropertyConfig as GraphPropertyConfig
+from mattertune.finetune.properties import GraphVectorPropertyConfig as GraphVectorPropertyConfig
+from mattertune.finetune.properties import NodeInvariantVectorPropertyConfig as NodeInvariantVectorPropertyConfig
 from mattertune.finetune.loss import HuberLossConfig as HuberLossConfig
 from mattertune.backbones import JMPBackboneConfig as JMPBackboneConfig
 from mattertune.backbones.jmp.model import JMPGraphComputerConfig as JMPGraphComputerConfig
@@ -177,6 +179,8 @@ __all__ = [
     "FinetuneModuleBaseConfig",
     "ForcesPropertyConfig",
     "GraphPropertyConfig",
+    "GraphVectorPropertyConfig",
+    "NodeInvariantVectorPropertyConfig",
     "HuberLossConfig",
     "JMPBackboneConfig",
     "JMPGraphComputerConfig",
