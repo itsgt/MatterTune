@@ -413,9 +413,12 @@ class ORBBackboneModule(
         if has_labels:
             if atom_graphs.system_targets is None:
                 atom_graphs = atom_graphs._replace(system_targets={})
+            if atom_graphs.node_targets is None:
+                atom_graphs = atom_graphs._replace(node_targets={})
 
             # Making the type checker happy
             assert atom_graphs.system_targets is not None
+            assert atom_graphs.node_targets is not None
 
             # Also, pass along any other targets/properties. This includes:
             #   - energy: The total energy of the system
