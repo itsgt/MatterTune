@@ -44,13 +44,18 @@ class JSONDataset(Dataset[Atoms]):
 
         self.atoms_list = []
         for entry in raw_data:
+            info_dict = {}
+            for key in entry.keys():
+                if key not in ["atomic_numbers", "positions", "cell"]:
+                    info_dict[key] = np.array(entry[key])
             atoms = Atoms(
                 numbers=np.array(entry["atomic_numbers"]),
                 positions=np.array(entry["positions"]),
                 cell=np.array(entry["cell"]),
                 pbc=True,
+                info=info_dict,
             )
-
+            
             energy, forces, stress = None, None, None
             if "energy" in self.config.tasks:
                 energy = torch.tensor(entry[self.config.tasks["energy"]])
