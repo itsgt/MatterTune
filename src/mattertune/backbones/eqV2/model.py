@@ -54,15 +54,18 @@ class EqV2ScalarHead(nn.Module, HeadInterface):
 
     def forward(self, data: Batch, emb: dict[str, torch.Tensor | GraphData]):
         node_energy = self.energy_block(emb["node_embedding"])
+        print(node_energy.shape)
         node_energy = node_energy.embedding.narrow(1, 0, 1)
+        print(node_energy.shape)
         if gp_utils.initialized():
             node_energy = gp_utils.gather_from_model_parallel_region(node_energy, dim=0)
+            print(node_energy.shape)
         energy = torch.zeros(
             len(data.natoms),
             device=node_energy.device,
             dtype=node_energy.dtype,
         )
-
+        print(node_energy.shape.view(-1))
         energy.index_add_(0, data.batch, node_energy.view(-1))
         if self.reduce == "sum":
             return {"energy": energy / self.avg_num_nodes}
