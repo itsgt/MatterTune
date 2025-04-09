@@ -34,14 +34,14 @@ log = logging.getLogger(__name__)
 
 # https://github.com/FAIR-Chem/fairchem/blob/omat24/src/fairchem/core/models/equiformer_v2/equiformer_v2.py
 class EqV2ScalarHead(nn.Module, HeadInterface):
-    def __init__(self, backbone, reduce: str = "sum"):
+    def __init__(self, backbone, reduce: str = "sum", outdim = 1):
         super().__init__()
         self.reduce = reduce
         self.avg_num_nodes = backbone.avg_num_nodes
         self.energy_block = FeedForwardNetwork(
             backbone.sphere_channels,
             backbone.ffn_hidden_channels,
-            1,
+            outdim,
             backbone.lmax_list,
             backbone.mmax_list,
             backbone.SO3_grid,
@@ -294,6 +294,16 @@ class EqV2BackboneModule(FinetuneModuleBase["BaseData", "Batch", EqV2BackboneCon
                         "Pretrained model does not support general graph properties, only energy, forces, and stresses are supported."
                     )
                 return EqV2ScalarHead(self.backbone, reduce=prop.reduction)
+            case props.GraphVectorPropertyConfig():
+                assert prop.reduction in ("sum", "mean"), (
+                    f"Unsupported reduction: {prop.reduction} for eqV2. "
+                    "Please use 'sum' or 'mean'."
+                )
+                if not self.hparams.reset_output_heads:
+                    raise ValueError(
+                        "Pretrained model does not support general graph properties, only energy, forces, and stresses are supported."
+                    )
+                return EqV2ScalarHead(self.backbone, reduce=prop.reduction, outdim = prop.size)
             case _:
                 raise ValueError(
                     f"Unsupported property config: {prop} for eqV2"
