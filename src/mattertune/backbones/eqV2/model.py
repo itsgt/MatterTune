@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 # https://github.com/FAIR-Chem/fairchem/blob/omat24/src/fairchem/core/models/equiformer_v2/equiformer_v2.py
-class EquiformerV2ScalarHead(nn.Module, HeadInterface):
+class EqV2ScalarHead(nn.Module, HeadInterface):
     def __init__(self, backbone, reduce: str = "sum"):
         super().__init__()
         self.reduce = reduce
