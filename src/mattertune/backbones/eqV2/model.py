@@ -68,6 +68,7 @@ class EqV2ScalarHead(nn.Module, HeadInterface):
         )
         print(node_energy.squeeze(1).shape)
         print(data.batch.shape)
+        print(energy.shape)
         energy.index_add_(0, data.batch, node_energy.squeeze(1))
         if self.reduce == "sum":
             return {"energy": energy / self.avg_num_nodes}
