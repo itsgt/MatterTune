@@ -220,10 +220,7 @@ def _get_pretrained_model(hparams: EqV2BackboneConfig):
     elementrefs = trainer.elementrefs
 
     return model, normalizers, elementrefs
-
-
-@final
-class EqV2BackboneModule(FinetuneModuleBase["BaseData", "Batch", EqV2BackboneConfig]):
+https://github.com/FAIR-Chem/fairchem/blob/main/src/fairchem/core/models/equiformer_v2/heads/scalar.pyse["BaseData", "Batch", EqV2BackboneConfig]):
     @override
     @classmethod
     def hparams_cls(cls):
