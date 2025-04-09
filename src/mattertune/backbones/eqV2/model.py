@@ -73,7 +73,7 @@ class EqV2ScalarHead(nn.Module, HeadInterface):
         if self.reduce == "sum":
             return {"energy": energy / self.avg_num_nodes}
         elif self.reduce == "mean":
-            return {"energy": energy / data.natoms}
+            return {"energy": energy / data.natoms.unsqueeze(1).repeat([1, self.outdim])}
         else:
             raise ValueError(
                 f"reduce can only be sum or mean, user provided: {self.reduce}"
