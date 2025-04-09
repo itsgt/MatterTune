@@ -5,6 +5,7 @@ import importlib.util
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
+from functools import partial
 
 import nshconfig as C
 import nshconfig_extra as CE
@@ -19,12 +20,63 @@ from ...normalization import NormalizationContext
 from ...registry import backbone_registry
 from ...util import optional_import_error_message
 
+with optional_import_error_message("fairchem"):
+    from fairchem.core.common import gp_utils
+    from fairchem.core.models.base import GraphData, HeadInterface
+    from fairchem.core.models.equiformer_v2.transformer_block import FeedForwardNetwork
+    from fairchem.core.models.equiformer_v2.weight_initialization import eqv2_init_weights
+
 if TYPE_CHECKING:
     from torch_geometric.data.batch import Batch  # type: ignore[reportMissingImports] # noqa
     from torch_geometric.data.data import BaseData  # type: ignore[reportMissingImports] # noqa
 
 log = logging.getLogger(__name__)
 
+# https://github.com/FAIR-Chem/fairchem/blob/main/src/fairchem/core/models/equiformer_v2/heads/scalar.py
+class EqV2ScalarHead(nn.Module, HeadInterface):
+    def __init__(self, backbone, output_name: str = "energy", reduce: str = "sum"):
+        super().__init__()
+        self.output_name = output_name
+        self.reduce = reduce
+        self.avg_num_nodes = backbone.avg_num_nodes
+        self.energy_block = FeedForwardNetwork(
+            backbone.sphere_channels,
+            backbone.ffn_hidden_channels,
+            1,
+            backbone.lmax_list,
+            backbone.mmax_list,
+            backbone.SO3_grid,
+            backbone.ffn_activation,
+            backbone.use_gate_act,
+            backbone.use_grid_mlp,
+            backbone.use_sep_s2_act,
+        )
+        self.apply(partial(eqv2_init_weights, weight_init=backbone.weight_init))
+
+    def forward(self, data: Batch, emb: dict[str, torch.Tensor | GraphData]):
+        node_output = self.energy_block(emb["node_embedding"])
+        print(node_output.shape)
+        node_output = node_output.embedding.narrow(1, 0, 1)
+        print(node_output.shape)
+        if gp_utils.initialized():
+            node_output = gp_utils.gather_from_model_parallel_region(node_output, dim=0)
+        print(node_output.shape)
+        output = torch.zeros(
+            len(data.natoms),
+            device=node_output.device,
+            dtype=node_output.dtype,
+        )
+        print(node_output.view(-1).shape)
+
+        output.index_add_(0, data.batch, node_output.view(-1))
+        if self.reduce == "sum":
+            return {self.output_name: output / self.avg_num_nodes}
+        elif self.reduce == "mean":
+            return {self.output_name: output / data.natoms}
+        else:
+            raise ValueError(
+                f"reduce can only be sum or mean, user provided: {self.reduce}"
+            )
 
 class FAIRChemAtomsToGraphSystemConfig(C.Config):
     """Configuration for converting ASE Atoms to a graph for the FAIRChem model."""
@@ -239,15 +291,11 @@ class EqV2BackboneModule(FinetuneModuleBase["BaseData", "Batch", EqV2BackboneCon
                     f"Unsupported reduction: {prop.reduction} for eqV2. "
                     "Please use 'sum' or 'mean'."
                 )
-                with optional_import_error_message("fairchem"):
-                    from fairchem.core.models.equiformer_v2.equiformer_v2 import (  # type: ignore[reportMissingImports] # noqa
-                        EquiformerV2EnergyHead,
-                    )
                 if not self.hparams.reset_output_heads:
                     raise ValueError(
                         "Pretrained model does not support general graph properties, only energy, forces, and stresses are supported."
                     )
-                return EquiformerV2EnergyHead(self.backbone, reduce=prop.reduction)
+                return EqV2ScalarHead(self.backbone, reduce=prop.reduction)
             case _:
                 raise ValueError(
                     f"Unsupported property config: {prop} for eqV2"
