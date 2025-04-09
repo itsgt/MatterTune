@@ -398,6 +398,8 @@ class EqV2BackboneModule(FinetuneModuleBase["BaseData", "Batch", EqV2BackboneCon
                     pred = _combine_scalar_irrep2(head, stress_rank0, stress_rank2)
                 case props.GraphPropertyConfig():
                     pred = head_output["energy"]
+                case props.GraphVectorPropertyConfig():
+                    pred = head_output["energy"]
                 case _:
                     assert_never(prop)
 
