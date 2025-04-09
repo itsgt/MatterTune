@@ -38,6 +38,7 @@ class EqV2ScalarHead(nn.Module, HeadInterface):
         super().__init__()
         self.reduce = reduce
         self.avg_num_nodes = backbone.avg_num_nodes
+        self.outdim = outdim
         self.energy_block = FeedForwardNetwork(
             backbone.sphere_channels,
             backbone.ffn_hidden_channels,
@@ -61,7 +62,7 @@ class EqV2ScalarHead(nn.Module, HeadInterface):
             node_energy = gp_utils.gather_from_model_parallel_region(node_energy, dim=0)
             print(node_energy.shape)
         energy = torch.zeros(
-            len(data.natoms),
+            [len(data.natoms), self.outdim],
             device=node_energy.device,
             dtype=node_energy.dtype,
         )
