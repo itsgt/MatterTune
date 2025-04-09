@@ -24,7 +24,7 @@ with optional_import_error_message("fairchem"):
     from fairchem.core.common import gp_utils
     from fairchem.core.models.base import GraphData, HeadInterface
     from fairchem.core.models.equiformer_v2.transformer_block import FeedForwardNetwork
-    from fairchem.core.models.equiformer_v2.weight_initialization import eqv2_init_weights
+    from fairchem.core.models.equiformer_v2.equiformer_v2 import eqv2_init_weights
 
 if TYPE_CHECKING:
     from torch_geometric.data.batch import Batch  # type: ignore[reportMissingImports] # noqa
@@ -32,11 +32,10 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-# https://github.com/FAIR-Chem/fairchem/blob/main/src/fairchem/core/models/equiformer_v2/heads/scalar.py
-class EqV2ScalarHead(nn.Module, HeadInterface):
-    def __init__(self, backbone, output_name: str = "energy", reduce: str = "sum"):
+# https://github.com/FAIR-Chem/fairchem/blob/omat24/src/fairchem/core/models/equiformer_v2/equiformer_v2.py
+class EquiformerV2ScalarHead(nn.Module, HeadInterface):
+    def __init__(self, backbone, reduce: str = "sum"):
         super().__init__()
-        self.output_name = output_name
         self.reduce = reduce
         self.avg_num_nodes = backbone.avg_num_nodes
         self.energy_block = FeedForwardNetwork(
@@ -54,25 +53,21 @@ class EqV2ScalarHead(nn.Module, HeadInterface):
         self.apply(partial(eqv2_init_weights, weight_init=backbone.weight_init))
 
     def forward(self, data: Batch, emb: dict[str, torch.Tensor | GraphData]):
-        node_output = self.energy_block(emb["node_embedding"])
-        print(node_output.shape)
-        node_output = node_output.embedding.narrow(1, 0, 1)
-        print(node_output.shape)
+        node_energy = self.energy_block(emb["node_embedding"])
+        node_energy = node_energy.embedding.narrow(1, 0, 1)
         if gp_utils.initialized():
-            node_output = gp_utils.gather_from_model_parallel_region(node_output, dim=0)
-        print(node_output.shape)
-        output = torch.zeros(
+            node_energy = gp_utils.gather_from_model_parallel_region(node_energy, dim=0)
+        energy = torch.zeros(
             len(data.natoms),
-            device=node_output.device,
-            dtype=node_output.dtype,
+            device=node_energy.device,
+            dtype=node_energy.dtype,
         )
-        print(node_output.view(-1).shape)
 
-        output.index_add_(0, data.batch, node_output.view(-1))
+        energy.index_add_(0, data.batch, node_energy.view(-1))
         if self.reduce == "sum":
-            return {self.output_name: output / self.avg_num_nodes}
+            return {"energy": energy / self.avg_num_nodes}
         elif self.reduce == "mean":
-            return {self.output_name: output / data.natoms}
+            return {"energy": energy / data.natoms}
         else:
             raise ValueError(
                 f"reduce can only be sum or mean, user provided: {self.reduce}"
