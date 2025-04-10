@@ -104,7 +104,7 @@ class EqV2AtomVectorHead(nn.Module, HeadInterface):
             dtype=node_energy.dtype,
         )
         for i in range(len(data.natoms)):
-            energy[i, :, :] = node_energy.squeeze(1)[data.batch == data.batch[i].item()]
+            energy[i, :, :] = node_energy.squeeze(1)[data.batch == i]
 
         return {"energy": energy}
 
