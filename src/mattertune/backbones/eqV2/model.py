@@ -73,6 +73,42 @@ class EqV2ScalarHead(nn.Module, HeadInterface):
                 f"reduce can only be sum or mean, user provided: {self.reduce}"
             )
 
+# https://github.com/FAIR-Chem/fairchem/blob/omat24/src/fairchem/core/models/equiformer_v2/equiformer_v2.py
+class EqV2AtomVectorHead(nn.Module, HeadInterface):
+    def __init__(self, backbone, reduce: str = "sum", outdim = 1):
+        super().__init__()
+        self.reduce = reduce
+        self.avg_num_nodes = backbone.avg_num_nodes
+        self.outdim = outdim
+        self.energy_block = FeedForwardNetwork(
+            backbone.sphere_channels,
+            backbone.ffn_hidden_channels,
+            outdim,
+            backbone.lmax_list,
+            backbone.mmax_list,
+            backbone.SO3_grid,
+            backbone.ffn_activation,
+            backbone.use_gate_act,
+            backbone.use_grid_mlp,
+            backbone.use_sep_s2_act,
+        )
+        self.apply(partial(eqv2_init_weights, weight_init=backbone.weight_init))
+
+    def forward(self, data: Batch, emb: dict[str, torch.Tensor | GraphData]):
+        node_energy = self.energy_block(emb["node_embedding"])
+        node_energy = node_energy.embedding.narrow(1, 0, 1)
+        if gp_utils.initialized():
+            node_energy = gp_utils.gather_from_model_parallel_region(node_energy, dim=0)
+        energy = torch.zeros(
+            [len(data.natoms), data.natoms[0].item(), self.outdim],
+            device=node_energy.device,
+            dtype=node_energy.dtype,
+        )
+        for i in range(len(data.natoms)):
+            energy[i, :, :] = node_energy.squeeze(1)[data.batch == data.batch[i].item()]
+
+        return {"energy": energy}
+
 class FAIRChemAtomsToGraphSystemConfig(C.Config):
     """Configuration for converting ASE Atoms to a graph for the FAIRChem model."""
 
@@ -301,6 +337,12 @@ class EqV2BackboneModule(FinetuneModuleBase["BaseData", "Batch", EqV2BackboneCon
                         "Pretrained model does not support general graph properties, only energy, forces, and stresses are supported."
                     )
                 return EqV2ScalarHead(self.backbone, reduce=prop.reduction, outdim = prop.size)
+            case props.AtomInvariantVectorPropertyConfig():
+                if not self.hparams.reset_output_heads:
+                    raise ValueError(
+                        "Pretrained model does not support general graph properties, only energy, forces, and stresses are supported."
+                    )
+                return EqV2AtomVectorHead(self.backbone, reduce=prop.reduction, outdim = prop.size)
             case _:
                 raise ValueError(
                     f"Unsupported property config: {prop} for eqV2"
@@ -393,6 +435,8 @@ class EqV2BackboneModule(FinetuneModuleBase["BaseData", "Batch", EqV2BackboneCon
                 case props.GraphPropertyConfig():
                     pred = head_output["energy"]
                 case props.GraphVectorPropertyConfig():
+                    pred = head_output["energy"]
+                case props.AtomInvariantVectorPropertyConfig():
                     pred = head_output["energy"]
                 case _:
                     assert_never(prop)
