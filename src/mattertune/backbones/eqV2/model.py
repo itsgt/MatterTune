@@ -75,10 +75,12 @@ class EqV2ScalarHead(nn.Module, HeadInterface):
 
 # https://github.com/FAIR-Chem/fairchem/blob/omat24/src/fairchem/core/models/equiformer_v2/equiformer_v2.py
 class EqV2AtomVectorHead(nn.Module, HeadInterface):
-    def __init__(self, backbone, outdim = 1):
+    def __init__(self, backbone, outdim = 1, sphere_channels = None, ffn_hidden_channels = None):
         super().__init__()
         self.avg_num_nodes = backbone.avg_num_nodes
         self.outdim = outdim
+        backbone.sphere_channels = backbone.sphere_channels if sphere_channels is None else sphere_channels
+        backbone.ffn_hidden_channels = backbone.ffn_hidden_channels if ffn_hidden_channels is None else ffn_hidden_channels
         self.energy_block = FeedForwardNetwork(
             backbone.sphere_channels,
             backbone.ffn_hidden_channels,
@@ -341,7 +343,7 @@ class EqV2BackboneModule(FinetuneModuleBase["BaseData", "Batch", EqV2BackboneCon
                     raise ValueError(
                         "Pretrained model does not support general graph properties, only energy, forces, and stresses are supported."
                     )
-                return EqV2AtomVectorHead(self.backbone, outdim = prop.size)
+                return EqV2AtomVectorHead(self.backbone, outdim = prop.size, **(prop.additional_head_settings))
             case _:
                 raise ValueError(
                     f"Unsupported property config: {prop} for eqV2"

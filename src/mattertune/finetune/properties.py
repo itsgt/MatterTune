@@ -184,6 +184,8 @@ class AtomInvariantVectorPropertyConfig(PropertyConfigBase):
     number of spectral components per atom.
     """
 
+    additional_head_settings = {}
+
     @override
     def from_ase_atoms(self, atoms):
         return atoms.info[self.name]
