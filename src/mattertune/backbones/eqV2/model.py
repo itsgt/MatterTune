@@ -99,7 +99,8 @@ class EqV2AtomVectorHead(nn.Module, HeadInterface):
             for i in range(num_grid_mlp_layers):
                 grid_mlp_args.append(nn.Linear(self.energy_block.hidden_channels, 
                                                self.energy_block.hidden_channels, bias=False))
-                grid_mlp_args.append(nn.SiLU())
+                if i != num_grid_mlp_layers - 1:
+                    grid_mlp_args.append(nn.SiLU())
             self.energy_block.grid_mlp = nn.Sequential(*grid_mlp_args)
         self.apply(partial(eqv2_init_weights, weight_init=backbone.weight_init))
 
