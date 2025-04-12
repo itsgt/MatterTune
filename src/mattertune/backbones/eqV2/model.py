@@ -75,7 +75,7 @@ class EqV2ScalarHead(nn.Module, HeadInterface):
 
 # https://github.com/FAIR-Chem/fairchem/blob/omat24/src/fairchem/core/models/equiformer_v2/equiformer_v2.py
 class EqV2AtomVectorHead(nn.Module, HeadInterface):
-    def __init__(self, backbone, outdim = 1, sphere_channels = None, ffn_hidden_channels = None):
+    def __init__(self, backbone, outdim = 1, sphere_channels = None, ffn_hidden_channels = None, num_grid_mlp_layers = None):
         super().__init__()
         self.avg_num_nodes = backbone.avg_num_nodes
         self.outdim = outdim
@@ -93,6 +93,14 @@ class EqV2AtomVectorHead(nn.Module, HeadInterface):
             backbone.use_grid_mlp,
             backbone.use_sep_s2_act,
         )
+        
+        if backbone.use_grid_mlp and num_grid_mlp_layers is not None:
+            grid_mlp_args = []
+            for i in range(num_grid_mlp_layers):
+                grid_mlp_args.append(nn.Linear(self.energy_block.hidden_channels, 
+                                               self.energy_block.hidden_channels, bias=False))
+                grid_mlp_args.append(nn.SiLU())
+            self.energy_block.grid_mlp = nn.Sequential(*grid_mlp_args)
         self.apply(partial(eqv2_init_weights, weight_init=backbone.weight_init))
 
     def forward(self, data: Batch, emb: dict[str, torch.Tensor | GraphData]):
