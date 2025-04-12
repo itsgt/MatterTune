@@ -80,6 +80,7 @@ class EqV2AtomVectorHead(nn.Module, HeadInterface):
         self.avg_num_nodes = backbone.avg_num_nodes
         self.outdim = outdim
         backbone.sphere_channels = backbone.sphere_channels if sphere_channels is None else sphere_channels
+        backbone.sphere_channels_all = backbone.num_resolutions * backbone.sphere_channels
         backbone.ffn_hidden_channels = backbone.ffn_hidden_channels if ffn_hidden_channels is None else ffn_hidden_channels
         self.energy_block = FeedForwardNetwork(
             backbone.sphere_channels,
