@@ -20,104 +20,11 @@ from ...normalization import NormalizationContext
 from ...registry import backbone_registry
 from ...util import optional_import_error_message
 
-with optional_import_error_message("fairchem"):
-    from fairchem.core.common import gp_utils
-    from fairchem.core.models.base import GraphData, HeadInterface
-    from fairchem.core.models.equiformer_v2.transformer_block import FeedForwardNetwork
-    from fairchem.core.models.equiformer_v2.equiformer_v2 import eqv2_init_weights
-
 if TYPE_CHECKING:
     from torch_geometric.data.batch import Batch  # type: ignore[reportMissingImports] # noqa
     from torch_geometric.data.data import BaseData  # type: ignore[reportMissingImports] # noqa
 
 log = logging.getLogger(__name__)
-
-# https://github.com/FAIR-Chem/fairchem/blob/omat24/src/fairchem/core/models/equiformer_v2/equiformer_v2.py
-class EqV2ScalarHead(nn.Module, HeadInterface):
-    def __init__(self, backbone, reduce: str = "sum", outdim = 1):
-        super().__init__()
-        self.reduce = reduce
-        self.avg_num_nodes = backbone.avg_num_nodes
-        self.outdim = outdim
-        self.energy_block = FeedForwardNetwork(
-            backbone.sphere_channels,
-            backbone.ffn_hidden_channels,
-            outdim,
-            backbone.lmax_list,
-            backbone.mmax_list,
-            backbone.SO3_grid,
-            backbone.ffn_activation,
-            backbone.use_gate_act,
-            backbone.use_grid_mlp,
-            backbone.use_sep_s2_act,
-        )
-        self.apply(partial(eqv2_init_weights, weight_init=backbone.weight_init))
-
-    def forward(self, data: Batch, emb: dict[str, torch.Tensor | GraphData]):
-        node_energy = self.energy_block(emb["node_embedding"])
-        node_energy = node_energy.embedding.narrow(1, 0, 1)
-        if gp_utils.initialized():
-            node_energy = gp_utils.gather_from_model_parallel_region(node_energy, dim=0)
-        energy = torch.zeros(
-            [len(data.natoms), self.outdim],
-            device=node_energy.device,
-            dtype=node_energy.dtype,
-        )
-        energy.index_add_(0, data.batch, node_energy.squeeze(1))
-        if self.reduce == "sum":
-            return {"energy": energy / self.avg_num_nodes}
-        elif self.reduce == "mean":
-            return {"energy": energy / data.natoms.unsqueeze(1).repeat([1, self.outdim])}
-        else:
-            raise ValueError(
-                f"reduce can only be sum or mean, user provided: {self.reduce}"
-            )
-
-# https://github.com/FAIR-Chem/fairchem/blob/omat24/src/fairchem/core/models/equiformer_v2/equiformer_v2.py
-class EqV2AtomVectorHead(nn.Module, HeadInterface):
-    def __init__(self, backbone, outdim = 1, sphere_channels = None, ffn_hidden_channels = None, num_grid_mlp_layers = None, mlp_bias = False):
-        super().__init__()
-        self.avg_num_nodes = backbone.avg_num_nodes
-        self.outdim = outdim
-        backbone.sphere_channels = backbone.sphere_channels if sphere_channels is None else sphere_channels
-        backbone.ffn_hidden_channels = backbone.ffn_hidden_channels if ffn_hidden_channels is None else ffn_hidden_channels
-        self.energy_block = FeedForwardNetwork(
-            backbone.sphere_channels,
-            backbone.ffn_hidden_channels,
-            outdim,
-            backbone.lmax_list,
-            backbone.mmax_list,
-            backbone.SO3_grid,
-            backbone.ffn_activation,
-            backbone.use_gate_act,
-            backbone.use_grid_mlp,
-            backbone.use_sep_s2_act,
-        )
-        
-        if backbone.use_grid_mlp and num_grid_mlp_layers is not None:
-            grid_mlp_args = []
-            for i in range(num_grid_mlp_layers):
-                grid_mlp_args.append(nn.Linear(self.energy_block.hidden_channels, 
-                                               self.energy_block.hidden_channels, bias=mlp_bias))
-                if i != num_grid_mlp_layers - 1:
-                    grid_mlp_args.append(nn.SiLU())
-            self.energy_block.grid_mlp = nn.Sequential(*grid_mlp_args)
-        self.apply(partial(eqv2_init_weights, weight_init=backbone.weight_init))
-
-    def forward(self, data: Batch, emb: dict[str, torch.Tensor | GraphData]):
-        node_energy = self.energy_block(emb["node_embedding"])
-        node_energy = node_energy.embedding.narrow(1, 0, 1)
-        if gp_utils.initialized():
-            node_energy = gp_utils.gather_from_model_parallel_region(node_energy, dim=0)
-        energy = torch.zeros(
-            [len(data.natoms), data.natoms[0].item(), self.outdim],
-            device=node_energy.device,
-            dtype=node_energy.dtype,
-        )
-        for i in range(len(data.natoms)):
-            energy[i, :, :] = node_energy.squeeze(1)[data.batch == i]
-
-        return {"energy": energy}
 
 class FAIRChemAtomsToGraphSystemConfig(C.Config):
     """Configuration for converting ASE Atoms to a graph for the FAIRChem model."""
@@ -276,6 +183,98 @@ class EqV2BackboneModule(FinetuneModuleBase["BaseData", "Batch", EqV2BackboneCon
 
     def _create_output_head(self, prop: props.PropertyConfig, pretrained_model):
         from fairchem.core.models.base import HydraModel  # type: ignore[reportMissingImports] # noqa
+        from fairchem.core.common import gp_utils  # type: ignore[reportMissingImports] # noqa
+        from fairchem.core.models.base import GraphData, HeadInterface  # type: ignore[reportMissingImports] # noqa
+        from fairchem.core.models.equiformer_v2.transformer_block import FeedForwardNetwork  # type: ignore[reportMissingImports] # noqa
+        from fairchem.core.models.equiformer_v2.equiformer_v2 import eqv2_init_weights  # type: ignore[reportMissingImports] # noqa
+
+        # https://github.com/FAIR-Chem/fairchem/blob/omat24/src/fairchem/core/models/equiformer_v2/equiformer_v2.py
+        class EqV2ScalarHead(nn.Module, HeadInterface):
+            def __init__(self, backbone, reduce: str = "sum", outdim = 1):
+                super().__init__()
+                self.reduce = reduce
+                self.avg_num_nodes = backbone.avg_num_nodes
+                self.outdim = outdim
+                self.energy_block = FeedForwardNetwork(
+                    backbone.sphere_channels,
+                    backbone.ffn_hidden_channels,
+                    outdim,
+                    backbone.lmax_list,
+                    backbone.mmax_list,
+                    backbone.SO3_grid,
+                    backbone.ffn_activation,
+                    backbone.use_gate_act,
+                    backbone.use_grid_mlp,
+                    backbone.use_sep_s2_act,
+                )
+                self.apply(partial(eqv2_init_weights, weight_init=backbone.weight_init))
+
+            def forward(self, data: Batch, emb: dict[str, torch.Tensor | GraphData]):
+                node_energy = self.energy_block(emb["node_embedding"])
+                node_energy = node_energy.embedding.narrow(1, 0, 1)
+                if gp_utils.initialized():
+                    node_energy = gp_utils.gather_from_model_parallel_region(node_energy, dim=0)
+                energy = torch.zeros(
+                    [len(data.natoms), self.outdim],
+                    device=node_energy.device,
+                    dtype=node_energy.dtype,
+                )
+                energy.index_add_(0, data.batch, node_energy.squeeze(1))
+                if self.reduce == "sum":
+                    return {"energy": energy / self.avg_num_nodes}
+                elif self.reduce == "mean":
+                    return {"energy": energy / data.natoms.unsqueeze(1).repeat([1, self.outdim])}
+                else:
+                    raise ValueError(
+                        f"reduce can only be sum or mean, user provided: {self.reduce}"
+                    )
+
+        # https://github.com/FAIR-Chem/fairchem/blob/omat24/src/fairchem/core/models/equiformer_v2/equiformer_v2.py
+        class EqV2AtomVectorHead(nn.Module, HeadInterface):
+            def __init__(self, backbone, outdim = 1, sphere_channels = None, ffn_hidden_channels = None, num_grid_mlp_layers = None, mlp_bias = False):
+                super().__init__()
+                self.avg_num_nodes = backbone.avg_num_nodes
+                self.outdim = outdim
+                backbone.sphere_channels = backbone.sphere_channels if sphere_channels is None else sphere_channels
+                backbone.ffn_hidden_channels = backbone.ffn_hidden_channels if ffn_hidden_channels is None else ffn_hidden_channels
+                self.energy_block = FeedForwardNetwork(
+                    backbone.sphere_channels,
+                    backbone.ffn_hidden_channels,
+                    outdim,
+                    backbone.lmax_list,
+                    backbone.mmax_list,
+                    backbone.SO3_grid,
+                    backbone.ffn_activation,
+                    backbone.use_gate_act,
+                    backbone.use_grid_mlp,
+                    backbone.use_sep_s2_act,
+                )
+                
+                if backbone.use_grid_mlp and num_grid_mlp_layers is not None:
+                    grid_mlp_args = []
+                    for i in range(num_grid_mlp_layers):
+                        grid_mlp_args.append(nn.Linear(self.energy_block.hidden_channels, 
+                                                    self.energy_block.hidden_channels, bias=mlp_bias))
+                        if i != num_grid_mlp_layers - 1:
+                            grid_mlp_args.append(nn.SiLU())
+                    self.energy_block.grid_mlp = nn.Sequential(*grid_mlp_args)
+                self.apply(partial(eqv2_init_weights, weight_init=backbone.weight_init))
+
+            def forward(self, data: Batch, emb: dict[str, torch.Tensor | GraphData]):
+                node_energy = self.energy_block(emb["node_embedding"])
+                node_energy = node_energy.embedding.narrow(1, 0, 1)
+                if gp_utils.initialized():
+                    node_energy = gp_utils.gather_from_model_parallel_region(node_energy, dim=0)
+                energy = torch.zeros(
+                    [len(data.natoms), data.natoms[0].item(), self.outdim],
+                    device=node_energy.device,
+                    dtype=node_energy.dtype,
+                )
+                for i in range(len(data.natoms)):
+                    energy[i, :, :] = node_energy.squeeze(1)[data.batch == i]
+
+                return {"energy": energy}
+
 
         assert isinstance(pretrained_model, cast(type, HydraModel)), (
             f"Expected model to be of type HydraModel, but got {type(pretrained_model)}"
