@@ -114,8 +114,6 @@ def compute_loss(
 
     match config:
         case MAELossConfig():
-            print(prediction.shape)
-            print(label.shape)
             return F.l1_loss(prediction, label, reduction=config.reduction)
 
         case MAEWithSTDLossConfig():
