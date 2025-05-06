@@ -18,7 +18,7 @@ class MAELossConfig(C.Config):
     """
 
 class MAEWithSTDLossConfig(C.Config):
-    name: Literal["mae"] = "mae"
+    name: Literal["mae_with_std"] = "mae_with_std"
     λ: float = 1.0
     reduction: Literal["mean", "sum"] = "mean"
     """How to reduce the loss values across the batch.
