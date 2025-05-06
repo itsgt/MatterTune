@@ -38,6 +38,7 @@ from mattertune.finetune.loss import L2MAELossConfig as L2MAELossConfig
 from mattertune.finetune.lr_scheduler import LinearLRConfig as LinearLRConfig
 from mattertune.finetune.loss import LossConfig as LossConfig
 from mattertune.finetune.loss import MAELossConfig as MAELossConfig
+from mattertune.finetune.loss import MAEWithSTDLossConfig as MAEWithSTDLossConfig
 from mattertune.finetune.loss import MSELossConfig as MSELossConfig
 from mattertune.finetune.lr_scheduler import MultiStepLRConfig as MultiStepLRConfig
 from mattertune.finetune.base import NormalizerConfig as NormalizerConfig
@@ -75,6 +76,7 @@ __all__ = [
     "LinearLRConfig",
     "LossConfig",
     "MAELossConfig",
+    "MAEWithSTDLossConfig",
     "MSELossConfig",
     "MultiStepLRConfig",
     "NormalizerConfig",
