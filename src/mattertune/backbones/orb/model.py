@@ -200,10 +200,13 @@ class ORBBackboneModule(
                         PropertyDefinition,
                     )
 
+                hidden_dim = prop.additional_head_settings['hidden_channels'] if 'hidden_channels' in prop.additional_head_settings else 256
+                num_layers = prop.additional_head_settings['num_layers'] if 'num_layers' in prop.additional_head_settings else 1
+
                 return NodeHead(
                     latent_dim=256,
-                    num_mlp_layers=1,
-                    mlp_hidden_dim=256,
+                    num_mlp_layers=num_layers,
+                    mlp_hidden_dim=hidden_dim,
                     target=PropertyDefinition(
                         name=prop.name,
                         dim=prop.size,
