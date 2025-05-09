@@ -195,7 +195,7 @@ class ORBBackboneModule(
                 )
             case props.AtomInvariantVectorPropertyConfig():
                 with optional_import_error_message("orb-models"):
-                    from orb_models.forcefield.graph_regressor import EnergyHead  # type: ignore[reportMissingImports] # noqa
+                    from orb_models.forcefield.forcefield_heads import EnergyHead  # type: ignore[reportMissingImports] # noqa
                     from orb_models.forcefield.property_definitions import (  # type: ignore[reportMissingImports] # noqa
                         PropertyDefinition,
                     )
