@@ -99,15 +99,15 @@ class ORBBackboneModule(
         return False
 
     def _create_output_head(self, prop: props.PropertyConfig, pretrained_model):
-        from orb_models.forcefield.graph_regressor import GraphRegressor  # type: ignore[reportMissingImports] # noqa
+        from orb_models.forcefield.direct_regressor import DirectForcefieldRegressor  # type: ignore[reportMissingImports] # noqa
 
-        assert isinstance(pretrained_model, GraphRegressor), (
-            f"Expected a GraphRegressor object, but got {type(pretrained_model)}"
+        assert isinstance(pretrained_model, DirectForcefieldRegressor), (
+            f"Expected a DirectForcefieldRegressor object, but got {type(pretrained_model)}"
         )
         match prop:
             case props.EnergyPropertyConfig():
                 with optional_import_error_message("orb-models"):
-                    from orb_models.forcefield.graph_regressor import EnergyHead  # type: ignore[reportMissingImports] # noqa
+                    from orb_models.forcefield.forcefield_heads import EnergyHead  # type: ignore[reportMissingImports] # noqa
 
                 if not self.hparams.reset_output_heads:
                     return pretrained_model.graph_head
@@ -125,12 +125,12 @@ class ORBBackboneModule(
 
             case props.ForcesPropertyConfig(conservative=False):
                 with optional_import_error_message("orb-models"):
-                    from orb_models.forcefield.graph_regressor import NodeHead  # type: ignore[reportMissingImports] # noqa
+                    from orb_models.forcefield.forcefield_heads import ForceHead  # type: ignore[reportMissingImports] # noqa
 
                 if not self.hparams.reset_output_heads:
                     return pretrained_model.node_head
                 else:
-                    return NodeHead(
+                    return ForceHead(
                         latent_dim=256,
                         num_mlp_layers=1,
                         mlp_hidden_dim=256,
@@ -140,7 +140,7 @@ class ORBBackboneModule(
 
             case props.StressesPropertyConfig(conservative=False):
                 with optional_import_error_message("orb-models"):
-                    from orb_models.forcefield.graph_regressor import GraphHead  # type: ignore[reportMissingImports] # noqa
+                    from orb_models.forcefield.forcefield_heads import GraphHead  # type: ignore[reportMissingImports] # noqa
 
                 if not self.hparams.reset_output_heads:
                     return pretrained_model.stress_head
@@ -155,7 +155,7 @@ class ORBBackboneModule(
 
             case props.GraphPropertyConfig():
                 with optional_import_error_message("orb-models"):
-                    from orb_models.forcefield.graph_regressor import GraphHead  # type: ignore[reportMissingImports] # noqa
+                    from orb_models.forcefield.forcefield_heads import GraphHead  # type: ignore[reportMissingImports] # noqa
                     from orb_models.forcefield.property_definitions import (  # type: ignore[reportMissingImports] # noqa
                         PropertyDefinition,
                     )
@@ -177,7 +177,7 @@ class ORBBackboneModule(
                     )
             case props.GraphVectorPropertyConfig():
                 with optional_import_error_message("orb-models"):
-                    from orb_models.forcefield.graph_regressor import GraphHead  # type: ignore[reportMissingImports] # noqa
+                    from orb_models.forcefield.forcefield_heads import GraphHead  # type: ignore[reportMissingImports] # noqa
                     from orb_models.forcefield.property_definitions import (  # type: ignore[reportMissingImports] # noqa
                         PropertyDefinition,
                     )
@@ -195,26 +195,34 @@ class ORBBackboneModule(
                 )
             case props.AtomInvariantVectorPropertyConfig():
                 with optional_import_error_message("orb-models"):
-                    from orb_models.forcefield.graph_regressor import NodeHead  # type: ignore[reportMissingImports] # noqa
+                    from orb_models.forcefield.graph_regressor import EnergyHead  # type: ignore[reportMissingImports] # noqa
                     from orb_models.forcefield.property_definitions import (  # type: ignore[reportMissingImports] # noqa
                         PropertyDefinition,
                     )
+                    from orb_models.forcefield.nn_util import build_mlp
 
                 hidden_dim = prop.additional_head_settings['hidden_channels'] if 'hidden_channels' in prop.additional_head_settings else 256
                 num_layers = prop.additional_head_settings['num_layers'] if 'num_layers' in prop.additional_head_settings else 1
 
-                return NodeHead(
+                head = EnergyHead(
                     latent_dim=256,
                     num_mlp_layers=num_layers,
                     mlp_hidden_dim=hidden_dim,
-                    target=PropertyDefinition(
-                        name=prop.name,
-                        dim=prop.size,
-                        domain="real",
-                    ),
-                    remove_mean=False,
-                    remove_torque_for_nonpbc_systems=False,
+                    predict_atom_avg=True,
+                    activation='silu',
                 )
+
+                head.mlp = build_mlp(
+                    input_size=256,
+                    hidden_layer_sizes=[hidden_dim] * num_layers,
+                    output_size=prop.size,
+                    activation='silu',
+                    dropout=None,
+                    checkpoint=None,
+                )
+
+                return head
+
             case _:
                 raise ValueError(
                     f"Unsupported property config: {prop} for ORB"
@@ -225,7 +233,7 @@ class ORBBackboneModule(
     def create_model(self):
         with optional_import_error_message("orb-models"):
             from orb_models.forcefield import pretrained  # type: ignore[reportMissingImports] # noqa
-            from orb_models.forcefield.graph_regressor import GraphRegressor  # type: ignore[reportMissingImports] # noqa
+            orb_models.forcefield.direct_regressor import DirectForcefieldRegressor  # type: ignore[reportMissingImports] # noqa
 
         # Get the pre-trained backbone
         # Load the pre-trained model from the ORB package
@@ -243,8 +251,8 @@ class ORBBackboneModule(
         assert pretrained_model is not None, "The pretrained model is not available"
 
         # This should be a `GraphRegressor` object, so we need to extract the backbone.
-        assert isinstance(pretrained_model, GraphRegressor), (
-            f"Expected a GraphRegressor object, but got {type(pretrained_model)}"
+        assert isinstance(pretrained_model, DirectForcefieldRegressor), (
+            f"Expected a DirectForcefieldRegressor object, but got {type(pretrained_model)}"
         )
         backbone = pretrained_model.model
 
