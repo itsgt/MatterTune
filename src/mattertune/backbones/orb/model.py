@@ -233,7 +233,7 @@ class ORBBackboneModule(
     def create_model(self):
         with optional_import_error_message("orb-models"):
             from orb_models.forcefield import pretrained  # type: ignore[reportMissingImports] # noqa
-            orb_models.forcefield.direct_regressor import DirectForcefieldRegressor  # type: ignore[reportMissingImports] # noqa
+            from orb_models.forcefield.direct_regressor import DirectForcefieldRegressor  # type: ignore[reportMissingImports] # noqa
 
         # Get the pre-trained backbone
         # Load the pre-trained model from the ORB package
