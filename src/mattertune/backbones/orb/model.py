@@ -41,7 +41,7 @@ class ORBSystemConfig(C.Config):
         return SystemConfig(
             radius=self.radius,
             max_num_neighbors=self.max_num_neighbors,
-            use_timestep_0=True,
+            #use_timestep_0=True,
         )
 
 
