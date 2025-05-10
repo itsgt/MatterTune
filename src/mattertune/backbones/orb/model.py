@@ -212,7 +212,7 @@ class ORBBackboneModule(
                     #assert False
                 #    """Forward pass (without inverse transformation)."""
                     input = segment_ops.aggregate_nodes(
-                        batch.node_features, batch.n_node, reduction=self.node_aggregation
+                        batch['node_features'], batch['n_node'], reduction=self.node_aggregation
                     )
                     pred = self.mlp(input)
                     return pred.squeeze(-1)
