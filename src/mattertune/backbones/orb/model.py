@@ -321,6 +321,7 @@ class ORBBackboneModule(
         else:
             batch = self.backbone(batch)
         batch = cast("AtomGraphs", batch)
+        print(type(batch))
         
         # merge the node and feature features
         
