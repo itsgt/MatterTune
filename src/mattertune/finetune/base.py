@@ -615,7 +615,7 @@ class FinetuneModuleBase(
         #normalization_ctx = self.create_normalization_context_from_batch(batch)
         #if len(self.normalizers) > 0:
         #    predictions = self.denormalize_predict(predictions, normalization_ctx)
-        num_atoms = batch.n_nodes
+        num_atoms = batch.n_node
         pred_list = []
         for i in range(len(num_atoms)):
             pred_dict = {}
