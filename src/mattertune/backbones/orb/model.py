@@ -312,6 +312,8 @@ class ORBBackboneModule(
     @override
     def model_forward(self, batch, mode: str, return_backbone_output=False):
         
+        print(return_backbone_output)
+
         if mode == "predict":
             self.eval()
         
