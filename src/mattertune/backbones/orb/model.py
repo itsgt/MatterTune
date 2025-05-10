@@ -188,13 +188,13 @@ class ORBBackboneModule(
                     self, node_features: torch.Tensor, batch: base.AtomGraphs
                 ) -> torch.Tensor:
                     """Forward pass (without inverse transformation)."""
-                    input = segment_ops.aggregate_nodes(
-                        node_features, batch.n_node, reduction=self.node_aggregation
-                    )
-                    pred = self.mlp(input)
-                    print(input)
-                    print(input.shape)
-                    print(node_features.shape)
+                    #input = segment_ops.aggregate_nodes(
+                    #    node_features, batch.n_node, reduction=self.node_aggregation
+                    #)
+                    pred = self.mlp(node_features)
+                    #print(input)
+                    #print(input.shape)
+                    #print(node_features.shape)
                     return pred.squeeze(-1)
 
                 EnergyHead.forward = head_forward
