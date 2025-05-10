@@ -223,10 +223,9 @@ class ORBBackboneModule(
                 )
 
                 def head_forward(
-                    self, *args, **kwargs
+                    self, batch
                 ) -> torch.Tensor:
-                    print(args)
-                    print(kwargs)
+                    print(batch)
                     assert False
                 #    """Forward pass (without inverse transformation)."""
                 #    input = segment_ops.aggregate_nodes(
