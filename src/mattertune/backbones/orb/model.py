@@ -178,7 +178,8 @@ class ORBBackboneModule(
                     )
             case props.AtomInvariantVectorPropertyConfig():
                 with optional_import_error_message("orb-models"):
-                    from orb_models.forcefield.nn_util import build_mlp, segment_ops
+                    from orb_models.forcefield import segment_ops
+                    from orb_models.forcefield.nn_util import build_mlp
                 
                 hidden_dim = prop.additional_head_settings['hidden_channels'] if 'hidden_channels' in prop.additional_head_settings else 256
                 num_layers = prop.additional_head_settings['num_layers'] if 'num_layers' in prop.additional_head_settings else 1
