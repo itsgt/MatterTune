@@ -196,28 +196,9 @@ class ORBBackboneModule(
                     pred = self.mlp(node_features)
                     return pred.squeeze(-1)
 
-                def head_normalize(self, x: torch.Tensor, batch: base.AtomGraphs, reference = None, online = None,):
-                    raise NotImplementedError
-                    if reference is None:
-                        reference = self.reference(batch.atomic_numbers, batch.n_node)
-                    x = x - reference
-                    if self.atom_avg:
-                        x = x / batch.n_node
-                    return self.normalizer(x, online=online)
-
-                def head_denormalize(self, x: torch.Tensor, batch: base.AtomGraphs):
-                    raise NotImplementedError
-                    x = self.normalizer.inverse(x).squeeze(-1)
-                    if self.atom_avg:
-                        x = x * batch.n_node
-                    return x + self.reference(batch.atomic_numbers, batch.n_node)
-
-
                 EnergyHead.forward = head_forward
                 EnergyHead.predict = head_predict
-                EnergyHead.normalize = head_normalize
-                EnergyHead.denormalize = head_denormalize
-                
+
                 if not self.hparams.reset_output_heads:
                     raise NotImplementedError
                 else:
