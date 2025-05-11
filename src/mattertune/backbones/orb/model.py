@@ -511,4 +511,4 @@ class ORBBackboneModule(
         if compositions is None:
             raise ValueError("No composition found in the batch.")
         compositions = compositions[:, 1:]  # Remove the zeroth element
-        return NormalizationContext(num_atoms=num_atoms, compositions=compositions)
+        return NormalizationContext(compositions=compositions)
