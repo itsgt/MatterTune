@@ -612,10 +612,10 @@ class FinetuneModuleBase(
             batch, mode="predict", ignore_gpu_batch_transform_error=False
         )
         predictions = output["predicted_properties"]
-        #normalization_ctx = self.create_normalization_context_from_batch(batch)
-        #if len(self.normalizers) > 0:
-        #    predictions = self.denormalize_predict(predictions, normalization_ctx)
-        num_atoms = batch.n_node
+        normalization_ctx = self.create_normalization_context_from_batch(batch)
+        if len(self.normalizers) > 0:
+            predictions = self.denormalize_predict(predictions, normalization_ctx)
+        num_atoms = normalization_ctx.num_atoms
         pred_list = []
         for i in range(len(num_atoms)):
             pred_dict = {}
