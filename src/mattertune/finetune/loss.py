@@ -27,6 +27,15 @@ class MAEWithSTDLossConfig(C.Config):
     - ``"sum"``: The sum of the loss values.
     """
 
+class MAEWithDerivConfig(C.Config):
+    name: Literal["mae_with_std"] = "mae_with_std"
+    λ: float = 0.1
+    reduction: Literal["mean", "sum"] = "mean"
+    """How to reduce the loss values across the batch.
+
+    - ``"mean"``: The mean of the loss values.
+    - ``"sum"``: The sum of the loss values.
+    """
 
 class MSELossConfig(C.Config):
     name: Literal["mse"] = "mse"
@@ -80,7 +89,7 @@ def l2_mae_loss(
 LossConfig = TypeAliasType(
     "LossConfig",
     Annotated[
-        MAELossConfig | MAEWithSTDLossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig,
+        MAELossConfig | MAEWithSTDLossConfig | MAEWithDerivConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig,
         C.Field(discriminator="name"),
     ],
 )
@@ -115,6 +124,12 @@ def compute_loss(
     match config:
         case MAELossConfig():
             return F.l1_loss(prediction, label, reduction=config.reduction)
+
+        case MAEWithDerivConfig():
+            mae_loss = F.l1_loss(prediction, label, reduction=config.reduction)
+            deriv_loss = F.l1_loss(prediction[:, 1:] - prediction[:, :-1], 
+                label[:, 1:] - label[:, :-1], reduction=config.reduction)
+            return mae_loss + config.λ * deriv_loss
 
         case MAEWithSTDLossConfig():
             mae_loss = F.l1_loss(prediction, label, reduction=config.reduction)
