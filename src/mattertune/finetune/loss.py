@@ -148,7 +148,7 @@ def compute_loss(
             return mae_loss + config.λ * std_loss
 
         case MAEWeightedLossConfig():
-            r_w = config.w.repeat((prediction.shape[0], 1))
+            r_w = config.w.to(prediction.device).repeat((prediction.shape[0], 1))
             return F.l1_loss(r_w * prediction, r_w * label, reduction=config.reduction)
 
         case MSELossConfig():
