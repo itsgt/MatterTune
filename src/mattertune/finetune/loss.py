@@ -18,7 +18,7 @@ class MAELossConfig(C.Config):
     """
 
 class MAEWeightedLossConfig(C.Config):
-    name: Literal["mae"] = "mae_weighted"
+    name: Literal["mae_weighted"] = "mae_weighted"
     reduction: Literal["mean", "sum"] = "mean"
     w: torch.Tensor = torch.pow(torch.arange(1.0, 10.0, 0.01), 2) / 100
     """How to reduce the loss values across the batch.
