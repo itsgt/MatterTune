@@ -35,6 +35,7 @@ from mattertune.backbones import M3GNetBackboneConfig as M3GNetBackboneConfig
 from mattertune.backbones.m3gnet import M3GNetGraphComputerConfig as M3GNetGraphComputerConfig
 from mattertune.finetune.loss import MAELossConfig as MAELossConfig
 from mattertune.finetune.loss import MAEWithSTDLossConfig as MAEWithSTDLossConfig
+from mattertune.finetune.loss import MAEWeightedLossConfig as MAEWeightedLossConfig
 from mattertune.finetune.loss import MAEWithDerivConfig as MAEWithDerivConfig
 from mattertune.data import MPDatasetConfig as MPDatasetConfig
 from mattertune.data.mptraj import MPTrajDatasetConfig as MPTrajDatasetConfig
@@ -197,6 +198,7 @@ __all__ = [
     "M3GNetGraphComputerConfig",
     "MAELossConfig",
     "MAEWithSTDLossConfig",
+    "MAEWeightedLossConfig",
     "MAEWithDerivConfig",
     "MPDatasetConfig",
     "MPTrajDatasetConfig",

@@ -17,6 +17,16 @@ class MAELossConfig(C.Config):
     - ``"sum"``: The sum of the loss values.
     """
 
+class MAEWeightedLossConfig(C.Config):
+    name: Literal["mae"] = "mae"
+    reduction: Literal["mean", "sum"] = "mean"
+    w: torch.Tensor = torch.pow(torch.arange(1.0, 10.0, 0.01), 2) / 100
+    """How to reduce the loss values across the batch.
+
+    - ``"mean"``: The mean of the loss values.
+    - ``"sum"``: The sum of the loss values.
+    """
+
 class MAEWithSTDLossConfig(C.Config):
     name: Literal["mae_with_std"] = "mae_with_std"
     λ: float = 1.0
@@ -89,7 +99,7 @@ def l2_mae_loss(
 LossConfig = TypeAliasType(
     "LossConfig",
     Annotated[
-        MAELossConfig | MAEWithSTDLossConfig | MAEWithDerivConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig,
+        MAELossConfig | MAEWithSTDLossConfig | MAEWithDerivConfig | MAEWeightedLossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig,
         C.Field(discriminator="name"),
     ],
 )
@@ -136,6 +146,10 @@ def compute_loss(
             std_loss = torch.mean(torch.abs(torch.std(prediction, dim = 1
                 ) - torch.std(label, dim = 1)))
             return mae_loss + config.λ * std_loss
+
+        case MAEWeightedLossConfig():
+            r_w = config.w.repeat((prediction.shape[0], 1))
+            return F.l1_loss(r_w * prediction, r_w * label, reduction=config.reduction)
 
         case MSELossConfig():
             return F.mse_loss(prediction, label, reduction=config.reduction)
