@@ -424,6 +424,38 @@ class ORBBackboneModule(
     def atoms_to_data(self, atoms, has_labels):
         with optional_import_error_message("orb_models"):
             from orb_models.forcefield import atomic_system  # type: ignore[reportMissingImports] # noqa
+            from orb_models.forcefield.featurization_utilities import _integer_lattice, find_minimal_supercell_translations  # type: ignore[reportMissingImports] # noqa
+            import orb_models
+
+        def construct_minimal_supercell(
+            positions: torch.Tensor,
+            cell: torch.Tensor,
+            cutoff: Optional[Union[float, torch.Tensor]] = None,
+        ) -> Tuple[torch.Tensor, torch.Tensor]:
+            if cell.shape != (3, 3):
+                raise ValueError("Cell must be a 3x3 matrix. Batched PBCs are not supported.")
+            n_positions = len(positions)
+
+            if cutoff is None:
+                # construct a 3x3x3 supercell
+                integer_offsets = _integer_lattice(-1, 1, device=cell.device, dtype=cell.dtype)
+                translations = integer_offsets.mm(cell)  # shape: (27, 3)
+            else:
+                translations, integer_offsets = find_minimal_supercell_translations(
+                    cell, cutoff, N = 4 if self.hparams.system.radius <= 6.0 else 5
+                )
+
+            # broadcasted positions + translations
+            n_offsets = len(integer_offsets)
+            expanded_translations = translations.unsqueeze(0).expand(n_positions, n_offsets, 3)
+            expanded_positions = positions.unsqueeze(1)
+
+            # Shape (n_positions, n_offsets, 3)
+            supercell_positions = expanded_positions + expanded_translations
+
+            return supercell_positions, integer_offsets
+
+        orb_models.forcefield.featurization_utilities.construct_minimal_supercell = construct_minimal_supercell
 
         # This is the dataset transform; we can't use GPU here.
         # NOTE: The 0.4.0 version of `orb_models` doesn't actually fully respect
