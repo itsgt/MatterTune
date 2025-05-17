@@ -38,7 +38,7 @@ class AtomsListDataset(Dataset[ase.Atoms]):
         atoms_list = self.config.atoms_list
         assert isinstance(atoms_list, list), "Expected a list of Atoms objects"
         #shuffle_indices = np.random.permutation(len(atoms_list))
-        self.atoms_list = [atoms_list[i] for i in len(atoms_list)]
+        self.atoms_list = [atoms_list[i] for i in range(len(atoms_list))]
 
     @override
     def __getitem__(self, idx: int) -> ase.Atoms:
