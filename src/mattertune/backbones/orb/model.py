@@ -229,6 +229,28 @@ class ORBBackboneModule(
             from orb_models.forcefield import pretrained
             from orb_models.forcefield.direct_regressor import DirectForcefieldRegressor
             from orb_models.forcefield.conservative_regressor import ConservativeForcefieldRegressor
+            import orb_models
+            from orb_models.forcefield.segment_ops import _broadcast
+
+        # https://github.com/orbital-materials/orb-models/blob/718f3297a4026b042e8fb92e09b8b311adfec8bf/orb_models/forcefield/segment_ops.py#L141
+        def scatter_sum(src: torch.Tensor, index: torch.Tensor, dim: int = -1,
+            out = None, dim_size = None, reduce: str = "sum",):
+            assert reduce == "sum"
+            index = _broadcast(index, src, dim)
+            if out is None:
+                size = list(src.size())
+                if dim_size is not None:
+                    size[dim] = dim_size
+                elif index.numel() == 0:
+                    size[dim] = 0
+                else:
+                    size[dim] = int(index.max()) + 1
+                out = torch.zeros(size, dtype=src.dtype, device=src.device)
+                return out.scatter_add(dim, index, src)
+            else:
+                return out.scatter_add(dim, index, src)
+
+        orb_models.forcefield.segment_ops.scatter_sum = scatter_sum
 
         # Get the pre-trained backbone
         # Load the pre-trained model from the ORB package
