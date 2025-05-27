@@ -248,6 +248,7 @@ class ORBBackboneModule(
                 out = torch.zeros(size, dtype=src.dtype, device=src.device)
                 return out.scatter_add(dim, index, src)
             else:
+                out = out.scatter_add(dim, index, src)
                 return out.scatter_add(dim, index, src)
 
         orb_models.forcefield.segment_ops.scatter_sum = scatter_sum
