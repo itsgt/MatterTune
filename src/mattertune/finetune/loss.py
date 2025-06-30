@@ -17,6 +17,12 @@ class MAELossConfig(C.Config):
     - ``"sum"``: The sum of the loss values.
     """
 
+class MAEMaskedLossConfig(C.config):
+    name: Literal["mae_masked"] = "mae_masked"
+    reduction: Literal["mean", "sum"] = "mean"
+    mask: torch.Tensor = torch.tensor([True for _ in range(10)], 
+        dtype = torch.bool)
+
 class MAEWeightedLossConfig(C.Config):
     name: Literal["mae_weighted"] = "mae_weighted"
     reduction: Literal["mean", "sum"] = "mean"
@@ -99,7 +105,7 @@ def l2_mae_loss(
 LossConfig = TypeAliasType(
     "LossConfig",
     Annotated[
-        MAELossConfig | MAEWithSTDLossConfig | MAEWithDerivConfig | MAEWeightedLossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig,
+        MAELossConfig | MAEWithSTDLossConfig | MAEWithDerivConfig | MAEWeightedLossConfig | MAEMaskedLossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig,
         C.Field(discriminator="name"),
     ],
 )
@@ -134,6 +140,10 @@ def compute_loss(
     match config:
         case MAELossConfig():
             return F.l1_loss(prediction, label, reduction=config.reduction)
+
+        case MAEMaskedLossConfig():
+            return F.l1_loss(prediction[config.mask, :], label[config.mask, :], 
+                reduction=config.reduction)
 
         case MAEWithDerivConfig():
             mae_loss = F.l1_loss(prediction, label, reduction=config.reduction)
