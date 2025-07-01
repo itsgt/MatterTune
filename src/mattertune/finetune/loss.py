@@ -142,7 +142,8 @@ def compute_loss(
             return F.l1_loss(prediction, label, reduction=config.reduction)
 
         case MAEMaskedLossConfig():
-            return F.l1_loss(prediction[config.mask, :], label[config.mask, :], 
+            mask = config.mask.repeat(int(prediction.shape[0] / 80))
+            return F.l1_loss(prediction[mask, :], label[mask, :], 
                 reduction=config.reduction)
 
         case MAEWithDerivConfig():
