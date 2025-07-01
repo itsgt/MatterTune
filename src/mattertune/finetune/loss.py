@@ -17,7 +17,7 @@ class MAELossConfig(C.Config):
     - ``"sum"``: The sum of the loss values.
     """
 
-class MAEMaskedLossConfig(C.config):
+class MAEMaskedLossConfig(C.Config):
     name: Literal["mae_masked"] = "mae_masked"
     reduction: Literal["mean", "sum"] = "mean"
     mask: torch.Tensor = torch.tensor([True for _ in range(10)], 
