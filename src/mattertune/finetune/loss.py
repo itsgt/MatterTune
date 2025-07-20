@@ -20,6 +20,7 @@ class MAELossConfig(C.Config):
 class MAEMaskedLossConfig(C.Config):
     name: Literal["mae_masked"] = "mae_masked"
     reduction: Literal["mean", "sum"] = "mean"
+    natoms: int = 80
     mask: torch.Tensor = torch.tensor([True for _ in range(10)], 
         dtype = torch.bool)
 
@@ -142,7 +143,7 @@ def compute_loss(
             return F.l1_loss(prediction, label, reduction=config.reduction)
 
         case MAEMaskedLossConfig():
-            mask = config.mask.repeat(int(prediction.shape[0] / 80))
+            mask = config.mask.repeat(int(prediction.shape[0] / config.natoms))
             return F.l1_loss(prediction[mask, :], label[mask, :], 
                 reduction=config.reduction)
 
