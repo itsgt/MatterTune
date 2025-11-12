@@ -27,6 +27,9 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+with optional_import_error_message("orb_models"):
+    from orb_models.forcefield.forcefield_heads import EnergyHead
+
 class NodeEnergyHead(EnergyHead):
     def __init__(self, latent_dim, num_mlp_layers, mlp_hidden_dim, level_of_theory,
         predict_atom_avg = True, loss_type = "huber_0.01", dropout = None, checkpoint = None,
