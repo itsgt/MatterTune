@@ -27,6 +27,29 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+class NodeEnergyHead(EnergyHead):
+    def __init__(self, latent_dim, num_mlp_layers, mlp_hidden_dim, level_of_theory,
+        predict_atom_avg = True, loss_type = "huber_0.01", dropout = None, checkpoint = None,
+        online_normalisation = True, activation = "ssp", reference_energy = None,
+    ):
+        super().__init__(latent_dim, num_mlp_layers, mlp_hidden_dim, level_of_theory,
+            predict_atom_avg = predict_atom_avg, loss_type = loss_type, dropout = dropout, 
+            checkpoint = checkpoint, online_normalisation = online_normalisation, 
+            activation = activation, reference_energy = reference_energy)
+
+    def forward(
+        self, node_features: torch.Tensor, batch: base.AtomGraphs
+    ) -> torch.Tensor:
+        """Forward pass (without inverse transformation)."""
+        pred = self.mlp(node_features)
+        return pred.squeeze(-1)
+
+    def predict(
+        self, node_features: torch.Tensor, batch: base.AtomGraphs
+    ) -> torch.Tensor:
+        """Predict energy."""
+        pred = self.mlp(node_features)
+        return pred.squeeze(-1)
 
 class ORBSystemConfig(C.Config):
     """Config controlling how to featurize a system of atoms."""
@@ -183,26 +206,11 @@ class ORBBackboneModule(
                 
                 hidden_dim = prop.additional_head_settings['hidden_channels'] if 'hidden_channels' in prop.additional_head_settings else 256
                 num_layers = prop.additional_head_settings['num_layers'] if 'num_layers' in prop.additional_head_settings else 1
-    
-                def head_forward(
-                    self, node_features: torch.Tensor, batch: base.AtomGraphs
-                ) -> torch.Tensor:
-                    pred = self.mlp(node_features)
-                    return pred.squeeze(-1)
-
-                def head_predict(
-                    self, node_features: torch.Tensor, batch: base.AtomGraphs
-                ) -> torch.Tensor:
-                    pred = self.mlp(node_features)
-                    return pred.squeeze(-1)
-
-                EnergyHead.forward = head_forward
-                EnergyHead.predict = head_predict
 
                 if not self.hparams.reset_output_heads:
                     raise NotImplementedError
                 else:
-                    head = EnergyHead(
+                    head = NodeEnergyHead(
                         latent_dim=256,
                         num_mlp_layers=num_layers,
                         mlp_hidden_dim=hidden_dim,
