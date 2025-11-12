@@ -31,11 +31,11 @@ with optional_import_error_message("orb_models"):
     from orb_models.forcefield.forcefield_heads import EnergyHead
 
 class NodeEnergyHead(EnergyHead):
-    def __init__(self, latent_dim, num_mlp_layers, mlp_hidden_dim, level_of_theory,
+    def __init__(self, latent_dim, num_mlp_layers, mlp_hidden_dim, level_of_theory = None,
         predict_atom_avg = True, loss_type = "huber_0.01", dropout = None, checkpoint = None,
         online_normalisation = True, activation = "ssp", reference_energy = None,
     ):
-        super().__init__(latent_dim, num_mlp_layers, mlp_hidden_dim, level_of_theory,
+        super().__init__(latent_dim, num_mlp_layers, mlp_hidden_dim, level_of_theory = level_of_theory,
             predict_atom_avg = predict_atom_avg, loss_type = loss_type, dropout = dropout, 
             checkpoint = checkpoint, online_normalisation = online_normalisation, 
             activation = activation, reference_energy = reference_energy)
