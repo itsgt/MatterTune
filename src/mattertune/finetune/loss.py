@@ -24,6 +24,10 @@ class MAEMaskedLossConfig(C.Config):
     mask: torch.Tensor = torch.tensor([True for _ in range(10)], 
         dtype = torch.bool)
 
+class MAEAtomAveragedLossConfig(C.Config):
+    name: Literal["mae_atom_avg"] = "mae_atom_avg"
+    reduction: Literal["mean", "sum"] = "mean"
+
 class MAEWeightedLossConfig(C.Config):
     name: Literal["mae_weighted"] = "mae_weighted"
     reduction: Literal["mean", "sum"] = "mean"
@@ -106,7 +110,7 @@ def l2_mae_loss(
 LossConfig = TypeAliasType(
     "LossConfig",
     Annotated[
-        MAELossConfig | MAEWithSTDLossConfig | MAEWithDerivConfig | MAEWeightedLossConfig | MAEMaskedLossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig,
+        MAELossConfig | MAEWithSTDLossConfig | MAEWithDerivConfig | MAEWeightedLossConfig | MAEMaskedLossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig | MAEAtomAveragedLossConfig,
         C.Field(discriminator="name"),
     ],
 )
@@ -146,6 +150,27 @@ def compute_loss(
             mask = config.mask.repeat(int(prediction.shape[0] / config.natoms))
             return F.l1_loss(prediction[mask, :], label[mask, :], 
                 reduction=config.reduction)
+        
+        case MAEAtomAveragedLossConfig():
+            unique_labels, counts = torch.unique_consecutive(
+                label, dim=0, return_counts=True
+            )
+        
+            idx = torch.repeat_interleave(
+                torch.arange(len(counts), device=prediction.device),
+                counts
+            )
+        
+            pred_sums = torch.zeros_like(unique_labels)
+            pred_sums.index_add_(0, idx, prediction)
+        
+            pred_means = pred_sums / counts.unsqueeze(1)
+        
+            return F.l1_loss(
+                pred_means,
+                unique_labels,
+                reduction=config.reduction,
+            )
 
         case MAEWithDerivConfig():
             mae_loss = F.l1_loss(prediction, label, reduction=config.reduction)
