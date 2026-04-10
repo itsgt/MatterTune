@@ -36,6 +36,7 @@ from mattertune.backbones.m3gnet import M3GNetGraphComputerConfig as M3GNetGraph
 from mattertune.finetune.loss import MAELossConfig as MAELossConfig
 from mattertune.finetune.loss import MAEWithSTDLossConfig as MAEWithSTDLossConfig
 from mattertune.finetune.loss import MAEMaskedLossConfig as MAEMaskedLossConfig
+from mattertune.finetune.loss import MAEAtomAveragedLossConfig as MAEAtomAveragedLossConfig
 from mattertune.finetune.loss import MAEWeightedLossConfig as MAEWeightedLossConfig
 from mattertune.finetune.loss import MAEWithDerivConfig as MAEWithDerivConfig
 from mattertune.data import MPDatasetConfig as MPDatasetConfig
