@@ -7,6 +7,8 @@ import torch
 import torch.nn.functional as F
 from typing_extensions import TypeAliasType, assert_never
 
+def smoothness_loss(y):
+    return ((y[:, 2:] - 2*y[:, 1:-1] + y[:, :-2])**2).mean()
 
 class MAELossConfig(C.Config):
     name: Literal["mae"] = "mae"
@@ -31,6 +33,7 @@ class MAEAtomAveragedLossConfig(C.Config):
 class CosAtomAveragedLossConfig(C.Config):
     name: Literal["cos_atom_avg"] = "cos_atom_avg"
     reduction: Literal["mean", "sum"] = "mean"
+    smoothness_λ: float = 1e-3
 
 class MAEWeightedLossConfig(C.Config):
     name: Literal["mae_weighted"] = "mae_weighted"
@@ -199,7 +202,7 @@ def compute_loss(
                 dim=1,
             )
 
-            loss = 1.0 - cos_sim
+            loss = 1.0 - cos_sim + config.smoothness_λ * smoothness_loss(torch.stack(pred_means))
             if config.reduction == "mean":
                 return loss.mean()
             elif config.reduction == "sum":
