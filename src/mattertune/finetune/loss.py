@@ -28,6 +28,10 @@ class MAEAtomAveragedLossConfig(C.Config):
     name: Literal["mae_atom_avg"] = "mae_atom_avg"
     reduction: Literal["mean", "sum"] = "mean"
 
+class CosAtomAveragedLossConfig(C.Config):
+    name: Literal["mae_atom_avg"] = "cos_atom_avg"
+    reduction: Literal["mean", "sum"] = "mean"
+
 class MAEWeightedLossConfig(C.Config):
     name: Literal["mae_weighted"] = "mae_weighted"
     reduction: Literal["mean", "sum"] = "mean"
@@ -172,6 +176,36 @@ def compute_loss(
                 torch.stack(label_means),
                 reduction=config.reduction,
             )
+
+        case CosAtomAveragedLossConfig():
+            unique_labels, counts = torch.unique_consecutive(
+                label[:, -1], return_counts=True)
+
+            label_means = []
+            pred_means = []
+
+            count_so_far = 0
+            for i in range(len(unique_labels)):
+                mask = torch.max(torch.abs(label[count_so_far:(count_so_far + counts[i]), :-1]), axis = 1).values > 0
+                label_mean = torch.mean(label[count_so_far:(count_so_far + counts[i]), :-1][mask, :], axis = 0)
+                pred_mean = torch.mean(prediction[count_so_far:(count_so_far + counts[i]), :-1][mask, :], axis = 0)
+                label_means.append(label_mean)
+                pred_means.append(pred_mean)
+                count_so_far += counts[i]
+        
+            cos_sim = F.cosine_similarity(
+                torch.stack(pred_means),
+                torch.stack(label_means),
+                dim=1,
+            )
+
+            loss = 1.0 - cos_sim
+            if config.reduction == "mean":
+                return loss.mean()
+            elif config.reduction == "sum":
+                return loss.sum()
+            else:  # "none"
+                return loss
 
         case MAEWithDerivConfig():
             mae_loss = F.l1_loss(prediction, label, reduction=config.reduction)
