@@ -114,7 +114,7 @@ def l2_mae_loss(
 LossConfig = TypeAliasType(
     "LossConfig",
     Annotated[
-        MAELossConfig | MAEWithSTDLossConfig | MAEWithDerivConfig | MAEWeightedLossConfig | MAEMaskedLossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig | MAEAtomAveragedLossConfig,
+        MAELossConfig | MAEWithSTDLossConfig | MAEWithDerivConfig | MAEWeightedLossConfig | MAEMaskedLossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig | MAEAtomAveragedLossConfig | CosAtomAveragedLossConfig,
         C.Field(discriminator="name"),
     ],
 )
