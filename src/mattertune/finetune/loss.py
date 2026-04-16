@@ -153,22 +153,23 @@ def compute_loss(
         
         case MAEAtomAveragedLossConfig():
             unique_labels, counts = torch.unique_consecutive(
-                label, dim=0, return_counts=True
-            )
-        
-            idx = torch.repeat_interleave(
-                torch.arange(len(counts), device=prediction.device),
-                counts
-            )
-        
-            pred_sums = torch.zeros_like(unique_labels)
-            pred_sums.index_add_(0, idx, prediction)
-        
-            pred_means = pred_sums / counts.unsqueeze(1)
+                label[:, -1], return_counts=True)
+
+            label_means = []
+            pred_means = []
+
+            count_so_far = 0
+            for i in range(len(unique_labels)):
+                mask = torch.max(torch.abs(label[count_so_far:(count_so_far + counts[i]), :-1]), axis = 1) > 0
+                label_mean = torch.mean(label[count_so_far:(count_so_far + counts[i]), :-1][mask, :], axis = 0)
+                pred_mean = torch.mean(prediction[count_so_far:(count_so_far + counts[i]), :-1][mask, :], axis = 0)
+                label_means.append(label_mean)
+                pred_means.append(pred_mean)
+                count_so_far += counts[i]
         
             return F.l1_loss(
-                pred_means,
-                unique_labels,
+                torch.stack(pred_means),
+                torch.stack(label_means),
                 reduction=config.reduction,
             )
 
