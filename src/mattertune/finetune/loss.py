@@ -29,7 +29,7 @@ class MAEAtomAveragedLossConfig(C.Config):
     reduction: Literal["mean", "sum"] = "mean"
 
 class CosAtomAveragedLossConfig(C.Config):
-    name: Literal["mae_atom_avg"] = "cos_atom_avg"
+    name: Literal["cos_atom_avg"] = "cos_atom_avg"
     reduction: Literal["mean", "sum"] = "mean"
 
 class MAEWeightedLossConfig(C.Config):
