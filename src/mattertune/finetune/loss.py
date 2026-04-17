@@ -8,7 +8,8 @@ import torch.nn.functional as F
 from typing_extensions import TypeAliasType, assert_never
 
 def smoothness_loss(y):
-    return ((y[:, 2:] - 2*y[:, 1:-1] + y[:, :-2])**2).mean()
+    x = y / y.norm(dim=1, keepdim=True).clamp_min(1e-8)
+    return ((x[:, 2:] - 2*x[:, 1:-1] + x[:, :-2])**2).mean()
 
 class MAELossConfig(C.Config):
     name: Literal["mae"] = "mae"
