@@ -211,7 +211,7 @@ def compute_loss(
             sq_mse_loss = F.mse_loss((prediction ** 2).mean(dim = -1), (label ** 2).mean(dim = -1))
             fft_loss = F.mse_loss(pred_fft, label_fft, reduction = config.reduction)
 
-            return config.ws[0] * mse_loss + config.ws[1] * cos_loss + config.ws[2] * sq_mse_loss + ws[3] * fft_loss
+            return config.ws[0] * mse_loss + config.ws[1] * cos_loss + config.ws[2] * sq_mse_loss + config.ws[3] * fft_loss
 
         case CosAtomAveragedLossConfig():
             unique_labels, counts = torch.unique_consecutive(
