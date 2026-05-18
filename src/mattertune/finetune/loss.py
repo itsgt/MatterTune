@@ -202,17 +202,16 @@ def compute_loss(
                 pred_means.append(pred_mean)
                 count_so_far += counts[i]
         
-            cos_sim = F.cosine_similarity(
-                torch.stack(pred_means),
-                torch.stack(label_means),
-                dim=1,
-            )
+            cos_sim = F.cosine_similarity(torch.stack(pred_means), torch.stack(label_means), dim=1)
+            pred_fft = torch.abs(torch.fft.rfft(prediction, dim = -1))
+            label_fft = torch.abs(torch.fft.rfft(label, dim = -1))
 
             cos_loss = (1.0 - cos_sim).mean() if config.reduction == "mean" else (1.0 - cos_sim).sum()
-            mse_loss = F.mse_loss(prediction, label, reduction=config.reduction)
-            sq_mse_loss = F.mse_loss((prediction ** 2).mean(), (label ** 2).mean())
+            mse_loss = F.mse_loss(prediction, label, reduction = config.reduction)
+            sq_mse_loss = F.mse_loss((prediction ** 2).mean(dim = -1), (label ** 2).mean(dim = -1))
+            fft_loss = F.mse_loss(pred_fft, label_fft, reduction = config.reduction)
 
-            return config.ws[0] * mse_loss + config.ws[1] * cos_loss + config.ws[2] * sq_mse_loss
+            return config.ws[0] * mse_loss + config.ws[1] * cos_loss + config.ws[2] * sq_mse_loss + ws[3] * fft_loss
 
         case CosAtomAveragedLossConfig():
             unique_labels, counts = torch.unique_consecutive(
