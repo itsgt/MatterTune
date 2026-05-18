@@ -30,7 +30,7 @@ class MAEMaskedLossConfig(C.Config):
 class EXAFSLossConfig(C.Config):
     name: Literal["exafs"] = "exafs"
     reduction: Literal["mean", "sum"] = "mean"
-    w: float = 0.9
+    ws: list[float] = [0.9, 0.1, 0.1]
 
 class MAEAtomAveragedLossConfig(C.Config):
     name: Literal["mae_atom_avg"] = "mae_atom_avg"
@@ -210,7 +210,9 @@ def compute_loss(
 
             cos_loss = (1.0 - cos_sim).mean() if config.reduction == "mean" else (1.0 - cos_sim).sum()
             mse_loss = F.mse_loss(prediction, label, reduction=config.reduction)
-            return config.w * mse_loss + (1 - config.w) * cos_loss
+            sq_mse_loss = F.mse_loss((pred**2).mean(dim=-1), (target**2).mean(dim=-1))
+
+            return config.ws[0] * mse_loss + config.ws[1] * cos_loss + config.ws[2] * sq_mse_loss
 
         case CosAtomAveragedLossConfig():
             unique_labels, counts = torch.unique_consecutive(
