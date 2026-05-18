@@ -210,7 +210,7 @@ def compute_loss(
 
             cos_loss = (1.0 - cos_sim).mean() if config.reduction == "mean" else (1.0 - cos_sim).sum()
             mse_loss = F.mse_loss(prediction, label, reduction=config.reduction)
-            sq_mse_loss = F.mse_loss((pred**2).mean(dim=-1), (target**2).mean(dim=-1))
+            sq_mse_loss = F.mse_loss((prediction ** 2).mean(), (target ** 2).mean())
 
             return config.ws[0] * mse_loss + config.ws[1] * cos_loss + config.ws[2] * sq_mse_loss
 
