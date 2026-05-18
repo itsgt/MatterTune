@@ -27,6 +27,11 @@ class MAEMaskedLossConfig(C.Config):
     mask: torch.Tensor = torch.tensor([True for _ in range(10)], 
         dtype = torch.bool)
 
+class EXAFSLossConfig(C.Config):
+    name: Literal["exafs"] = "exafs"
+    reduction: Literal["mean", "sum"] = "mean"
+    w: float = 0.9
+
 class MAEAtomAveragedLossConfig(C.Config):
     name: Literal["mae_atom_avg"] = "mae_atom_avg"
     reduction: Literal["mean", "sum"] = "mean"
@@ -118,7 +123,7 @@ def l2_mae_loss(
 LossConfig = TypeAliasType(
     "LossConfig",
     Annotated[
-        MAELossConfig | MAEWithSTDLossConfig | MAEWithDerivConfig | MAEWeightedLossConfig | MAEMaskedLossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig | MAEAtomAveragedLossConfig | CosAtomAveragedLossConfig,
+        MAELossConfig | MAEWithSTDLossConfig | MAEWithDerivConfig | EXAFSLossConfig | MAEWeightedLossConfig | MAEMaskedLossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig | MAEAtomAveragedLossConfig | CosAtomAveragedLossConfig,
         C.Field(discriminator="name"),
     ],
 )
@@ -180,6 +185,32 @@ def compute_loss(
                 torch.stack(label_means),
                 reduction=config.reduction,
             )
+
+        case EXAFSLossConfig():
+            unique_labels, counts = torch.unique_consecutive(
+                label[:, -1], return_counts=True)
+
+            label_means = []
+            pred_means = []
+
+            count_so_far = 0
+            for i in range(len(unique_labels)):
+                mask = torch.max(torch.abs(label[count_so_far:(count_so_far + counts[i]), :-1]), axis = 1).values > 0
+                label_mean = torch.mean(label[count_so_far:(count_so_far + counts[i]), :-1][mask, :], axis = 0)
+                pred_mean = torch.mean(prediction[count_so_far:(count_so_far + counts[i]), :-1][mask, :], axis = 0)
+                label_means.append(label_mean)
+                pred_means.append(pred_mean)
+                count_so_far += counts[i]
+        
+            cos_sim = F.cosine_similarity(
+                torch.stack(pred_means),
+                torch.stack(label_means),
+                dim=1,
+            )
+
+            cos_loss = (1.0 - cos_sim).mean() if config.reduction == "mean" else (1.0 - cos_sim).sum()
+            mse_loss = F.mse_loss(prediction, label, reduction=config.reduction)
+            return config.w * mse_loss + (1 - config.w) * cos_loss
 
         case CosAtomAveragedLossConfig():
             unique_labels, counts = torch.unique_consecutive(
