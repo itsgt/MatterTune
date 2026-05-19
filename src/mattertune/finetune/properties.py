@@ -209,7 +209,7 @@ class EdgeInvariantVectorPropertyConfig(PropertyConfigBase):
     of the molecule.
     """
 
-    type: Literal["atom_invariant_vector"] = "edge_invariant_vector"
+    type: Literal["edge_invariant_vector"] = "edge_invariant_vector"
 
     size: C.PositiveInt
     """The size of the vector property associated with each atom.
