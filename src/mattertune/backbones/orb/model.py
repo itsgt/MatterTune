@@ -68,7 +68,6 @@ class EdgeEnergyHead(EnergyHead):
         self, edge_features: torch.Tensor, batch: base.AtomGraphs
     ) -> torch.Tensor:
         """Forward pass (without inverse transformation)."""
-        print(edge_features.size)
         pred = self.mlp(edge_features)
         return pred.squeeze(-1)
 
@@ -76,7 +75,6 @@ class EdgeEnergyHead(EnergyHead):
         self, edge_features: torch.Tensor, batch: base.AtomGraphs
     ) -> torch.Tensor:
         """Predict energy."""
-        print(edge_features.size)
         pred = self.mlp(edge_features)
         return pred.squeeze(-1)
 
