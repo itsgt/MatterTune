@@ -504,7 +504,7 @@ class ORBBackboneModule(
     @override
     def batch_to_labels(self, batch):
         # If the labels are not present, throw.
-        if not batch.system_targets and not batch.node_targets:
+        if not batch.system_targets and not batch.node_targets and not batch.edge_targets:
             raise ValueError("No labels found in the batch.")
 
         labels: dict[str, torch.Tensor] = {}
@@ -516,6 +516,9 @@ class ORBBackboneModule(
                 case "atom":
                     assert batch.node_targets is not None, "Node targets are None"
                     labels[prop.name] = batch.node_targets[prop.name]
+                case "edge":
+                    assert batch.edge_targets is not None, "Edge targets are None"
+                    labels[prop.name] = batch.edge_targets[prop.name]
                 case _:
                     assert_never(prop_type)
 
@@ -600,6 +603,8 @@ class ORBBackboneModule(
                         )
                     case "atom":
                         atom_graphs.node_targets[prop.name] = value # type: ignore[reportUnboundType]
+                    case "edge":
+                        atom_graphs.edge_targets[prop.name] = value
                     case _:
                         assert_never(prop_type)
 
