@@ -149,7 +149,7 @@ def compute_loss(
         The computed loss value.
     """
     if isinstance(config, EXAFSLossConfig):
-        continue 
+        pass 
     else:
         try:
             prediction = prediction.reshape(label.shape)
