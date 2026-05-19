@@ -5,6 +5,7 @@ from mattertune.finetune.properties import ForcesPropertyConfig as ForcesPropert
 from mattertune.finetune.properties import GraphPropertyConfig as GraphPropertyConfig
 from mattertune.finetune.properties import GraphVectorPropertyConfig as GraphVectorPropertyConfig
 from mattertune.finetune.properties import AtomInvariantVectorPropertyConfig as AtomInvariantVectorPropertyConfig
+from mattertune.finetune.properties import EdgeInvariantVectorPropertyConfig as EdgeInvariantVectorPropertyConfig
 from mattertune.finetune.properties import PropertyConfigBase as PropertyConfigBase
 from mattertune.finetune.properties import StressesPropertyConfig as StressesPropertyConfig
 
@@ -24,6 +25,7 @@ __all__ = [
     "GraphPropertyConfig",
     "GraphVectorPropertyConfig",
     "AtomInvariantVectorPropertyConfig",
+    "EdgeInvariantVectorPropertyConfig",
     "LossConfig",
     "PropertyConfig",
     "PropertyConfigBase",

@@ -106,7 +106,7 @@ class PropertyConfigBase(C.Config, ABC):
         """
 
     @abstractmethod
-    def property_type(self) -> Literal["system", "atom"]: ...
+    def property_type(self) -> Literal["system", "atom", "edge"]: ...
 
     def prepare_value_for_ase_calculator(self, value: float | np.ndarray):
         """Convert the property value to a format that can be used by the ASE calculator."""
@@ -197,6 +197,41 @@ class AtomInvariantVectorPropertyConfig(PropertyConfigBase):
     @override
     def property_type(self):
         return "atom"
+
+class EdgeInvariantVectorPropertyConfig(PropertyConfigBase):
+    """Configuration class for atom-level vector properties that are invariant to rotations.
+
+    This class handles properties that are associated with individual atoms and remain unchanged
+    under molecular rotations (rotational invariance). Examples include atomic spectra or other
+    per-atom vector quantities that don't transform under rotation.
+
+    This is distinct from equivariant properties like forces, which transform with the rotation
+    of the molecule.
+    """
+
+    type: Literal["atom_invariant_vector"] = "edge_invariant_vector"
+
+    size: C.PositiveInt
+    """The size of the vector property associated with each atom.
+
+    This parameter specifies the dimensionality of the vector property for each atom
+    in the system. For example, if representing atomic spectra, this would be the
+    number of spectral components per atom.
+    """
+
+    additional_head_settings: dict[str, int] = {}
+
+    @override
+    def from_ase_atoms(self, atoms):
+        return atoms.info[self.name]
+
+    @override
+    def ase_calculator_property_name(self):
+        return None
+
+    @override
+    def property_type(self):
+        return "edge"
 
 class EnergyPropertyConfig(PropertyConfigBase):
     type: Literal["energy"] = "energy"
@@ -308,7 +343,8 @@ PropertyConfig = TypeAliasType(
         | ForcesPropertyConfig
         | StressesPropertyConfig
         | GraphVectorPropertyConfig
-        | AtomInvariantVectorPropertyConfig,
+        | AtomInvariantVectorPropertyConfig
+        | EdgeInvariantVectorPropertyConfig,
         C.Field(
             description="The configuration for the property.",
             discriminator="type",

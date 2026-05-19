@@ -54,6 +54,32 @@ class NodeEnergyHead(EnergyHead):
         pred = self.mlp(node_features)
         return pred.squeeze(-1)
 
+class EdgeEnergyHead(EnergyHead):
+    def __init__(self, latent_dim, num_mlp_layers, mlp_hidden_dim, level_of_theory = None,
+        predict_atom_avg = True, loss_type = "huber_0.01", dropout = None, checkpoint = None,
+        online_normalisation = True, activation = "ssp", reference_energy = None,
+    ):
+        super().__init__(latent_dim, num_mlp_layers, mlp_hidden_dim, level_of_theory = level_of_theory,
+            predict_atom_avg = predict_atom_avg, loss_type = loss_type, dropout = dropout, 
+            checkpoint = checkpoint, online_normalisation = online_normalisation, 
+            activation = activation, reference_energy = reference_energy)
+
+    def forward(
+        self, edge_features: torch.Tensor, batch: base.AtomGraphs
+    ) -> torch.Tensor:
+        """Forward pass (without inverse transformation)."""
+        print(edge_features.size)
+        pred = self.mlp(edge_features)
+        return pred.squeeze(-1)
+
+    def predict(
+        self, edge_features: torch.Tensor, batch: base.AtomGraphs
+    ) -> torch.Tensor:
+        """Predict energy."""
+        print(edge_features.size)
+        pred = self.mlp(edge_features)
+        return pred.squeeze(-1)
+
 class ORBSystemConfig(C.Config):
     """Config controlling how to featurize a system of atoms."""
 
@@ -228,6 +254,32 @@ class ORBBackboneModule(
                     )
                 
                 return head
+            case props.EdgeInvariantVectorPropertyConfig():
+                with optional_import_error_message("orb-models"):
+                    from orb_models.forcefield import segment_ops
+                    from orb_models.forcefield.nn_util import build_mlp
+                
+                hidden_dim = prop.additional_head_settings['hidden_channels'] if 'hidden_channels' in prop.additional_head_settings else 256
+                num_layers = prop.additional_head_settings['num_layers'] if 'num_layers' in prop.additional_head_settings else 1
+
+                if not self.hparams.reset_output_heads:
+                    raise NotImplementedError
+                else:
+                    head = EdgeEnergyHead(
+                        latent_dim=256,
+                        num_mlp_layers=num_layers,
+                        mlp_hidden_dim=hidden_dim,
+                    )
+                    head.mlp = build_mlp(
+                        input_size=256,
+                        hidden_layer_sizes=[hidden_dim] * num_layers,
+                        output_size=prop.size,
+                        activation='silu',
+                        dropout=None,
+                        checkpoint=None,
+                    )
+                
+                return head
             case _:
                 raise ValueError(
                     f"Unsupported property config: {prop} for ORB"
@@ -350,6 +402,7 @@ class ORBBackboneModule(
         # Run the backbone
         out = self.backbone(batch)
         node_features = out["node_features"]
+        edge_features = out["edge_features"]
         
         # Feed the backbone output to the output heads
         predicted_properties: dict[str, torch.Tensor] = {}
@@ -363,18 +416,32 @@ class ORBBackboneModule(
                 "This should not happen, please report this."
             )
             if head is not None:
-                res = head(node_features, batch)
-                if isinstance(res, torch.Tensor):
-                    predicted_properties[name] = res
-                elif isinstance(res, dict):
-                    if mode!="predict":
-                        predicted_properties[name] = res[name]
+                if isinstance(head, EdgeEnergyHead):
+                    res = head(edge_features, batch)
+                    if isinstance(res, torch.Tensor):
+                        predicted_properties[name] = res
+                    elif isinstance(res, dict):
+                        if mode!="predict":
+                            predicted_properties[name] = res[name]
+                        else:
+                            predicted_properties.update(res)
                     else:
-                        predicted_properties.update(res)
-                else:
-                    raise ValueError(
-                        f"Invalid output from head {head}: {res}"
-                    )
+                        raise ValueError(
+                            f"Invalid output from head {head}: {res}"
+                        )
+                else: 
+                    res = head(node_features, batch)
+                    if isinstance(res, torch.Tensor):
+                        predicted_properties[name] = res
+                    elif isinstance(res, dict):
+                        if mode!="predict":
+                            predicted_properties[name] = res[name]
+                        else:
+                            predicted_properties.update(res)
+                    else:
+                        raise ValueError(
+                            f"Invalid output from head {head}: {res}"
+                        )
             else:
                 assert isinstance(prop, props.ForcesPropertyConfig) or isinstance(prop, props.StressesPropertyConfig), (
                     f"Conservative Property {name} is not a force or stress property."
