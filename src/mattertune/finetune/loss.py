@@ -275,3 +275,64 @@ def compute_loss(
 
         case _:
             assert_never(config)
+
+def compute_loss_with_batch(
+    config: LossConfig,
+    prediction: torch.Tensor,
+    batch, 
+    label: torch.Tensor,
+) -> torch.Tensor:
+    """
+    Compute the loss value given the model output, ``prediction``,
+    and the target label, ``label``.
+
+    The loss value should be a scalar tensor.
+
+    Args:
+        config: The loss configuration.
+        prediction: The model output.
+        label: The target label.
+
+    Returns:
+        The computed loss value.
+    """
+    if isinstance(config, EXAFSLossConfig):
+        pass 
+    else:
+        try:
+            prediction = prediction.reshape(label.shape)
+        except RuntimeError:
+            raise ValueError(
+                f"Prediction shape {prediction.shape} does not match ground truth shape {label.shape}"
+            )
+
+    match config:
+        case EXAFSLossConfig():
+            unique_labels, counts = torch.unique_consecutive(
+                label[:, -1], return_counts=True)
+
+            label_means = []
+            pred_means = []
+
+            count_so_far = 0
+            for i in range(len(unique_labels)):
+                mask = torch.max(torch.abs(label[count_so_far:(count_so_far + counts[i]), :-1]), axis = 1).values > 0
+                label_mean = torch.mean(label[count_so_far:(count_so_far + counts[i]), :-1][mask, :], axis = 0)
+                pred_mean = torch.mean(prediction[count_so_far:(count_so_far + counts[i]), :-1][mask, :], axis = 0)
+                label_means.append(label_mean)
+                pred_means.append(pred_mean)
+                count_so_far += counts[i]
+        
+            cos_sim = F.cosine_similarity(torch.stack(pred_means), torch.stack(label_means), dim=1)
+            pred_fft = torch.abs(torch.fft.rfft(prediction, dim = -1))
+            label_fft = torch.abs(torch.fft.rfft(label, dim = -1))
+
+            cos_loss = (1.0 - cos_sim).mean() if config.reduction == "mean" else (1.0 - cos_sim).sum()
+            mse_loss = F.mse_loss(prediction, label, reduction = config.reduction)
+            sq_mse_loss = F.mse_loss((prediction ** 2).mean(dim = -1), (label ** 2).mean(dim = -1))
+            fft_loss = F.mse_loss(pred_fft, label_fft, reduction = config.reduction)
+
+            return config.ws[0] * mse_loss + config.ws[1] * cos_loss + config.ws[2] * sq_mse_loss + config.ws[3] * fft_loss
+
+        case _:
+            assert_never(config)

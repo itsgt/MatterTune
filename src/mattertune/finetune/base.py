@@ -17,7 +17,7 @@ from typing_extensions import NotRequired, TypedDict, TypeVar, Unpack, cast, ove
 
 from ..normalization import ComposeNormalizers, NormalizationContext, NormalizerConfig
 from .loader import DataLoaderKwargs, create_dataloader
-from .loss import compute_loss
+from .loss import compute_loss, compute_loss_with_batch
 from .lr_scheduler import LRSchedulerConfig, ReduceOnPlateauConfig, create_lr_scheduler
 from .metrics import FinetuneMetrics
 from .optimizer import OptimizerConfig, create_optimizer
@@ -526,6 +526,36 @@ class FinetuneModuleBase(
         if log:
             self.log(f"{log_prefix}total_loss", loss)
         return loss
+    
+    def _compute_loss_with_batch(
+        self,
+        predictions: dict[str, torch.Tensor],
+        labels: dict[str, torch.Tensor],
+        batch,
+        log: bool = True,
+        log_prefix: str = "",
+    ):
+        losses: list[torch.Tensor] = []
+        for prop in self.hparams.properties:
+            # Get the target and prediction
+            prediction = predictions[prop.name]
+            label = labels[prop.name]
+
+            # Compute the loss
+            loss = compute_loss_with_batch(prop.loss, prediction, label, batch) * prop.loss_coefficient
+
+            # Log the loss
+            if log:
+                self.log(f"{log_prefix}{prop.name}_loss", loss)
+            losses.append(loss)
+
+        # Sum the losses
+        loss = cast(torch.Tensor, sum(losses))
+
+        # Log the total loss & return
+        if log:
+            self.log(f"{log_prefix}total_loss", loss)
+        return loss
 
     def _common_step(
         self,
@@ -564,13 +594,28 @@ class FinetuneModuleBase(
         for key, value in labels.items():
             labels[key] = value.contiguous()
 
-        # Compute loss
-        loss = self._compute_loss(
-            predictions,
-            labels,
-            log=log,
-            log_prefix=f"{mode}/",
-        )
+        edge_loss = False
+        for prop in self.hparams.properties:
+            if prop.name == "edge_props":
+                edge_loss = True
+
+        if edge_loss:
+            # Compute loss
+            loss = self._compute_loss_with_batch(
+                predictions,
+                labels,
+                batch,
+                log=log,
+                log_prefix=f"{mode}/",
+            )
+        edge:
+            # Compute loss
+            loss = self._compute_loss(
+                predictions,
+                labels,
+                log=log,
+                log_prefix=f"{mode}/",
+            )
 
         if len(self.normalizers) > 0:
             predictions, labels = self.denormalize(predictions, labels, normalization_ctx) # type: ignore
