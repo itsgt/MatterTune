@@ -608,7 +608,7 @@ class FinetuneModuleBase(
                 log=log,
                 log_prefix=f"{mode}/",
             )
-        edge:
+        else:
             # Compute loss
             loss = self._compute_loss(
                 predictions,
