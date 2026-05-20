@@ -276,8 +276,8 @@ def compute_loss(
 def compute_loss_with_batch(
     config: LossConfig,
     prediction: torch.Tensor,
-    batch, 
     label: torch.Tensor,
+    batch,
 ) -> torch.Tensor:
     """
     Compute the loss value given the model output, ``prediction``,
