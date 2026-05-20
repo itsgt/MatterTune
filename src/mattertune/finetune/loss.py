@@ -296,10 +296,11 @@ def compute_loss_with_batch(
 
     match config:
         case EXAFSLossConfig():
-            raise ValueError(f'Edge Feat. Vectors: size {batch.edge_features["vectors"].size} values {str(batch.edge_features["vectors"])[:100]}\n' + 
-                f'Edge Feat. Unit Shifts: size {batch.edge_features["unit_shifts"].size} values {str(batch.edge_features["unit_shifts"])[:100]}\n' + 
-                f'Senders: size {batch.senders.size} values {str(batch.senders)[:100]}\n' + 
-                f'Receivers: size {batch.receivers.size} values {str(batch.receivers)[:100]}\n'
+            raise ValueError(f'Edge Feat. Vectors: size {batch.edge_features["vectors"].size()} values {str(batch.edge_features["vectors"])}\n' + 
+                f'Edge Feat. Unit Shifts: size {batch.edge_features["unit_shifts"].size()} values {str(batch.edge_features["unit_shifts"])}\n' + 
+                f'Senders: size {batch.senders.size()} values {str(batch.senders)}\n' + 
+                f'Receivers: size {batch.receivers.size()} values {str(batch.receivers)}\n' + 
+                f'Prediction: size {prediction.size()} values {str(prediction)}\n'
             ) 
 
         case _:
