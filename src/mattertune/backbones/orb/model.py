@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 
 with optional_import_error_message("orb_models"):
     from orb_models.forcefield.forcefield_heads import EnergyHead
+    from orb_models.forcefield.base import AtomGraphs
 
 class NodeEnergyHead(EnergyHead):
     def __init__(self, latent_dim, num_mlp_layers, mlp_hidden_dim, level_of_theory = None,
