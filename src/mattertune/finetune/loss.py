@@ -279,7 +279,7 @@ def compute_loss(
         case L2MAELossConfig():
             return l2_mae_loss(prediction, label, reduction=config.reduction)
 
-        case NoLossConfig()
+        case NoLossConfig():
             return 0 * F.l1_loss(prediction, label, reduction=config.reduction)
 
         case _:
