@@ -31,6 +31,10 @@ class EXAFSLossConfig(C.Config):
     name: Literal["exafs"] = "exafs"
     reduction: Literal["mean", "sum"] = "mean"
     ws: list[float] = [0.9, 0.1, 0.1]
+    exp_spectra: torch.Tensor = torch.tensor([0.])
+    abs_inds: list[torch.Tensor] = [torch.tensor([0.])]
+    ss_paths_info = None
+     
 
 class MAEAtomAveragedLossConfig(C.Config):
     name: Literal["mae_atom_avg"] = "mae_atom_avg"
@@ -128,6 +132,53 @@ def l2_mae_loss(
         case _:
             assert_never(reduction)
 
+def interp_linear_batch(x, xk, yk):
+    x = np.asarray(x)
+    xk = np.asarray(xk)
+    yk = np.asarray(yk)
+
+    m, n = yk.shape
+    nk = x.size
+
+    # interval indices
+    idx = np.searchsorted(xk, x, side="right") - 1
+    idx = np.clip(idx, 0, n - 2)
+
+    x0 = xk[idx]
+    x1 = xk[idx + 1]
+
+    w = (x - x0) / (x1 - x0)   # (nk,)
+
+    # broadcasted gather
+    y0 = yk[:, idx]            # (m, nk)
+    y1 = yk[:, idx + 1]        # (m, nk)
+
+    return y0 + (y1 - y0) * w
+
+# https://github.com/xraypy/xraylarch/blob/6a68e776c3b10625bcda556432f45a4ddb6b18d1/larch/xafs/feffdat.py#L632
+def calc_chi_linear_vectorized(q, s02, deltar, sigma2, third, fourth,
+    amp, pha, rep, lam, reff, degen, ei):
+    reff   = reff[:,   None]
+    degen  = degen[:,  None]
+    deltar = deltar[:, None]
+    sigma2 = sigma2[:, None]
+    third  = third[:,  None]
+    fourth = fourth[:, None]
+
+    pp = (rep + 1j / lam) ** 2 + 1j * ei * ETOK
+    p  = np.sqrt(pp)
+
+    cchi = np.exp(
+        -2 * reff * p.imag
+        - 2 * pp * (sigma2 - pp * fourth / 3.0)
+        + 1j * (
+            2 * q * reff
+            + pha
+            + 2 * p *(deltar - 2 * sigma2 / reff - 2 * pp * third / 3.0)
+        )
+    ) * degen * s02 * amp / (q * (reff + deltar) ** 2)
+    return cchi.imag
+
 
 LossConfig = TypeAliasType(
     "LossConfig",
@@ -194,33 +245,6 @@ def compute_loss(
                 torch.stack(label_means),
                 reduction=config.reduction,
             )
-
-        case EXAFSLossConfig():
-            unique_labels, counts = torch.unique_consecutive(
-                label[:, -1], return_counts=True)
-
-            label_means = []
-            pred_means = []
-
-            count_so_far = 0
-            for i in range(len(unique_labels)):
-                mask = torch.max(torch.abs(label[count_so_far:(count_so_far + counts[i]), :-1]), axis = 1).values > 0
-                label_mean = torch.mean(label[count_so_far:(count_so_far + counts[i]), :-1][mask, :], axis = 0)
-                pred_mean = torch.mean(prediction[count_so_far:(count_so_far + counts[i]), :-1][mask, :], axis = 0)
-                label_means.append(label_mean)
-                pred_means.append(pred_mean)
-                count_so_far += counts[i]
-        
-            cos_sim = F.cosine_similarity(torch.stack(pred_means), torch.stack(label_means), dim=1)
-            pred_fft = torch.abs(torch.fft.rfft(prediction, dim = -1))
-            label_fft = torch.abs(torch.fft.rfft(label, dim = -1))
-
-            cos_loss = (1.0 - cos_sim).mean() if config.reduction == "mean" else (1.0 - cos_sim).sum()
-            mse_loss = F.mse_loss(prediction, label, reduction = config.reduction)
-            sq_mse_loss = F.mse_loss((prediction ** 2).mean(dim = -1), (label ** 2).mean(dim = -1))
-            fft_loss = F.mse_loss(pred_fft, label_fft, reduction = config.reduction)
-
-            return config.ws[0] * mse_loss + config.ws[1] * cos_loss + config.ws[2] * sq_mse_loss + config.ws[3] * fft_loss
 
         case CosAtomAveragedLossConfig():
             unique_labels, counts = torch.unique_consecutive(
@@ -308,6 +332,23 @@ def compute_loss_with_batch(
 
     match config:
         case EXAFSLossConfig():
+            tot_edge = 0
+            for i, struct_i in label:
+                n_edge = batch.n_edge[i]
+                edge_vecs = batch.edge_features['vectors'][tot_edge:(tot_edge + n_edge)]
+                edge_preds = prediction[tot_edge:(tot_edge + n_edge)]
+                edge_Reffs = torch.linalg.norm(edge_vecs, dim = 0)
+                receivers = batch.receivers[tot_edge:(tot_edge + n_edge)]
+                senders = batch.senders[tot_edge:(tot_edge + n_edge)]
+                scatterer_Zs = batch.node_features['atomic numbers'][receivers]
+                for abs_i in config.abs_inds[struct_i]:
+                    abs_Reffs = edge_Reffs[senders == abs_i]
+                    abs_Zs = scatterer_Zs[senders == abs_i]
+                    abs_preds = edge_preds[senders == abs_i]
+
+
+
+
             raise ValueError(batch)
             raise ValueError(f'Edge Feat. Vectors: size {batch.edge_features["vectors"].size()} values {str(batch.edge_features["vectors"])}\n' + 
                 f'Edge Feat. Unit Shifts: size {batch.edge_features["unit_shifts"].size()} values {str(batch.edge_features["unit_shifts"])}\n' + 
