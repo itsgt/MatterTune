@@ -495,7 +495,7 @@ class ORBBackboneModule(
 
         batch = batch_graphs(data_list)
         
-        if "edge_props" in data_list[0].info.keys():
+        if not isinstance(data_list[0], AtomGraphs) and "edge_props" in data_list[0].info.keys():
             additional_props = {}
             for prop in data_list[0].info.keys():
                 if prop != "edge_props":
