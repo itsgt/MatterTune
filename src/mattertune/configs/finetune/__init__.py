@@ -46,6 +46,7 @@ from mattertune.finetune.loss import CosAtomAveragedLossConfig as CosAtomAverage
 from mattertune.finetune.loss import EXAFSLossConfig as EXAFSLossConfig
 from mattertune.finetune.loss import MAEWeightedLossConfig as MAEWeightedLossConfig
 from mattertune.finetune.loss import MAEWithDerivConfig as MAEWithDerivConfig
+from mattertune.finetune.loss import NoLossConfig as NoLossConfig
 from mattertune.finetune.loss import MSELossConfig as MSELossConfig
 from mattertune.finetune.lr_scheduler import MultiStepLRConfig as MultiStepLRConfig
 from mattertune.finetune.base import NormalizerConfig as NormalizerConfig
@@ -88,6 +89,7 @@ __all__ = [
     "MAEMaskedLossConfig",
     "MAEWeightedLossConfig",
     "MAEWithDerivConfig",
+    "NoLossConfig",
     "MSELossConfig",
     "MultiStepLRConfig",
     "NormalizerConfig",

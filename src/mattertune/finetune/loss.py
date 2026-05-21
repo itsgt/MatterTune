@@ -80,6 +80,15 @@ class MSELossConfig(C.Config):
     - ``"sum"``: The sum of the loss values.
     """
 
+class NoLossConfig(C.Config):
+    name: Literal["none"] = "none"
+    reduction: Literal["mean", "sum"] = "mean"
+    """How to reduce the loss values across the batch.
+
+    - ``"mean"``: The mean of the loss values.
+    - ``"sum"``: The sum of the loss values.
+    """
+
 
 class HuberLossConfig(C.Config):
     name: Literal["huber"] = "huber"
@@ -123,7 +132,7 @@ def l2_mae_loss(
 LossConfig = TypeAliasType(
     "LossConfig",
     Annotated[
-        MAELossConfig | MAEWithSTDLossConfig | MAEWithDerivConfig | EXAFSLossConfig | MAEWeightedLossConfig | MAEMaskedLossConfig | MSELossConfig | HuberLossConfig | L2MAELossConfig | MAEAtomAveragedLossConfig | CosAtomAveragedLossConfig,
+        MAELossConfig | MAEWithSTDLossConfig | MAEWithDerivConfig | EXAFSLossConfig | MAEWeightedLossConfig | MAEMaskedLossConfig | MSELossConfig | NoLossConfig | HuberLossConfig | L2MAELossConfig | MAEAtomAveragedLossConfig | CosAtomAveragedLossConfig,
         C.Field(discriminator="name"),
     ],
 )
@@ -269,6 +278,9 @@ def compute_loss(
 
         case L2MAELossConfig():
             return l2_mae_loss(prediction, label, reduction=config.reduction)
+
+        case NoLossConfig()
+            return 0 * F.l1_loss(prediction, label, reduction=config.reduction)
 
         case _:
             assert_never(config)
