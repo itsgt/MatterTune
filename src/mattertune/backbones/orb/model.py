@@ -493,7 +493,16 @@ class ORBBackboneModule(
         with optional_import_error_message("orb_models"):
             from orb_models.forcefield.base import batch_graphs  # type: ignore[reportMissingImports] # noqa
 
-        return batch_graphs(data_list)
+        batch = batch_graphs(data_list)
+        
+        if "edge_props" in data_list[0].info.keys():
+            additional_props = {}
+            for prop in data_list[0].info.keys():
+                if prop != "edge_props":
+                    additional_props[prop] = [atoms.info[prop] for atoms in data_list]    
+        
+            batch.additional_props = additional_props
+        return batch
 
     @override
     def gpu_batch_transform(self, batch):
