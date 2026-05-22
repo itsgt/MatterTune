@@ -147,7 +147,12 @@ ETOK = 0.262465831
 # https://github.com/xraypy/xraylarch/blob/6a68e776c3b10625bcda556432f45a4ddb6b18d1/larch/xafs/feffdat.py#L632
 def calc_chi(q, deltar, sigma2, third, fourth, amp, pha, rep, lam, reff, ei):
     pp = (rep + 1j / lam) ** 2 + 1j * ei * ETOK
-    p  = torch.sqrt(pp)
+    check(pp.real, "pp.real")
+    check(pp.imag, "pp.imag")
+
+    p = torch.sqrt(pp)
+    check(p.real, "p.real")
+    check(p.imag, "p.imag")
 
     cchi = torch.exp(
         -2 * reff * p.imag
@@ -290,6 +295,10 @@ def compute_loss(
         case _:
             assert_never(config)
 
+def check(tensor, name):
+    if torch.isnan(tensor).any() or torch.isinf(tensor).any():
+        raise RuntimeError(f"{name} has NaNs/Infs")
+
 def compute_loss_with_batch(
     config: LossConfig,
     prediction: torch.Tensor,
@@ -315,6 +324,7 @@ def compute_loss_with_batch(
                 n_edge = batch.n_edge[i]
                 edge_vecs = batch.edge_features["vectors"][tot_edge:(tot_edge + n_edge)]
                 edge_preds = prediction[tot_edge:(tot_edge + n_edge)]
+                check(edge_preds, "edge_preds")
                 edge_Reffs = torch.linalg.norm(edge_vecs, dim = 1)
                 receivers = batch.receivers[tot_edge:(tot_edge + n_edge)]
                 senders = batch.senders[tot_edge:(tot_edge + n_edge)]
@@ -326,8 +336,18 @@ def compute_loss_with_batch(
                     abs_preds = edge_preds[abs_mask]
 
                     E0 = torch.mean(abs_preds[:, 0])
+                    if abs_preds.shape[0] == 0:
+                        raise RuntimeError(f"Empty absorber at structure {i}, absorber {j}")
+                    check(E0, "E0")
                     ΔE0 = torch.clamp(E0 - config.ss_paths_info[struct_i][j]["edge"], min = ΔE0_min, max = ΔE0_max)
-                    q = torch.sqrt(k2s[sl:sr] - ΔE0)
+                    check(ΔE0, "ΔE0")
+                    
+                    arg = k2s[sl:sr] - ΔE0
+                    check(arg, "sqrt arg BEFORE clamp")
+
+                    q = torch.sqrt(torch.clamp(arg, min=1e-12))
+                    check(q, "q")
+
                     k_feff = config.ss_paths_info[struct_i][j]["k_feff"]
 
                     for k in range(len(abs_Reffs)):
@@ -337,9 +357,20 @@ def compute_loss_with_batch(
                             pha = interp_soft_adaptive(q, k_feff, config.ss_paths_info[struct_i][j]["pha"][path_ind])
                             rep = interp_soft_adaptive(q, k_feff, config.ss_paths_info[struct_i][j]["rep"][path_ind])
                             lam = interp_soft_adaptive(q, k_feff, config.ss_paths_info[struct_i][j]["lam"][path_ind])
+                            
+                            check(amp, "amp")
+                            check(pha, "pha")
+                            check(rep, "rep")
+                            check(lam, "lam")
+
                             deltar = abs_preds[k, 1]
                             sigma2 = abs_preds[k, 2]
                             third = abs_preds[k, 3]
+
+                            check(deltar, "deltar")
+                            check(sigma2, "sigma2")
+                            check(third, "third")
+
                             fourth = 0#abs_preds[k, 4]
                             chi[j] += calc_chi(q, deltar, sigma2, third, fourth, amp, pha, rep, lam, config.ss_paths_info[struct_i][j]["Reffs"][path_ind], 0.0)
                 tot_edge += n_edge
