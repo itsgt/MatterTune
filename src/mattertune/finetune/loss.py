@@ -305,7 +305,7 @@ def compute_loss_with_batch(
             sl = 60
             sr = -10
             
-            ΔE0_max = k2s[sl]
+            ΔE0_max = k2s[sl] - 0.01
             ΔE0_min = -16 + k2s[sr]
             sim_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
             exp_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
@@ -347,7 +347,7 @@ def compute_loss_with_batch(
                 mean_sim_chi = torch.mean(chi, dim = 0) 
                 sim_chis[i] = mean_sim_chi / torch.linalg.norm(mean_sim_chi)
                 exp_chis[i] = config.exp_spectra[struct_i][sl:sr] / torch.linalg.norm(config.exp_spectra[struct_i][sl:sr])
-
+                assert KeyError(f'Sim {sim_chis[i]} \n Exp {exp_chis[i]}')
             return F.mse_loss(sim_chis, exp_chis, reduction=config.reduction)
 
         case _:
