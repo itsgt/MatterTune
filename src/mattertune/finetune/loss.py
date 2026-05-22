@@ -345,7 +345,7 @@ def compute_loss_with_batch(
             
                 mean_sim_chi = torch.mean(chi, dim = 0) 
                 sim_chis[i] = mean_sim_chi / torch.linalg.norm(mean_sim_chi)
-                exp_chis[i] = config.exp_spectra[struct_i] / torch.linalg.norm(config.exp_spectra[struct_i])
+                exp_chis[i] = config.exp_spectra[struct_i][sl:sr] / torch.linalg.norm(config.exp_spectra[struct_i][sl:sr])
 
             return F.mse_loss(sim_chis, exp_chis, reduction=config.reduction)
 
