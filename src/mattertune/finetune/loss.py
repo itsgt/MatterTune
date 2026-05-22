@@ -33,7 +33,7 @@ class EXAFSLossConfig(C.Config):
     ws: list[float] = [0.9, 0.1, 0.1]
     exp_spectra: torch.Tensor = torch.tensor([0.])
     abs_inds: list[torch.Tensor] = [torch.tensor([0.])]
-    ss_paths_info = None
+    ss_paths_info: list[list[dict[str, torch.Tensor]]] = [[{"edge": torch.tensor([0.0],)}]]
      
 
 class MAEAtomAveragedLossConfig(C.Config):
