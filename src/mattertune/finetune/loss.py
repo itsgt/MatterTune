@@ -318,7 +318,7 @@ def compute_loss_with_batch(
                 edge_Reffs = torch.linalg.norm(edge_vecs, dim = 1)
                 receivers = batch.receivers[tot_edge:(tot_edge + n_edge)]
                 senders = batch.senders[tot_edge:(tot_edge + n_edge)]
-                scatterer_Zs = batch.node_features["atomic numbers"][receivers]
+                scatterer_Zs = batch.node_features["atomic_numbers"][receivers]
                 for j, abs_i in enumerate(config.abs_inds[struct_i]):
                     abs_mask = (senders - batch.n_node[:i].sum()) == abs_i
                     abs_Reffs = edge_Reffs[abs_mask]
