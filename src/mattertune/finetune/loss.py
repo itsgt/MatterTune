@@ -306,8 +306,8 @@ def compute_loss_with_batch(
             sl = 60
             sr = -10
             
-            ΔE0_max = k2s[sl] - 0.01
-            ΔE0_min = -16 + k2s[sr]
+            ΔE0_max = k2s[sl] - 0.05
+            ΔE0_min = k2s[sr] - 16 ** 2
             mid_ΔE0_range = 0.5 * (ΔE0_max + ΔE0_min)
             half_ΔE0_range = 0.5 * (ΔE0_max - ΔE0_min)
             sim_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
