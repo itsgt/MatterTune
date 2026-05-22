@@ -154,6 +154,8 @@ def calc_chi(q, deltar, sigma2, third, fourth, amp, pha, rep, lam, reff, ei):
     check(p.real, "p.real")
     check(p.imag, "p.imag")
 
+    real_exp_arg = -2 * reff * p.imag - 2 * pp * (sigma2 - pp * fourth / 3.0)
+
     cchi = torch.exp(
         -2 * reff * p.imag
         - 2 * pp * (sigma2 - pp * fourth / 3.0)
@@ -363,9 +365,13 @@ def compute_loss_with_batch(
                             check(rep, "rep")
                             check(lam, "lam")
 
-                            deltar = abs_preds[k, 1]
-                            sigma2 = abs_preds[k, 2]
-                            third = abs_preds[k, 3]
+                            deltar_raw = abs_preds[k, 1]
+                            sigma2_raw = abs_preds[k, 2]
+                            third_raw  = abs_preds[k, 3]
+
+                            deltar = 0.2 *  torch.tanh(deltar_raw)
+                            sigma2 = 0.05 * torch.sigmoid(sigma2_raw)
+                            third  = 0.01 * torch.tanh(third_raw)
 
                             check(deltar, "deltar")
                             check(sigma2, "sigma2")
@@ -378,7 +384,7 @@ def compute_loss_with_batch(
                 mean_sim_chi = torch.mean(chi, dim = 0) 
                 sim_chis[i] = mean_sim_chi / torch.linalg.norm(mean_sim_chi)
                 exp_chis[i] = config.exp_spectra[struct_i][sl:sr] / torch.linalg.norm(config.exp_spectra[struct_i][sl:sr])
-                raise KeyError(f'Sim {sim_chis[i]} \n Exp {exp_chis[i]}')
+                raise KeyError(f'ΔR {deltar} σ² {sigma2} 3rd {third} Sim {sim_chis[i]} \n Exp {exp_chis[i]}')
             return F.mse_loss(sim_chis, exp_chis, reduction=config.reduction)
 
         case _:
