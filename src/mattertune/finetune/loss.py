@@ -308,6 +308,8 @@ def compute_loss_with_batch(
             
             ΔE0_max = k2s[sl] - 0.01
             ΔE0_min = -16 + k2s[sr]
+            mid_ΔE0_range = 0.5 * (ΔE0_max + ΔE0_min)
+            half_ΔE0_range = 0.5 * (ΔE0_max - ΔE0_min)
             sim_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
             exp_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
             for i, struct_i_flt in enumerate(label):
@@ -327,9 +329,7 @@ def compute_loss_with_batch(
                     abs_preds = edge_preds[abs_mask]
 
                     E0 = torch.mean(abs_preds[:, 0])
-                    if abs_preds.shape[0] == 0:
-                        raise RuntimeError(f"Empty absorber at structure {i}, absorber {j}")
-                    ΔE0 = torch.clamp(E0 - config.ss_paths_info[struct_i][j]["edge"], min = ΔE0_min, max = ΔE0_max)
+                    ΔE0 = mid + half * torch.tanh((E0 - config.ss_paths_info[struct_i][j]["edge"]) / half)
                     
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
 
