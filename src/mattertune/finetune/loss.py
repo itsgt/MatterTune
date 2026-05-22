@@ -133,16 +133,12 @@ def l2_mae_loss(
             assert_never(reduction)
 
 def interp_linear_batch(x, xk, yk):
-    x = np.asarray(x)
-    xk = np.asarray(xk)
-    yk = np.asarray(yk)
-
     m, n = yk.shape
     nk = x.size
 
     # interval indices
-    idx = np.searchsorted(xk, x, side="right") - 1
-    idx = np.clip(idx, 0, n - 2)
+    idx = torch.searchsorted(xk, x, side="right") - 1
+    idx = torch.clamp(idx, 0, n - 2)
 
     x0 = xk[idx]
     x1 = xk[idx + 1]
@@ -166,9 +162,9 @@ def calc_chi_linear_vectorized(q, s02, deltar, sigma2, third, fourth,
     fourth = fourth[:, None]
 
     pp = (rep + 1j / lam) ** 2 + 1j * ei * ETOK
-    p  = np.sqrt(pp)
+    p  = torch.sqrt(pp)
 
-    cchi = np.exp(
+    cchi = torch.exp(
         -2 * reff * p.imag
         - 2 * pp * (sigma2 - pp * fourth / 3.0)
         + 1j * (
@@ -333,6 +329,8 @@ def compute_loss_with_batch(
     match config:
         case EXAFSLossConfig():
             tot_edge = 0
+            ks = np.arange(3.0, 15.50001, 0.05)
+
             for i, struct_i in label:
                 n_edge = batch.n_edge[i]
                 edge_vecs = batch.edge_features['vectors'][tot_edge:(tot_edge + n_edge)]
