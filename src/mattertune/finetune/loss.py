@@ -329,7 +329,7 @@ def compute_loss_with_batch(
                     abs_preds = edge_preds[abs_mask]
 
                     E0 = torch.mean(abs_preds[:, 0])
-                    ΔE0 = mid + half * torch.tanh((E0 - config.ss_paths_info[struct_i][j]["edge"]) / half)
+                    ΔE0 = mid_ΔE0_range + half_ΔE0_range * torch.tanh((E0 - config.ss_paths_info[struct_i][j]["edge"]) / half_ΔE0_range)
                     
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
 
