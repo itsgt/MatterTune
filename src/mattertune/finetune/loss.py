@@ -132,35 +132,20 @@ def l2_mae_loss(
         case _:
             assert_never(reduction)
 
-def interp_linear_batch(x, xk, yk):
-    m, n = yk.shape
-    nk = x.size
+def interp_soft_adaptive(x, xk, yk, beta = 1.0):
+    dxk = xk[1:] - xk[:-1]                     # (n-1,)
+    dx = x.unsqueeze(-1) - xk.unsqueeze(0)     # (nk, n)
+    h = ((torch.cat([dxk[:1], dxk]) + torch.cat([dxk, dxk[-1:]])) / 2).unsqueeze(0)
+    r = dx / h
+    w = torch.exp(-beta * r ** 2)
+    w = w / w.sum(dim = -1, keepdim = True)
+    y = (w * yk.unsqueeze(0)).sum(dim = -1)
+    return y
 
-    # interval indices
-    idx = torch.searchsorted(xk, x, side="right") - 1
-    idx = torch.clamp(idx, 0, n - 2)
-
-    x0 = xk[idx]
-    x1 = xk[idx + 1]
-
-    w = (x - x0) / (x1 - x0)   # (nk,)
-
-    # broadcasted gather
-    y0 = yk[:, idx]            # (m, nk)
-    y1 = yk[:, idx + 1]        # (m, nk)
-
-    return y0 + (y1 - y0) * w
+ETOK = 0.262465831
 
 # https://github.com/xraypy/xraylarch/blob/6a68e776c3b10625bcda556432f45a4ddb6b18d1/larch/xafs/feffdat.py#L632
-def calc_chi_linear_vectorized(q, s02, deltar, sigma2, third, fourth,
-    amp, pha, rep, lam, reff, degen, ei):
-    reff   = reff[:,   None]
-    degen  = degen[:,  None]
-    deltar = deltar[:, None]
-    sigma2 = sigma2[:, None]
-    third  = third[:,  None]
-    fourth = fourth[:, None]
-
+def calc_chi(q, deltar, sigma2, third, fourth, amp, pha, rep, lam, reff, ei):
     pp = (rep + 1j / lam) ** 2 + 1j * ei * ETOK
     p  = torch.sqrt(pp)
 
@@ -172,7 +157,7 @@ def calc_chi_linear_vectorized(q, s02, deltar, sigma2, third, fourth,
             + pha
             + 2 * p *(deltar - 2 * sigma2 / reff - 2 * pp * third / 3.0)
         )
-    ) * degen * s02 * amp / (q * (reff + deltar) ** 2)
+    ) * amp / (q * (reff + deltar) ** 2)
     return cchi.imag
 
 
@@ -311,49 +296,58 @@ def compute_loss_with_batch(
     label: torch.Tensor,
     batch,
 ) -> torch.Tensor:
-    """
-    Compute the loss value given the model output, ``prediction``,
-    and the target label, ``label``.
-
-    The loss value should be a scalar tensor.
-
-    Args:
-        config: The loss configuration.
-        prediction: The model output.
-        label: The target label.
-
-    Returns:
-        The computed loss value.
-    """
-
     match config:
         case EXAFSLossConfig():
             tot_edge = 0
-            ks = np.arange(3.0, 15.50001, 0.05)
-
-            for i, struct_i in label:
+            k1s = torch.arange(0.0, 16.00001, 0.05, device = prediction.device)
+            k2s = k1s ** 2
+            k3s = k1s ** 3
+            sl = 60
+            sr = -10
+            
+            ΔE0_max = k2s[sl]
+            ΔE0_min = -16 + k2s[sr]
+            sim_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
+            exp_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
+            for i, struct_i in enumerate(label):
+                chi = torch.zeros((len(config.abs_inds[struct_i]), len(k1s[sl:sr])), device = prediction.device)
                 n_edge = batch.n_edge[i]
-                edge_vecs = batch.edge_features['vectors'][tot_edge:(tot_edge + n_edge)]
+                edge_vecs = batch.edge_features["vectors"][tot_edge:(tot_edge + n_edge)]
                 edge_preds = prediction[tot_edge:(tot_edge + n_edge)]
-                edge_Reffs = torch.linalg.norm(edge_vecs, dim = 0)
+                edge_Reffs = torch.linalg.norm(edge_vecs, dim = 1)
                 receivers = batch.receivers[tot_edge:(tot_edge + n_edge)]
                 senders = batch.senders[tot_edge:(tot_edge + n_edge)]
-                scatterer_Zs = batch.node_features['atomic numbers'][receivers]
-                for abs_i in config.abs_inds[struct_i]:
-                    abs_Reffs = edge_Reffs[senders == abs_i]
-                    abs_Zs = scatterer_Zs[senders == abs_i]
-                    abs_preds = edge_preds[senders == abs_i]
+                scatterer_Zs = batch.node_features["atomic numbers"][receivers]
+                for j, abs_i in enumerate(config.abs_inds[struct_i]):
+                    abs_mask = (senders - batch.n_node[:i].sum()) == abs_i
+                    abs_Reffs = edge_Reffs[abs_mask]
+                    abs_Zs = scatterer_Zs[abs_mask]
+                    abs_preds = edge_preds[abs_mask]
 
+                    E0 = torch.mean(abs_preds[:, 0])
+                    ΔE0 = torch.clamp(E0 - config.ss_paths_info[struct_i][j]["edge"], min = ΔE0_min, max = ΔE0_max)
+                    q = torch.sqrt(k2s[sl:sr] - ΔE0)
+                    k_feff = config.ss_paths_info[struct_i][j]["k_feff"]
 
+                    for k in range(len(abs_Reffs)):
+                        path_ind = torch.argmin(torch.abs(torch.where(config.ss_paths_info[struct_i][j]["scatterer_Zs"] == abs_Zs[k], config.ss_paths_info[struct_i][j]["Reffs"], -10.0) - abs_Reffs[k]))
+                        if torch.abs(config.ss_paths_info[struct_i][j]["Reffs"][path_ind] - abs_Reffs[k]) < 0.01:
+                            amp = interp_soft_adaptive(q, k_feff, config.ss_paths_info[struct_i][j]["amp"][path_ind])
+                            pha = interp_soft_adaptive(q, k_feff, config.ss_paths_info[struct_i][j]["pha"][path_ind])
+                            rep = interp_soft_adaptive(q, k_feff, config.ss_paths_info[struct_i][j]["rep"][path_ind])
+                            lam = interp_soft_adaptive(q, k_feff, config.ss_paths_info[struct_i][j]["lam"][path_ind])
+                            deltar = abs_preds[k, 1]
+                            sigma2 = abs_preds[k, 2]
+                            third = abs_preds[k, 3]
+                            fourth = 0#abs_preds[k, 4]
+                            chi[j] += calc_chi(q, deltar, sigma2, third, fourth, amp, pha, rep, lam, config.ss_paths_info[struct_i][j]["Reffs"][path_ind], 0.0)
+                tot_edge += n_edge
+            
+                mean_sim_chi = torch.mean(chi, dim = 0) 
+                sim_chis[i] = mean_sim_chi / torch.linalg.norm(mean_sim_chi)
+                exp_chis[i] = config.exp_spectra[struct_i] / torch.linalg.norm(config.exp_spectra[struct_i])
 
-
-            raise ValueError(batch)
-            raise ValueError(f'Edge Feat. Vectors: size {batch.edge_features["vectors"].size()} values {str(batch.edge_features["vectors"])}\n' + 
-                f'Edge Feat. Unit Shifts: size {batch.edge_features["unit_shifts"].size()} values {str(batch.edge_features["unit_shifts"])}\n' + 
-                f'Senders: size {batch.senders.size()} values {str(batch.senders)}\n' + 
-                f'Receivers: size {batch.receivers.size()} values {str(batch.receivers)}\n' + 
-                f'Prediction: size {prediction.size()} values {str(prediction)}\n'
-            ) 
+            return F.mse_loss(sim_chis, exp_chis, reduction=config.reduction)
 
         case _:
             assert_never(config)
