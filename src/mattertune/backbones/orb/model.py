@@ -524,7 +524,7 @@ class ORBBackboneModule(
         return labels
 
     @override
-    def atoms_to_data(self, atoms, has_labels):
+    def atoms_to_data(self, atoms, has_labels, paths_info = None, abs_inds = None):
         with optional_import_error_message("orb_models"):
             from orb_models.forcefield import atomic_system  # type: ignore[reportMissingImports] # noqa
             from orb_models.forcefield.featurization_utilities import _integer_lattice, find_minimal_supercell_translations  # type: ignore[reportMissingImports] # noqa
@@ -620,6 +620,64 @@ class ORBBackboneModule(
         # ^ (1, 120)
         atom_graphs.system_features["norm_composition"] = composition
 
+        if paths_info is not None:
+            label = torch.tensor([atom.info['edge_props'][0] for atom in atoms], device = atom_graphs.device).int()
+            atom_graphs.feff_k = paths_info[0][0]["k_feff"]
+            atom_graphs.feff_edges = [[path_info[i][j]["edge"].to(atom_graphs.device) for j in range(len(path_info[i])
+                )] for i in range(len(path_info[j]))]
+
+            N_paths = 0
+            for i, struct_i in enumerate(label):
+                for j, abs_i in enumerate(abs_inds[struct_i]):
+                    N_paths += len(paths_info[struct_i][j]["Reffs"])
+
+            Reffs = torch.zeros((N_paths))
+            amp = torch.zeros((N_paths, len(atom_graphs.k_feff)))
+            pha = torch.zeros((N_paths, len(atom_graphs.k_feff)))
+            rep = torch.zeros((N_paths, len(atom_graphs.k_feff)))
+            lam = torch.zeros((N_paths, len(atom_graphs.k_feff)))
+            path_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = atom_graphs.device)
+            batch_abs_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = atom_graphs.device)
+
+            edge_inds = torch.arange(atom_graphs.edge_features["vectors"].size(dim = 0), device = atom_graphs.device)
+            tot_edge = 0
+            tot_path = 0
+            for i, struct_i in enumerate(label):
+                n_edge = atom_graphs.n_edge[i]
+                edge_vecs = atom_graphs.edge_features["vectors"][tot_edge:(tot_edge + n_edge)]
+                struct_edge_inds = edge_inds[tot_edge:(tot_edge + n_edge)]
+                edge_Reffs = torch.linalg.norm(edge_vecs, dim = 1)
+                receivers = atom_graphs.receivers[tot_edge:(tot_edge + n_edge)]
+                senders = atom_graphs.senders[tot_edge:(tot_edge + n_edge)]
+                scatterer_Zs = atom_graphs.node_features["atomic_numbers"][receivers]
+                for j, abs_i in enumerate(abs_inds[struct_i]):
+                    N_path_abs = len(paths_info[struct_i][j]["Reffs"])
+                    amp[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["amp"].to(atom_graphs.device)
+                    pha[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["pha"].to(atom_graphs.device)
+                    rep[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["rep"].to(atom_graphs.device)
+                    lam[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["lam"].to(atom_graphs.device)
+                    Reffs[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["Reffs"]
+
+                    abs_mask = (senders - batch.n_node[:i].sum()) == abs_i
+                    abs_edge_inds = struct_edge_inds[abs_mask]
+                    abs_Reffs = edge_Reffs[abs_mask]
+                    abs_Zs = scatterer_Zs[abs_mask]
+                    abs_preds = edge_preds[abs_mask]
+
+                    for k in range(len(abs_Reffs)):
+                        path_ind = torch.argmin(torch.abs(torch.where(paths_info[struct_i][j]["scatterer_Zs"] == abs_Zs[k], paths_info[struct_i][j]["Reffs"], -10.0) - abs_Reffs[k]))
+                        if torch.abs(paths_info[struct_i][j]["Reffs"][path_ind] - abs_Reffs[k]) < 0.01:
+                            path_inds[abs_edge_inds[k]] = tot_path + path_ind
+                            batch_abs_inds[abs_edge_inds[k]] = j
+                    tot_path += N_path_abs
+                tot_edge += n_edge
+            atom_graphs.path_inds = path_inds
+            atom_graphs.amp = amp
+            atom_graphs.pha = pha
+            atom_graphs.rep = rep
+            atom_graphs.lam = lam
+            atom_graphs.abs_inds = batch_abs_inds
+            atom_graphs.Reffs = Reffs
         return atom_graphs
 
     @override

@@ -58,6 +58,8 @@ class DataLoaderKwargs(TypedDict, total=False):
     prefetch_factor: int | None
     persistent_workers: bool
     pin_memory_device: str
+    paths_info: list[list[dict[str, torch.Tensor]]] | None 
+    abs_inds: list[torch.Tensor] | None
 
 
 def create_dataloader(
@@ -68,7 +70,10 @@ def create_dataloader(
     **kwargs: Unpack[DataLoaderKwargs],
 ):
     def map_fn(ase_data: ase.Atoms):
-        data = lightning_module.atoms_to_data(ase_data, has_labels)
+        if paths_info is None:
+            data = lightning_module.atoms_to_data(ase_data, has_labels)
+        else:
+            data = lightning_module.atoms_to_data(ase_data, has_labels, paths_info = paths_info, abs_inds = abs_inds) 
         data = lightning_module.cpu_data_transform(data)
         return data
 

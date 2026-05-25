@@ -32,8 +32,6 @@ class EXAFSLossConfig(C.Config):
     reduction: Literal["mean", "sum"] = "mean"
     ws: list[float] = [0.9, 0.1, 0.1]
     exp_spectra: torch.Tensor = torch.tensor([0.])
-    abs_inds: list[torch.Tensor] = [torch.tensor([0.])]
-    ss_paths_info: list[list[dict[str, torch.Tensor]]] = [[{"edge": torch.tensor([0.0],)}]]
      
 
 class MAEAtomAveragedLossConfig(C.Config):
@@ -139,13 +137,21 @@ def interp_soft_adaptive(x, xk, yk, beta = 1.0):
     r = dx / h
     w = torch.exp(-beta * r ** 2)
     w = w / w.sum(dim = -1, keepdim = True)
-    y = (w * yk.unsqueeze(0)).sum(dim = -1)
+    y = (w.unsqueeze(0) * yk.unsqueeze(1)).sum(dim=-1)
     return y
 
 ETOK = 0.262465831
 
 # https://github.com/xraypy/xraylarch/blob/6a68e776c3b10625bcda556432f45a4ddb6b18d1/larch/xafs/feffdat.py#L632
-def calc_chi(q, deltar, sigma2, third, fourth, amp, pha, rep, lam, reff, ei):
+def calc_chi_batch(q, deltar, sigma2, third, fourth, amp, pha, rep, lam, reff, ei):
+    q = q.unsqueeze(0)                # (1, Nk)
+    deltar = deltar[:, None]          # (Np, 1)
+    sigma2 = sigma2[:, None]
+    third  = third[:, None]
+    fourth = fourth[:, None]
+    reff   = reff[:, None]
+
+    
     pp = (rep + 1j / lam) ** 2 + 1j * ei * ETOK
     p = torch.sqrt(pp)
 
@@ -155,7 +161,7 @@ def calc_chi(q, deltar, sigma2, third, fourth, amp, pha, rep, lam, reff, ei):
         + 1j * (
             2 * q * reff
             + pha
-            + 2 * p *(deltar - 2 * sigma2 / reff - 2 * pp * third / 3.0)
+            + 2 * p * (deltar - 2 * sigma2 / reff - 2 * pp * third / 3.0)
         )
     ) * amp / (q * (reff + deltar) ** 2)
     return cchi.imag
@@ -305,6 +311,7 @@ def compute_loss_with_batch(
             k3s = k1s ** 3
             sl = 60
             sr = -10
+            k_feff = batch.feff_k
             
             ΔE0_max = k2s[sl] - 0.05
             ΔE0_min = k2s[sr] - 16 ** 2
@@ -312,47 +319,46 @@ def compute_loss_with_batch(
             half_ΔE0_range = 0.5 * (ΔE0_max - ΔE0_min)
             sim_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
             exp_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
+            edge_inds = torch.arange(batch.edge_features["vectors"].size(dim = 0), device = batch.device)
             for i, struct_i_flt in enumerate(label):
-                struct_i = struct_i_flt.int()
-                chi = torch.zeros((len(config.abs_inds[struct_i]), len(k1s[sl:sr])), device = prediction.device)
                 n_edge = batch.n_edge[i]
-                edge_vecs = batch.edge_features["vectors"][tot_edge:(tot_edge + n_edge)]
+                struct_i = struct_i_flt.int()
+                struct_edge_inds = edge_inds[tot_edge:(tot_edge + n_edge)]
+                unique_abs_inds = torch.unique(batch.abs_inds[tot_edge:(tot_edge + n_edge)], sorted = True)
+                chi = torch.zeros((len(unique_abs_inds), len(k1s[sl:sr])), device = prediction.device)
                 edge_preds = prediction[tot_edge:(tot_edge + n_edge)]
-                edge_Reffs = torch.linalg.norm(edge_vecs, dim = 1)
-                receivers = batch.receivers[tot_edge:(tot_edge + n_edge)]
-                senders = batch.senders[tot_edge:(tot_edge + n_edge)]
-                scatterer_Zs = batch.node_features["atomic_numbers"][receivers]
-                for j, abs_i in enumerate(config.abs_inds[struct_i]):
-                    abs_mask = (senders - batch.n_node[:i].sum()) == abs_i
-                    abs_Reffs = edge_Reffs[abs_mask]
-                    abs_Zs = scatterer_Zs[abs_mask]
+                for j, abs_i in enumerate(unique_abs_inds):
+                    abs_mask = batch.abs_inds[tot_edge:(tot_edge + n_edge)] == abs_i
                     abs_preds = edge_preds[abs_mask]
+                    abs_edge_inds = struct_edge_inds[abs_mask]
 
                     E0 = torch.mean(abs_preds[:, 0])
-                    ΔE0 = mid_ΔE0_range + half_ΔE0_range * torch.tanh((E0 - config.ss_paths_info[struct_i][j]["edge"]) / half_ΔE0_range)
+                    ΔE0 = mid_ΔE0_range + half_ΔE0_range * torch.tanh((E0 - batch.feff_edges[i][j]) / half_ΔE0_range)
                     
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
+                    pinds = batch.path_inds[abs_edge_inds]
+                    valid = pinds >= 0
 
-                    k_feff = config.ss_paths_info[struct_i][j]["k_feff"]
+                    pinds = pinds[valid]
+                    ss_preds = abs_preds[valid]
 
-                    for k in range(len(abs_Reffs)):
-                        path_ind = torch.argmin(torch.abs(torch.where(config.ss_paths_info[struct_i][j]["scatterer_Zs"] == abs_Zs[k], config.ss_paths_info[struct_i][j]["Reffs"], -10.0) - abs_Reffs[k]))
-                        if torch.abs(config.ss_paths_info[struct_i][j]["Reffs"][path_ind] - abs_Reffs[k]) < 0.01:
-                            amp = interp_soft_adaptive(q, k_feff, config.ss_paths_info[struct_i][j]["amp"][path_ind])
-                            pha = interp_soft_adaptive(q, k_feff, config.ss_paths_info[struct_i][j]["pha"][path_ind])
-                            rep = interp_soft_adaptive(q, k_feff, config.ss_paths_info[struct_i][j]["rep"][path_ind])
-                            lam = interp_soft_adaptive(q, k_feff, config.ss_paths_info[struct_i][j]["lam"][path_ind])
+                    amp = interp_soft_adaptive(q, k_feff, batch.amp[pinds])
+                    pha = interp_soft_adaptive(q, k_feff, batch.pha[pinds])
+                    rep = interp_soft_adaptive(q, k_feff, batch.rep[pinds])
+                    lam = interp_soft_adaptive(q, k_feff, batch.lam[pinds])
 
-                            deltar_raw = abs_preds[k, 1]
-                            sigma2_raw = abs_preds[k, 2]
-                            third_raw  = abs_preds[k, 3]
+                    deltar = 0.2 * torch.tanh(ss_preds[:, 1])
+                    sigma2 = 0.05 * torch.sigmoid(ss_preds[:, 2])
+                    third  = 0.01 * torch.tanh(ss_preds[:, 3])
+                    fourth = torch.zeros_like(deltar)
+                    Reff = batch.Reffs[pinds]
 
-                            deltar = 0.2 *  torch.tanh(deltar_raw)
-                            sigma2 = 0.05 * torch.sigmoid(sigma2_raw)
-                            third  = 0.01 * torch.tanh(third_raw)
+                    chi_paths = calc_chi_batch(
+                        q, deltar, sigma2, third, fourth,
+                        amp, pha, rep, lam,
+                        Reff
+                    )   # (N_paths, Nk)
 
-                            fourth = 0#abs_preds[k, 4]
-                            chi[j] += calc_chi(q, deltar, sigma2, third, fourth, amp, pha, rep, lam, config.ss_paths_info[struct_i][j]["Reffs"][path_ind], 0.0)
                 tot_edge += n_edge
             
                 mean_sim_chi = torch.mean(chi, dim = 0) 
