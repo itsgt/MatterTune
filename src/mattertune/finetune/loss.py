@@ -311,7 +311,7 @@ def compute_loss_with_batch(
             k3s = k1s ** 3
             sl = 60
             sr = -10
-            k_feff = batch.system_features["feff_k"][0]
+            k_feff = batch.system_features["feff_k"][:(len(batch.system_features["feff_k"]) // len(label))]
             
             ΔE0_max = k2s[sl] - 0.05
             ΔE0_min = k2s[sr] - 16 ** 2
