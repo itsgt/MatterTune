@@ -327,42 +327,56 @@ def compute_loss_with_batch(
             for i, struct_i_flt in enumerate(label):
                 n_edge = batch.n_edge[i]
                 struct_i = struct_i_flt.int()
-                struct_edge_inds = edge_inds[tot_edge:(tot_edge + n_edge)]
-                unique_abs_inds = torch.unique(batch.system_features["abs_inds"][tot_edge:(tot_edge + n_edge)], sorted = True)
-                chi = torch.zeros((len(unique_abs_inds), len(k1s[sl:sr])), device = prediction.device)
-                edge_preds = prediction[tot_edge:(tot_edge + n_edge)]
-                for j, abs_i in enumerate(unique_abs_inds):
-                    abs_mask = batch.system_features["abs_inds"][tot_edge:(tot_edge + n_edge)] == abs_i
-                    abs_preds = edge_preds[abs_mask]
-                    abs_edge_inds = struct_edge_inds[abs_mask]
+                edge_slice = slice(tot_edge, tot_edge + n_edge)
 
-                    ΔE0 = mid_ΔE0_range + half_ΔE0_range * torch.tanh(torch.mean(abs_preds[:, 0]) / half_ΔE0_range)
-                    
+                edge_preds = prediction[edge_slice]
+                edge_abs_inds = batch.system_features["abs_inds"][edge_slice]
+                edge_path_inds = batch.system_features["path_inds"][edge_slice]
+
+                valid = edge_path_inds >= 0
+
+                valid_preds = edge_preds[valid]
+                valid_abs_inds = edge_abs_inds[valid]
+                valid_path_inds = edge_path_inds[valid].int() + path_offsets[i]
+
+                amp_all = batch.system_features["amp"][valid_path_inds]
+                pha_all = batch.system_features["pha"][valid_path_inds]
+                rep_all = batch.system_features["rep"][valid_path_inds]
+                lam_all = batch.system_features["lam"][valid_path_inds]
+                Reff_all = batch.system_features["Reffs"][valid_path_inds]
+
+                unique_abs, inverse = torch.unique(valid_abs_inds, sorted=True, return_inverse=True)
+
+                chi = torch.zeros((len(unique_abs), len(k1s[sl:sr])), device=prediction.device)
+
+                for j in range(len(unique_abs)):
+                    mask = inverse == j
+
+                    ss_preds = valid_preds[mask]
+
+                    ΔE0 = mid_ΔE0_range + half_ΔE0_range * torch.tanh(
+                        ss_preds[:, 0].mean() / half_ΔE0_range
+                    )
+
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
-                    pinds = batch.system_features["path_inds"][abs_edge_inds]
-                    valid = pinds >= 0
 
-                    pinds = pinds[valid].int() + path_offsets[i]
-                    ss_preds = abs_preds[valid]
-
-                    amp = interp_soft_adaptive(q, k_feff, batch.system_features["amp"][pinds])
-                    pha = interp_soft_adaptive(q, k_feff, batch.system_features["pha"][pinds])
-                    rep = interp_soft_adaptive(q, k_feff, batch.system_features["rep"][pinds])
-                    lam = interp_soft_adaptive(q, k_feff, batch.system_features["lam"][pinds])
+                    amp = interp_soft_adaptive(q, k_feff, amp_all[mask])
+                    pha = interp_soft_adaptive(q, k_feff, pha_all[mask])
+                    rep = interp_soft_adaptive(q, k_feff, rep_all[mask])
+                    lam = interp_soft_adaptive(q, k_feff, lam_all[mask])
 
                     deltar = 0.2 * torch.tanh(ss_preds[:, 1])
                     sigma2 = 0.05 * torch.sigmoid(ss_preds[:, 2])
                     third  = 0.01 * torch.tanh(ss_preds[:, 3])
                     fourth = torch.zeros_like(deltar)
-                    Reff = batch.system_features["Reffs"][pinds]
 
                     chi_paths = calc_chi_batch(
                         q, deltar, sigma2, third, fourth,
                         amp, pha, rep, lam,
-                        Reff, 0.0,
-                    )   # (N_paths, Nk)
-                    chi[j] = torch.sum(chi_paths, dim = 0)
+                        Reff_all[mask], 0.0
+                    )
 
+                    chi[j] = torch.sum(chi_paths, dim=0)
                 tot_edge += n_edge
             
                 mean_sim_chi = torch.mean(chi, dim = 0) 
