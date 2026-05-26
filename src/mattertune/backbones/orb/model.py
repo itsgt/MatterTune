@@ -664,7 +664,6 @@ class ORBBackboneModule(
                     abs_edge_inds = struct_edge_inds[abs_mask]
                     abs_Reffs = edge_Reffs[abs_mask]
                     abs_Zs = scatterer_Zs[abs_mask]
-                    abs_preds = edge_preds[abs_mask]
 
                     for k in range(len(abs_Reffs)):
                         path_ind = torch.argmin(torch.abs(torch.where(paths_info[struct_i][j]["scatterer_Zs"] == abs_Zs[k], paths_info[struct_i][j]["Reffs"], -10.0) - abs_Reffs[k]))
