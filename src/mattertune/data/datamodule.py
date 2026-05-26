@@ -18,6 +18,7 @@ from .util.split_dataset import SplitDataset
 
 if TYPE_CHECKING:
     from ..finetune.loader import DataLoaderKwargs
+    import torch
 
 log = logging.getLogger(__name__)
 
