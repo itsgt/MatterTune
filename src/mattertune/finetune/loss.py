@@ -311,7 +311,7 @@ def compute_loss_with_batch(
             k3s = k1s ** 3
             sl = 60
             sr = -10
-            k_feff = batch.feff_k
+            k_feff = atom_graphs.system_features["feff_k"]
             
             ΔE0_max = k2s[sl] - 0.05
             ΔE0_min = k2s[sr] - 16 ** 2
@@ -324,34 +324,33 @@ def compute_loss_with_batch(
                 n_edge = batch.n_edge[i]
                 struct_i = struct_i_flt.int()
                 struct_edge_inds = edge_inds[tot_edge:(tot_edge + n_edge)]
-                unique_abs_inds = torch.unique(batch.abs_inds[tot_edge:(tot_edge + n_edge)], sorted = True)
+                unique_abs_inds = torch.unique(batch.system_features["abs_inds"][tot_edge:(tot_edge + n_edge)], sorted = True)
                 chi = torch.zeros((len(unique_abs_inds), len(k1s[sl:sr])), device = prediction.device)
                 edge_preds = prediction[tot_edge:(tot_edge + n_edge)]
                 for j, abs_i in enumerate(unique_abs_inds):
-                    abs_mask = batch.abs_inds[tot_edge:(tot_edge + n_edge)] == abs_i
+                    abs_mask = batch.system_features["abs_inds"][tot_edge:(tot_edge + n_edge)] == abs_i
                     abs_preds = edge_preds[abs_mask]
                     abs_edge_inds = struct_edge_inds[abs_mask]
 
-                    E0 = torch.mean(abs_preds[:, 0])
-                    ΔE0 = mid_ΔE0_range + half_ΔE0_range * torch.tanh((E0 - batch.feff_edges[i][j]) / half_ΔE0_range)
+                    ΔE0 = mid_ΔE0_range + half_ΔE0_range * torch.tanh(torch.mean(abs_preds[:, 0]) / half_ΔE0_range)
                     
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
-                    pinds = batch.path_inds[abs_edge_inds]
+                    pinds = batch.system_features["path_inds"][abs_edge_inds]
                     valid = pinds >= 0
 
                     pinds = pinds[valid]
                     ss_preds = abs_preds[valid]
 
-                    amp = interp_soft_adaptive(q, k_feff, batch.amp[pinds])
-                    pha = interp_soft_adaptive(q, k_feff, batch.pha[pinds])
-                    rep = interp_soft_adaptive(q, k_feff, batch.rep[pinds])
-                    lam = interp_soft_adaptive(q, k_feff, batch.lam[pinds])
+                    amp = interp_soft_adaptive(q, k_feff, batch.system_features["amp"][pinds])
+                    pha = interp_soft_adaptive(q, k_feff, batch.system_features["pha"][pinds])
+                    rep = interp_soft_adaptive(q, k_feff, batch.system_features["rep"][pinds])
+                    lam = interp_soft_adaptive(q, k_feff, batch.system_features["lam"][pinds])
 
                     deltar = 0.2 * torch.tanh(ss_preds[:, 1])
                     sigma2 = 0.05 * torch.sigmoid(ss_preds[:, 2])
                     third  = 0.01 * torch.tanh(ss_preds[:, 3])
                     fourth = torch.zeros_like(deltar)
-                    Reff = batch.Reffs[pinds]
+                    Reff = batch.system_features["Reffs"][pinds]
 
                     chi_paths = calc_chi_batch(
                         q, deltar, sigma2, third, fourth,
