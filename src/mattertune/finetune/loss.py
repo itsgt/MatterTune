@@ -319,7 +319,7 @@ def compute_loss_with_batch(
             half_ΔE0_range = 0.5 * (ΔE0_max - ΔE0_min)
             sim_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
             exp_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
-            edge_inds = torch.arange(batch.edge_features["vectors"].size(dim = 0), device = batch.device)
+            edge_inds = torch.arange(batch.edge_features["vectors"].size(dim = 0), device = prediction.device)
             for i, struct_i_flt in enumerate(label):
                 n_edge = batch.n_edge[i]
                 struct_i = struct_i_flt.int()
