@@ -358,6 +358,7 @@ def compute_loss_with_batch(
                         amp, pha, rep, lam,
                         Reff
                     )   # (N_paths, Nk)
+                    chi[j] = torch.sum(chi_paths, dim = 0)
 
                 tot_edge += n_edge
             
