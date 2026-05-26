@@ -355,7 +355,7 @@ def compute_loss_with_batch(
                     chi_paths = calc_chi_batch(
                         q, deltar, sigma2, third, fourth,
                         amp, pha, rep, lam,
-                        Reff
+                        Reff, 0.0,
                     )   # (N_paths, Nk)
                     chi[j] = torch.sum(chi_paths, dim = 0)
 
