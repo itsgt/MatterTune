@@ -625,7 +625,7 @@ class ORBBackboneModule(
             label = torch.tensor(atoms.info['edge_props'], device = device).int()
 
             nk = len(paths_info[0][0]["k_feff"])
-            atom_graphs.system_features["feff_k"] = paths_info[0][0]["k_feff"]
+            atom_graphs.system_features["feff_k"] = paths_info[0][0]["k_feff"].to(device)
 
             N_paths = 0
             for i, struct_i in enumerate(label):
