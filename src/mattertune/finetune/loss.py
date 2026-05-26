@@ -311,7 +311,7 @@ def compute_loss_with_batch(
             k3s = k1s ** 3
             sl = 60
             sr = -10
-            k_feff = batch.system_features["feff_k"]
+            k_feff = batch.system_features["feff_k"][0]
             
             ΔE0_max = k2s[sl] - 0.05
             ΔE0_min = k2s[sr] - 16 ** 2
@@ -338,7 +338,7 @@ def compute_loss_with_batch(
                     pinds = batch.system_features["path_inds"][abs_edge_inds]
                     valid = pinds >= 0
 
-                    pinds = pinds[valid]
+                    pinds = pinds[valid].int()
                     ss_preds = abs_preds[valid]
 
                     amp = interp_soft_adaptive(q, k_feff, batch.system_features["amp"][pinds])
