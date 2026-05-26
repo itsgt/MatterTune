@@ -311,7 +311,7 @@ def compute_loss_with_batch(
             k3s = k1s ** 3
             sl = 60
             sr = -10
-            k_feff = atom_graphs.system_features["feff_k"]
+            k_feff = batch.system_features["feff_k"]
             
             ΔE0_max = k2s[sl] - 0.05
             ΔE0_min = k2s[sr] - 16 ** 2
