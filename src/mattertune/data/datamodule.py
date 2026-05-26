@@ -48,6 +48,9 @@ class DataModuleBaseConfig(C.Config, ABC):
     This is useful for speeding up GPU data transfer.
     """
 
+    paths_info: list[list[dict[str, torch.Tensor]]] | None = None
+    abs_inds: list[torch.Tensor] | None = None
+
     def _num_workers_or_auto(self):
         if self.num_workers == "auto":
             import os
@@ -64,6 +67,8 @@ class DataModuleBaseConfig(C.Config, ABC):
             "batch_size": self.batch_size,
             "num_workers": self._num_workers_or_auto(),
             "pin_memory": self.pin_memory,
+            "paths_info": paths_info,
+            "abs_inds": abs_inds,
         }
 
     @abstractmethod
