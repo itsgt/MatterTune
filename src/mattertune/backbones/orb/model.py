@@ -621,7 +621,8 @@ class ORBBackboneModule(
         atom_graphs.system_features["norm_composition"] = composition
 
         if paths_info is not None:
-            label = torch.tensor([atom.info['edge_props'][0] for atom in atoms], device = atom_graphs.device).int()
+            label = torch.tensor(atoms.info['edge_props'], device=atom_graphs.device).int()
+
             atom_graphs.feff_k = paths_info[0][0]["k_feff"]
             atom_graphs.feff_edges = [[path_info[i][j]["edge"].to(atom_graphs.device) for j in range(len(path_info[i])
                 )] for i in range(len(path_info[j]))]
