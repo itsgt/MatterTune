@@ -658,7 +658,7 @@ class ORBBackboneModule(
                     pha[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["pha"].to(device)
                     rep[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["rep"].to(device)
                     lam[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["lam"].to(device)
-                    Reffs[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["Reffs"]
+                    Reffs[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["Reffs"].to(device)
 
                     abs_mask = (senders - atom_graphs.n_node[:i].sum()) == abs_i
                     abs_edge_inds = struct_edge_inds[abs_mask]
