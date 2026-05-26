@@ -621,10 +621,11 @@ class ORBBackboneModule(
         atom_graphs.system_features["norm_composition"] = composition
 
         if paths_info is not None:
-            label = torch.tensor(atoms.info['edge_props'], device=atom_graphs.pos.device).int()
+            device = atom_graphs.edge_features["vectors"]
+            label = torch.tensor(atoms.info['edge_props'], device = device).int()
 
             atom_graphs.feff_k = paths_info[0][0]["k_feff"]
-            atom_graphs.feff_edges = [[path_info[i][j]["edge"].to(atom_graphs.pos.device) for j in range(len(path_info[i])
+            atom_graphs.feff_edges = [[path_info[i][j]["edge"].to(device) for j in range(len(path_info[i])
                 )] for i in range(len(path_info[j]))]
 
             N_paths = 0
@@ -637,10 +638,10 @@ class ORBBackboneModule(
             pha = torch.zeros((N_paths, len(atom_graphs.k_feff)))
             rep = torch.zeros((N_paths, len(atom_graphs.k_feff)))
             lam = torch.zeros((N_paths, len(atom_graphs.k_feff)))
-            path_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = atom_graphs.pos.device)
-            batch_abs_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = atom_graphs.pos.device)
+            path_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device)
+            batch_abs_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device)
 
-            edge_inds = torch.arange(atom_graphs.edge_features["vectors"].size(dim = 0), device = atom_graphs.pos.device)
+            edge_inds = torch.arange(atom_graphs.edge_features["vectors"].size(dim = 0), device = device)
             tot_edge = 0
             tot_path = 0
             for i, struct_i in enumerate(label):
@@ -653,10 +654,10 @@ class ORBBackboneModule(
                 scatterer_Zs = atom_graphs.node_features["atomic_numbers"][receivers]
                 for j, abs_i in enumerate(abs_inds[struct_i]):
                     N_path_abs = len(paths_info[struct_i][j]["Reffs"])
-                    amp[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["amp"].to(atom_graphs.pos.device)
-                    pha[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["pha"].to(atom_graphs.pos.device)
-                    rep[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["rep"].to(atom_graphs.pos.device)
-                    lam[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["lam"].to(atom_graphs.pos.device)
+                    amp[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["amp"].to(device)
+                    pha[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["pha"].to(device)
+                    rep[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["rep"].to(device)
+                    lam[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["lam"].to(device)
                     Reffs[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["Reffs"]
 
                     abs_mask = (senders - batch.n_node[:i].sum()) == abs_i
