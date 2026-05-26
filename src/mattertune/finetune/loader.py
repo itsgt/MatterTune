@@ -69,6 +69,9 @@ def create_dataloader(
     lightning_module: FinetuneModuleBase[TData, TBatch, TFinetuneModuleConfig],
     **kwargs: Unpack[DataLoaderKwargs],
 ):
+    paths_info = kwargs.pop("paths_info", None)
+    abs_inds = kwargs.pop("abs_inds", None)
+
     def map_fn(ase_data: ase.Atoms):
         if paths_info is None:
             data = lightning_module.atoms_to_data(ase_data, has_labels)
