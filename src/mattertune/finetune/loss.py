@@ -312,7 +312,11 @@ def compute_loss_with_batch(
             sl = 60
             sr = -10
             k_feff = batch.system_features["feff_k"][:(len(batch.system_features["feff_k"]) // len(label))]
-            
+            path_offsets = torch.cumsum(torch.cat([
+                    torch.tensor([0], device=prediction.device),
+                    batch.system_features["N_paths"][:-1]
+                ]), dim = 0)
+
             ΔE0_max = k2s[sl] - 0.05
             ΔE0_min = k2s[sr] - 16 ** 2
             mid_ΔE0_range = 0.5 * (ΔE0_max + ΔE0_min)
@@ -338,7 +342,7 @@ def compute_loss_with_batch(
                     pinds = batch.system_features["path_inds"][abs_edge_inds]
                     valid = pinds >= 0
 
-                    pinds = pinds[valid].int()
+                    pinds = pinds[valid].int() + path_offsets[i]
                     ss_preds = abs_preds[valid]
 
                     amp = interp_soft_adaptive(q, k_feff, batch.system_features["amp"][pinds])

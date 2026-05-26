@@ -622,16 +622,16 @@ class ORBBackboneModule(
 
         if paths_info is not None:
             device = atom_graphs.edge_features["vectors"].device
-            label = torch.tensor(atoms.info['edge_props'], device = device).int()
+            struct_i = atoms.info['edge_props'][0]
 
             nk = len(paths_info[0][0]["k_feff"])
             atom_graphs.system_features["feff_k"] = paths_info[0][0]["k_feff"].to(device)
 
             N_paths = 0
-            for i, struct_i in enumerate(label):
-                abs_inds[struct_i] = abs_inds[struct_i].to(device)
-                for j, abs_i in enumerate(abs_inds[struct_i]):
-                    N_paths += len(paths_info[struct_i][j]["Reffs"])
+            abs_inds[struct_i] = abs_inds[struct_i].to(device)
+            for j, abs_i in enumerate(abs_inds[struct_i]):
+                N_paths += len(paths_info[struct_i][j]["Reffs"])
+            atom_graphs.system_features["N_paths"] = torch.tensor([N_paths])
 
             Reffs = torch.zeros((N_paths), device = device)
             amp = torch.zeros((N_paths, nk), device = device)
@@ -642,36 +642,31 @@ class ORBBackboneModule(
             batch_abs_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device)
 
             edge_inds = torch.arange(atom_graphs.edge_features["vectors"].size(dim = 0), device = device)
-            tot_edge = 0
             tot_path = 0
-            for i, struct_i in enumerate(label):
-                n_edge = atom_graphs.n_edge[i]
-                edge_vecs = atom_graphs.edge_features["vectors"][tot_edge:(tot_edge + n_edge)]
-                struct_edge_inds = edge_inds[tot_edge:(tot_edge + n_edge)]
-                edge_Reffs = torch.linalg.norm(edge_vecs, dim = 1)
-                receivers = atom_graphs.receivers[tot_edge:(tot_edge + n_edge)]
-                senders = atom_graphs.senders[tot_edge:(tot_edge + n_edge)]
-                scatterer_Zs = atom_graphs.node_features["atomic_numbers"][receivers]
-                for j, abs_i in enumerate(abs_inds[struct_i]):
-                    N_path_abs = len(paths_info[struct_i][j]["Reffs"])
-                    amp[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["amp"].to(device)
-                    pha[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["pha"].to(device)
-                    rep[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["rep"].to(device)
-                    lam[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["lam"].to(device)
-                    Reffs[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["Reffs"].to(device)
+            edge_vecs = atom_graphs.edge_features["vectors"]
+            edge_Reffs = torch.linalg.norm(edge_vecs, dim = 1)
+            receivers = atom_graphs.receivers
+            senders = atom_graphs.senders
+            scatterer_Zs = atom_graphs.node_features["atomic_numbers"][receivers]
+            for j, abs_i in enumerate(abs_inds[struct_i]):
+                N_path_abs = len(paths_info[struct_i][j]["Reffs"])
+                amp[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["amp"].to(device)
+                pha[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["pha"].to(device)
+                rep[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["rep"].to(device)
+                lam[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["lam"].to(device)
+                Reffs[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["Reffs"].to(device)
 
-                    abs_mask = (senders - atom_graphs.n_node[:i].sum()) == abs_i
-                    abs_edge_inds = struct_edge_inds[abs_mask]
-                    abs_Reffs = edge_Reffs[abs_mask]
-                    abs_Zs = scatterer_Zs[abs_mask]
+                abs_mask = senders == abs_i
+                abs_edge_inds = edge_inds[abs_mask]
+                abs_Reffs = edge_Reffs[abs_mask]
+                abs_Zs = scatterer_Zs[abs_mask]
 
-                    for k in range(len(abs_Reffs)):
-                        path_ind = torch.argmin(torch.abs(torch.where(paths_info[struct_i][j]["scatterer_Zs"] == abs_Zs[k], paths_info[struct_i][j]["Reffs"], -10.0) - abs_Reffs[k]))
-                        if torch.abs(paths_info[struct_i][j]["Reffs"][path_ind] - abs_Reffs[k]) < 0.01:
-                            path_inds[abs_edge_inds[k]] = tot_path + path_ind
-                            batch_abs_inds[abs_edge_inds[k]] = j
-                    tot_path += N_path_abs
-                tot_edge += n_edge
+                for k in range(len(abs_Reffs)):
+                    path_ind = torch.argmin(torch.abs(torch.where(paths_info[struct_i][j]["scatterer_Zs"] == abs_Zs[k], paths_info[struct_i][j]["Reffs"], -10.0) - abs_Reffs[k]))
+                    if torch.abs(paths_info[struct_i][j]["Reffs"][path_ind] - abs_Reffs[k]) < 0.01:
+                        path_inds[abs_edge_inds[k]] = tot_path + path_ind
+                        batch_abs_inds[abs_edge_inds[k]] = j
+                tot_path += N_path_abs
             atom_graphs.system_features["path_inds"] = path_inds
             atom_graphs.system_features["amp"] = amp
             atom_graphs.system_features["pha"] = pha
