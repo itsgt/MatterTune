@@ -629,14 +629,15 @@ class ORBBackboneModule(
 
             N_paths = 0
             for i, struct_i in enumerate(label):
+                abs_inds[struct_i] = abs_inds[struct_i].to(device)
                 for j, abs_i in enumerate(abs_inds[struct_i]):
                     N_paths += len(paths_info[struct_i][j]["Reffs"])
 
-            Reffs = torch.zeros((N_paths))
-            amp = torch.zeros((N_paths, nk))
-            pha = torch.zeros((N_paths, nk))
-            rep = torch.zeros((N_paths, nk))
-            lam = torch.zeros((N_paths, nk))
+            Reffs = torch.zeros((N_paths), device = device)
+            amp = torch.zeros((N_paths, nk), device = device)
+            pha = torch.zeros((N_paths, nk), device = device)
+            rep = torch.zeros((N_paths, nk), device = device)
+            lam = torch.zeros((N_paths, nk), device = device)
             path_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device)
             batch_abs_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device)
 
