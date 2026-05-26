@@ -624,9 +624,8 @@ class ORBBackboneModule(
             device = atom_graphs.edge_features["vectors"].device
             label = torch.tensor(atoms.info['edge_props'], device = device).int()
 
-            atom_graphs.feff_k = paths_info[0][0]["k_feff"]
-            atom_graphs.feff_edges = [[path_info[i][j]["edge"].to(device) for j in range(len(path_info[i])
-                )] for i in range(len(path_info[j]))]
+            nk = len(paths_info[0][0]["k_feff"])
+            atom_graphs.system_features["feff_k"] = paths_info[0][0]["k_feff"]
 
             N_paths = 0
             for i, struct_i in enumerate(label):
@@ -634,10 +633,10 @@ class ORBBackboneModule(
                     N_paths += len(paths_info[struct_i][j]["Reffs"])
 
             Reffs = torch.zeros((N_paths))
-            amp = torch.zeros((N_paths, len(atom_graphs.k_feff)))
-            pha = torch.zeros((N_paths, len(atom_graphs.k_feff)))
-            rep = torch.zeros((N_paths, len(atom_graphs.k_feff)))
-            lam = torch.zeros((N_paths, len(atom_graphs.k_feff)))
+            amp = torch.zeros((N_paths, nk))
+            pha = torch.zeros((N_paths, nk))
+            rep = torch.zeros((N_paths, nk))
+            lam = torch.zeros((N_paths, nk))
             path_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device)
             batch_abs_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device)
 
@@ -673,13 +672,13 @@ class ORBBackboneModule(
                             batch_abs_inds[abs_edge_inds[k]] = j
                     tot_path += N_path_abs
                 tot_edge += n_edge
-            atom_graphs.path_inds = path_inds
-            atom_graphs.amp = amp
-            atom_graphs.pha = pha
-            atom_graphs.rep = rep
-            atom_graphs.lam = lam
-            atom_graphs.abs_inds = batch_abs_inds
-            atom_graphs.Reffs = Reffs
+            atom_graphs.system_features["path_inds"] = path_inds
+            atom_graphs.system_features["amp"] = amp
+            atom_graphs.system_features["pha"] = pha
+            atom_graphs.system_features["rep"] = rep
+            atom_graphs.system_features["lam"] = lam
+            atom_graphs.system_features["abs_inds"] = batch_abs_inds
+            atom_graphs.system_features["Reffs"] = Reffs
         return atom_graphs
 
     @override
