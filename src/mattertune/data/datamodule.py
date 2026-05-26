@@ -16,9 +16,10 @@ from ..registry import data_registry
 from .base import DatasetConfig
 from .util.split_dataset import SplitDataset
 
+import torch
+
 if TYPE_CHECKING:
     from ..finetune.loader import DataLoaderKwargs
-    import torch
 
 log = logging.getLogger(__name__)
 
@@ -68,8 +69,8 @@ class DataModuleBaseConfig(C.Config, ABC):
             "batch_size": self.batch_size,
             "num_workers": self._num_workers_or_auto(),
             "pin_memory": self.pin_memory,
-            "paths_info": paths_info,
-            "abs_inds": abs_inds,
+            "paths_info": self.paths_info,
+            "abs_inds": self.abs_inds,
         }
 
     @abstractmethod
