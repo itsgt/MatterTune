@@ -313,17 +313,12 @@ def compute_loss_with_batch(
             sr = -10
             k_feff = batch.system_features["feff_k"][:(len(batch.system_features["feff_k"]) // len(label))]
             path_offsets = torch.cumsum(torch.cat([
-                    torch.tensor([0], device=prediction.device),
+                    torch.tensor([0], device = prediction.device),
                     batch.system_features["N_paths"][:-1]
                 ]), dim = 0)
 
-            ΔE0_max = k2s[sl] - 0.05
-            ΔE0_min = k2s[sr] - 16 ** 2
-            mid_ΔE0_range = 0.5 * (ΔE0_max + ΔE0_min)
-            half_ΔE0_range = 0.5 * (ΔE0_max - ΔE0_min)
             sim_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
             exp_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
-            edge_inds = torch.arange(batch.edge_features["vectors"].size(dim = 0), device = prediction.device)
             for i, struct_i_flt in enumerate(label):
                 n_edge = batch.n_edge[i]
                 struct_i = struct_i_flt.int()
@@ -345,34 +340,26 @@ def compute_loss_with_batch(
                 lam_all = batch.system_features["lam"][valid_path_inds]
                 Reff_all = batch.system_features["Reffs"][valid_path_inds]
 
-                unique_abs, inverse = torch.unique(valid_abs_inds, sorted=True, return_inverse=True)
+                unique_abs, inverse = torch.unique(valid_abs_inds, sorted = True, return_inverse = True)
 
-                chi = torch.zeros((len(unique_abs), len(k1s[sl:sr])), device=prediction.device)
+                chi = torch.zeros((len(unique_abs), len(k1s[sl:sr])), device = prediction.device)
 
                 for j in range(len(unique_abs)):
                     mask = inverse == j
-
                     ss_preds = valid_preds[mask]
 
-                    ΔE0 = mid_ΔE0_range + half_ΔE0_range * torch.tanh(
-                        ss_preds[:, 0].mean() / half_ΔE0_range
-                    )
-
+                    ΔE0 = 5 * torch.tanh(ss_preds[:, 0].mean())
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
 
-                    amp = interp_soft_adaptive(q, k_feff, amp_all[mask])
-                    pha = interp_soft_adaptive(q, k_feff, pha_all[mask])
-                    rep = interp_soft_adaptive(q, k_feff, rep_all[mask])
-                    lam = interp_soft_adaptive(q, k_feff, lam_all[mask])
-
-                    deltar = 0.2 * torch.tanh(ss_preds[:, 1])
-                    sigma2 = 0.05 * torch.sigmoid(ss_preds[:, 2])
-                    third  = 0.01 * torch.tanh(ss_preds[:, 3])
-                    fourth = torch.zeros_like(deltar)
-
-                    chi_paths = calc_chi_batch(
-                        q, deltar, sigma2, third, fourth,
-                        amp, pha, rep, lam,
+                    chi_paths = calc_chi_batch(q, 
+                        0.15 * torch.tanh(ss_preds[:, 1]), 
+                        0.015 * torch.sigmoid(ss_preds[:, 2]), 
+                        0.005 * torch.tanh(ss_preds[:, 3]), 
+                        torch.zeros_like(deltar),
+                        interp_soft_adaptive(q, k_feff, amp_all[mask]), 
+                        interp_soft_adaptive(q, k_feff, pha_all[mask]), 
+                        interp_soft_adaptive(q, k_feff, rep_all[mask]), 
+                        interp_soft_adaptive(q, k_feff, lam_all[mask]),
                         Reff_all[mask], 0.0
                     )
 
@@ -380,9 +367,9 @@ def compute_loss_with_batch(
                 tot_edge += n_edge
             
                 mean_sim_chi = torch.mean(chi, dim = 0) 
-                sim_chis[i] = mean_sim_chi / torch.linalg.norm(mean_sim_chi)
-                exp_chis[i] = config.exp_spectra[struct_i][sl:sr] / torch.linalg.norm(config.exp_spectra[struct_i][sl:sr])
-            return F.mse_loss(sim_chis, exp_chis, reduction=config.reduction)
+                sim_chis[i] = k3s * (mean_sim_chi / torch.linalg.norm(mean_sim_chi))
+                exp_chis[i] = k3s * (config.exp_spectra[struct_i][sl:sr] / torch.linalg.norm(config.exp_spectra[struct_i][sl:sr]))
+            return F.mse_loss(sim_chis, exp_chis, reduction = config.reduction)
 
         case _:
             assert_never(config)
