@@ -355,7 +355,7 @@ def compute_loss_with_batch(
                         0.15 * torch.tanh(ss_preds[:, 1]), 
                         0.015 * torch.sigmoid(ss_preds[:, 2]), 
                         0.005 * torch.tanh(ss_preds[:, 3]), 
-                        torch.zeros_like(deltar),
+                        torch.zeros_like(ss_preds[:, 1]),
                         interp_soft_adaptive(q, k_feff, amp_all[mask]), 
                         interp_soft_adaptive(q, k_feff, pha_all[mask]), 
                         interp_soft_adaptive(q, k_feff, rep_all[mask]), 
