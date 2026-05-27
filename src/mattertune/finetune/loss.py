@@ -351,6 +351,10 @@ def compute_loss_with_batch(
                     unique_paths, path_inv = torch.unique(path_ids, return_inverse=True)
                     ΔE0 = 5 * torch.tanh(preds_abs[:, 0].mean())
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
+                    amp_abs = amp_all[abs_mask]
+                    pha_abs = pha_all[abs_mask]
+                    rep_abs = rep_all[abs_mask]
+                    lam_abs = lam_all[abs_mask]
                     
                     chi_abs = torch.zeros(len(k1s[sl:sr]), device=prediction.device)
                     for p_idx in range(len(unique_paths)):
@@ -362,10 +366,10 @@ def compute_loss_with_batch(
                             0.015 * torch.sigmoid(ss_preds[:, 2].mean().unsqueeze(0)), 
                             0.005 * torch.tanh(ss_preds[:, 3].mean().unsqueeze(0)), 
                             torch.zeros_like(ss_preds[:, 1].mean().unsqueeze(0)),
-                            interp_soft_adaptive(q, k_feff, amp_all[p_mask][0:1]), 
-                            interp_soft_adaptive(q, k_feff, pha_all[p_mask][0:1]), 
-                            interp_soft_adaptive(q, k_feff, rep_all[p_mask][0:1]), 
-                            interp_soft_adaptive(q, k_feff, lam_all[p_mask][0:1]),
+                            interp_soft_adaptive(q, k_feff, amp_abs[p_mask][0:1]), 
+                            interp_soft_adaptive(q, k_feff, pha_abs[p_mask][0:1]), 
+                            interp_soft_adaptive(q, k_feff, rep_abs[p_mask][0:1]), 
+                            interp_soft_adaptive(q, k_feff, lam_abs[p_mask][0:1]),
                             Reff_all[abs_mask][p_mask][0].unsqueeze(0), 0.0
                         )
                         chi_abs += p_mask.sum().float() * chi_paths.squeeze(0)
