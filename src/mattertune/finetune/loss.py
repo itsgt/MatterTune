@@ -382,11 +382,12 @@ def compute_loss_with_batch(
 
                             All physical edge_vecs (same absorber + Z) =
                             {batch.edge_features["vectors"][edge_slice][
-                                (batch.senders[edge_slice] == abs_inds[struct_i][j]) &
+                                (batch.system_features["abs_inds"][edge_slice] == unique_abs[j]) &
                                 (batch.node_features["atomic_numbers"][batch.receivers[edge_slice]] ==
                                 batch.node_features["atomic_numbers"][batch.receivers[edge_slice]][valid][abs_mask][p_mask][0])
                             ]}
                             '''
+
                         chi_abs += p_mask.sum().float() * chi_paths.squeeze(0)
                     chi[j] = chi_abs
                 tot_edge += n_edge
