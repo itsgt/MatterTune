@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import logging
-import warning
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Literal, cast
 
