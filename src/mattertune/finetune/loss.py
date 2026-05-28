@@ -305,78 +305,76 @@ def compute_loss_with_batch(
 ) -> torch.Tensor:
     match config:
         case EXAFSLossConfig():
-            tot_edge = 0
             k1s = torch.arange(0.0, 16.00001, 0.05, device = prediction.device)
             k2s = k1s ** 2
             k3s = k1s ** 3
             sl = 60
             sr = -10
             k_feff = batch.system_features["feff_k"][:(len(batch.system_features["feff_k"]) // len(label))]
-            path_offsets = torch.cumsum(torch.cat([
-                    torch.tensor([0], device = prediction.device),
-                    batch.system_features["N_paths"][:-1]
-                ]), dim = 0)
 
             sim_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
             exp_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
+            tot_edge = 0
+            tot_path = 0
             for i, struct_i_flt in enumerate(label):
-                n_edge = batch.n_edge[i]
                 struct_i = struct_i_flt.int()
-                edge_slice = slice(tot_edge, tot_edge + n_edge)
+                n_edge = batch.n_edge[i]
+                n_path = batch.system_features["N_paths"][i]
+                
+                edge_preds = prediction[tot_edge:(tot_edge + n_edge)]
+                edge_abs_inds = batch.system_features["abs_edge_inds"][tot_edge:(tot_edge + n_edge)]
+                unique_abs_edge, inverse_abs_edge = torch.unique(edge_abs_inds, sorted = True, return_inverse = True)
+                path_abs_inds = batch.system_features["abs_path_inds"][tot_path:(tot_path + n_path)]
+                unique_abs_path, inverse_abs_path = torch.unique(path_abs_inds, sorted = True, return_inverse = True)
+                
+                amp_all = batch.system_features["amp"][tot_path:(tot_path + n_path)]
+                pha_all = batch.system_features["pha"][tot_path:(tot_path + n_path)]
+                rep_all = batch.system_features["rep"][tot_path:(tot_path + n_path)]
+                lam_all = batch.system_features["lam"][tot_path:(tot_path + n_path)]
+                Reff_all = batch.system_features["Reffs"][tot_path:(tot_path + n_path)]
+                degen_all = batch.system_features["degen"][tot_path:(tot_path + n_path)]
 
-                edge_preds = prediction[edge_slice]
-                edge_abs_inds = batch.system_features["abs_inds"][edge_slice]
-                edge_path_inds = batch.system_features["path_inds"][edge_slice]
+                chi = torch.zeros((len(unique_abs_edge), len(k1s[sl:sr])), device = prediction.device)
+                for j in range(len(unique_abs_edge)):
+                    abs_edge_mask = inverse_abs_edge == j
+                    abs_path_mask = inverse_abs_path == j
 
-                valid = edge_path_inds >= 0
-
-                valid_preds = edge_preds[valid]
-                valid_abs_inds = edge_abs_inds[valid]
-                valid_path_inds = edge_path_inds[valid].int() + path_offsets[i]
-
-                amp_all = batch.system_features["amp"][valid_path_inds]
-                pha_all = batch.system_features["pha"][valid_path_inds]
-                rep_all = batch.system_features["rep"][valid_path_inds]
-                lam_all = batch.system_features["lam"][valid_path_inds]
-                Reff_all = batch.system_features["Reffs"][valid_path_inds]
-                degen_all = batch.system_features["degen"][valid_path_inds]
-
-                unique_abs, inverse = torch.unique(valid_abs_inds, sorted = True, return_inverse = True)
-
-                chi = torch.zeros((len(unique_abs), len(k1s[sl:sr])), device = prediction.device)
-
-                for j in range(len(unique_abs)):
-                    abs_mask = inverse == j
-                    path_ids = valid_path_inds[abs_mask]
-                    preds_abs = valid_preds[abs_mask]
-                    unique_paths, path_inv = torch.unique(path_ids, return_inverse=True)
+                    preds_abs = edge_preds[abs_edge_mask]
                     ΔE0 = 5 * torch.tanh(preds_abs[:, 0].mean())
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
-                    amp_abs = amp_all[abs_mask]
-                    pha_abs = pha_all[abs_mask]
-                    rep_abs = rep_all[abs_mask]
-                    lam_abs = lam_all[abs_mask]
-                    
-                    chi_abs = torch.zeros(len(k1s[sl:sr]), device=prediction.device)
-                    for p_idx in range(len(unique_paths)):
-                        p_mask = path_inv == p_idx
-                        ss_preds = preds_abs[p_mask]
 
-                        chi_paths = calc_chi_batch(q, 
-                            0.15 * torch.tanh(ss_preds[:, 1].mean().unsqueeze(0)), 
-                            0.015 * torch.sigmoid(ss_preds[:, 2].mean().unsqueeze(0)), 
-                            0.005 * torch.tanh(ss_preds[:, 3].mean().unsqueeze(0)), 
-                            torch.zeros_like(ss_preds[:, 1].mean().unsqueeze(0)),
-                            interp_soft_adaptive(q, k_feff, amp_abs[p_mask][0:1]), 
-                            interp_soft_adaptive(q, k_feff, pha_abs[p_mask][0:1]), 
-                            interp_soft_adaptive(q, k_feff, rep_abs[p_mask][0:1]), 
-                            interp_soft_adaptive(q, k_feff, lam_abs[p_mask][0:1]),
-                            Reff_all[abs_mask][p_mask][0].unsqueeze(0), 0.0
-                        )
+                    amp_abs = amp_all[abs_path_mask]
+                    pha_abs = pha_all[abs_path_mask]
+                    rep_abs = rep_all[abs_path_mask]
+                    lam_abs = lam_all[abs_path_mask]
+                    degen_abs = degen_all[abs_path_mask]
+                    Reff_abs = Reff_all[abs_path_mask]
 
-                        chi_abs += p_mask.sum().float() * chi_paths.squeeze(0)
-                    chi[j] = chi_abs
+                    segment_ids = torch.repeat_interleave(torch.arange(len(degen_abs)), degen_abs)
+                    c1_pred = torch.zeros(len(degen_abs), dtype = preds_abs[:, 1].dtype)
+                    c1_pred = c1_pred.scatter_add(0, segment_ids, preds_abs[:, 1])
+                    c1_pred = c1_pred / degen_abs
+                    c2_pred = torch.zeros(len(degen_abs), dtype = preds_abs[:, 2].dtype)
+                    c2_pred = c2_pred.scatter_add(0, segment_ids, preds_abs[:, 2])
+                    c2_pred = c2_pred / degen_abs
+                    c3_pred = torch.zeros(len(degen_abs), dtype = preds_abs[:, 3].dtype)
+                    c3_pred = c3_pred.scatter_add(0, segment_ids, preds_abs[:, 3])
+                    c3_pred = c3_pred / degen_abs
+
+                    chi_paths = calc_chi_batch(q, 
+                        0.15 * torch.tanh(c1_pred), 
+                        0.015 * torch.sigmoid(c2_pred), 
+                        0.005 * torch.tanh(c3_pred), 
+                        torch.zeros_like(c1_pred),
+                        interp_soft_adaptive(q, k_feff, amp_abs), 
+                        interp_soft_adaptive(q, k_feff, pha_abs), 
+                        interp_soft_adaptive(q, k_feff, rep_abs), 
+                        interp_soft_adaptive(q, k_feff, lam_abs),
+                        Reff_abs, 0.0
+                    )
+                    chi[j] = torch.sum(chi_paths, dim = 0)
                 tot_edge += n_edge
+                tot_path += n_path
             
                 mean_sim_chi = torch.mean(chi, dim = 0) 
                 sim_chis[i] = k3s[sl:sr] * (mean_sim_chi / torch.linalg.norm(mean_sim_chi))
