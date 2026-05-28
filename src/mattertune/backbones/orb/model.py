@@ -668,7 +668,7 @@ class ORBBackboneModule(
                 abs_Reffs = edge_Reffs[abs_mask]
                 abs_Zs = scatterer_Zs[abs_mask]
 
-                batch_abs_edge_inds[abs_edge_inds] = j * torch.ones_like(abs_edge_inds)
+                batch_abs_edge_inds[abs_edge_inds] = j * torch.ones_like(abs_edge_inds).int()
                 batch_abs_path_inds[tot_path:(tot_path + N_path_abs)] = j * torch.ones_like(paths_info[struct_i][j]["Reffs"]).int()
 
                 path_degen_counter = 0
