@@ -632,7 +632,7 @@ class ORBBackboneModule(
             abs_inds[struct_i] = abs_inds[struct_i].to(device)
             for j, abs_i in enumerate(abs_inds[struct_i]):
                 N_paths += len(paths_info[struct_i][j]["Reffs"])
-                N_paths_degen += paths_info[struct_i][j]["degen"].to(device).int()
+                N_paths_degen += paths_info[struct_i][j]["degen"].to(device).int().sum()
             atom_graphs.system_features["N_paths"] = torch.tensor([N_paths])
 
             Reffs = torch.zeros((N_paths), device = device)
