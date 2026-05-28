@@ -634,6 +634,7 @@ class ORBBackboneModule(
             atom_graphs.system_features["N_paths"] = torch.tensor([N_paths])
 
             Reffs = torch.zeros((N_paths), device = device)
+            degen = torch.zeros((N_paths), device = device)
             amp = torch.zeros((N_paths, nk), device = device)
             pha = torch.zeros((N_paths, nk), device = device)
             rep = torch.zeros((N_paths, nk), device = device)
