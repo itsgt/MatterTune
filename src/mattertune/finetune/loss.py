@@ -373,7 +373,7 @@ def compute_loss_with_batch(
                             interp_soft_adaptive(q, k_feff, lam_abs[p_mask][0:1]),
                             Reff_all[abs_mask][p_mask][0].unsqueeze(0), 0.0
                         )
-                        assert degen_all[abs_mask][p_mask][0].int() == p_mask.sum().int(), f'Expected degen of {degen_all[abs_mask][p_mask][0].int()} but got {p_mask.sum().int()}'
+                        assert degen_all[abs_mask][p_mask][0].int() == p_mask.sum().int(), f'Expected degen of {degen_all[abs_mask][p_mask][0].int()} but got {p_mask.sum().int()}. Reff = {Reff_all[abs_mask][p_mask][0]} edge_vecs = {batch.edge_features[abs_mask][p_mask]}'
                         chi_abs += p_mask.sum().float() * chi_paths.squeeze(0)
                     chi[j] = chi_abs
                 tot_edge += n_edge
