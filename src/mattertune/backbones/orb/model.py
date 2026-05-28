@@ -698,7 +698,7 @@ class ORBBackboneModule(
                     """
 
                     edge_path_inds[(tot_path_degen + path_degen_counter):(
-                        tot_path_degen + path_degen_counter + degen[tot_path + k].int())] = abs_scatter_edge_inds[path_inds].int()]
+                        tot_path_degen + path_degen_counter + degen[tot_path + k].int())] = abs_scatter_edge_inds[path_inds].int()
                     path_degen_counter += degen[tot_path + k].int()
 
                 tot_path += N_path_abs
