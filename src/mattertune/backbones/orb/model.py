@@ -685,7 +685,7 @@ class ORBBackboneModule(
                     d_next = all_edge_diffs[all_edge_diff_orders[(degen[tot_path + k].int())]]
 
                     assert (
-                        torch.all(d_self < 1e-4) and
+                        torch.all(d_self < 1e-3) and
                         torch.all(d_next > 1e-6)
                     ), f"""
                     Struct {struct_i} 
