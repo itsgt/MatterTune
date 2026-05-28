@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import logging
+import warning
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Literal, cast
 
@@ -628,9 +629,11 @@ class ORBBackboneModule(
             atom_graphs.system_features["feff_k"] = paths_info[0][0]["k_feff"].to(device)
 
             N_paths = 0
+            N_paths_degen = 0
             abs_inds[struct_i] = abs_inds[struct_i].to(device)
             for j, abs_i in enumerate(abs_inds[struct_i]):
                 N_paths += len(paths_info[struct_i][j]["Reffs"])
+                N_paths_degen += paths_info[struct_i][j]["degen"].to(device).int()
             atom_graphs.system_features["N_paths"] = torch.tensor([N_paths])
 
             Reffs = torch.zeros((N_paths), device = device)
@@ -640,10 +643,11 @@ class ORBBackboneModule(
             rep = torch.zeros((N_paths, nk), device = device)
             lam = torch.zeros((N_paths, nk), device = device)
             path_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device)
-            batch_abs_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device)
+            edge_path_inds = torch.zeros((N_paths_degen), device = device).int()
 
             edge_inds = torch.arange(atom_graphs.edge_features["vectors"].size(dim = 0), device = device)
             tot_path = 0
+            tot_path_degen = 0
             edge_vecs = atom_graphs.edge_features["vectors"]
             edge_Reffs = torch.linalg.norm(edge_vecs, dim = 1)
             receivers = atom_graphs.receivers
@@ -651,6 +655,7 @@ class ORBBackboneModule(
             scatterer_Zs = atom_graphs.node_features["atomic_numbers"][receivers]
             for j, abs_i in enumerate(abs_inds[struct_i]):
                 N_path_abs = len(paths_info[struct_i][j]["Reffs"])
+                N_path_degen = paths_info[struct_i][j]["degen"].sum().int()
                 amp[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["amp"].to(device)
                 pha[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["pha"].to(device)
                 rep[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["rep"].to(device)
@@ -663,18 +668,46 @@ class ORBBackboneModule(
                 abs_Reffs = edge_Reffs[abs_mask]
                 abs_Zs = scatterer_Zs[abs_mask]
 
-                for k in range(len(abs_Reffs)):
-                    path_ind = torch.argmin(torch.abs(torch.where(paths_info[struct_i][j]["scatterer_Zs"] == abs_Zs[k], paths_info[struct_i][j]["Reffs"], -10.0) - abs_Reffs[k]))
-                    if torch.abs(paths_info[struct_i][j]["Reffs"][path_ind] - abs_Reffs[k]) < 0.00005:
-                        path_inds[abs_edge_inds[k]] = tot_path + path_ind
-                        batch_abs_inds[abs_edge_inds[k]] = j
+                path_degen_counter = 0
+                for k in range(N_path_abs):
+                    scatterer_mask = abs_Zs == paths_info[struct_i][j]["scatterer_Zs"][k]
+                    abs_scatter_edge_inds = abs_edge_inds[scatterer_mask]
+                    abs_scatter_Reffs = abs_Reffs[scatterer_mask]
+
+                    all_edge_diffs = torch.abs(abs_scatter_Reffs - Reffs[tot_path + k])
+                    all_edge_diff_orders = torch.argsort(all_edge_diffs)
+
+                    path_inds = all_edge_diff_orders[:(degen[tot_path + k].int())]
+                    d_self = all_edge_diffs[path_inds]
+                    d_next = all_edge_diffs[all_edge_diff_orders[(degen[tot_path + k].int())]]
+
+                    assert (
+                        torch.all(d_self < 1e-4) and
+                        torch.all(d_next > 1e-6)
+                    ), f"""
+                    Path {k} failed assignment checks
+                    Target Reff = {Reffs[tot_path + k]}
+
+                    d_self = {d_self}
+                    d_next = {d_next}
+                    """
+
+                    edge_path_inds[(tot_path_degen + path_degen_counter):(
+                        tot_path_degen + path_degen_counter + degen[tot_path + k].int())] = abs_scatter_edge_inds[path_inds].int()]
+                    path_degen_counter += degen[tot_path + k].int()
+
                 tot_path += N_path_abs
-            atom_graphs.system_features["path_inds"] = path_inds
+                tot_path_degen += N_path_degen
+            
+            edge_path_vals, edge_path_counts = torch.unique(edge_path_inds, return_counts=True)
+            edge_path_dups = edge_path_vals[edge_path_counts > 1]
+            assert edge_path_dups.numel() == 0, f"Duplicate edge assignments for edges: {edge_vecs[edge_path_dups]}"
+
+            atom_graphs.system_features["edge_path_inds"] = edge_path_inds
             atom_graphs.system_features["amp"] = amp
             atom_graphs.system_features["pha"] = pha
             atom_graphs.system_features["rep"] = rep
             atom_graphs.system_features["lam"] = lam
-            atom_graphs.system_features["abs_inds"] = batch_abs_inds
             atom_graphs.system_features["Reffs"] = Reffs
             atom_graphs.system_features["degen"] = degen
         return atom_graphs
