@@ -350,7 +350,7 @@ def compute_loss_with_batch(
                     degen_abs = degen_all[abs_path_mask]
                     Reff_abs = Reff_all[abs_path_mask]
 
-                    segment_ids = torch.repeat_interleave(torch.arange(len(degen_abs)), degen_abs)
+                    segment_ids = torch.repeat_interleave(torch.arange(len(degen_abs)), degen_abs.int())
                     c1_pred = torch.zeros(len(degen_abs), dtype = preds_abs[:, 1].dtype)
                     c1_pred = c1_pred.scatter_add(0, segment_ids, preds_abs[:, 1])
                     c1_pred = c1_pred / degen_abs
