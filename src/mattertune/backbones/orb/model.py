@@ -642,7 +642,7 @@ class ORBBackboneModule(
             pha = torch.zeros((N_paths, nk), device = device)
             rep = torch.zeros((N_paths, nk), device = device)
             lam = torch.zeros((N_paths, nk), device = device)
-            path_inds = -1 * torch.ones((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device)
+            batch_abs_inds = torch.zeros((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device)
             edge_path_inds = torch.zeros((N_paths_degen), device = device).int()
 
             edge_inds = torch.arange(atom_graphs.edge_features["vectors"].size(dim = 0), device = device)
@@ -667,6 +667,8 @@ class ORBBackboneModule(
                 abs_edge_inds = edge_inds[abs_mask]
                 abs_Reffs = edge_Reffs[abs_mask]
                 abs_Zs = scatterer_Zs[abs_mask]
+
+                batch_abs_inds[abs_edge_inds] = j * torch.ones_like(abs_edge_inds)
 
                 path_degen_counter = 0
                 for k in range(N_path_abs):
@@ -709,6 +711,7 @@ class ORBBackboneModule(
             atom_graphs.system_features["pha"] = pha
             atom_graphs.system_features["rep"] = rep
             atom_graphs.system_features["lam"] = lam
+            atom_graphs.system_features["abs_inds"] = batch_abs_inds
             atom_graphs.system_features["Reffs"] = Reffs
             atom_graphs.system_features["degen"] = degen
         return atom_graphs
