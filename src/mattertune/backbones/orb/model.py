@@ -685,6 +685,7 @@ class ORBBackboneModule(
                         torch.all(d_self < 1e-4) and
                         torch.all(d_next > 1e-6)
                     ), f"""
+                    Struct {struct_i} 
                     Path {k} failed assignment checks
                     Target Reff = {Reffs[tot_path + k]}
 
@@ -701,7 +702,7 @@ class ORBBackboneModule(
             
             edge_path_vals, edge_path_counts = torch.unique(edge_path_inds, return_counts=True)
             edge_path_dups = edge_path_vals[edge_path_counts > 1]
-            assert edge_path_dups.numel() == 0, f"Duplicate edge assignments for edges: {edge_vecs[edge_path_dups]}"
+            assert edge_path_dups.numel() == 0, f"Struct {struct_i} Duplicate edge assignments for edges: {edge_vecs[edge_path_dups]}"
 
             atom_graphs.system_features["edge_path_inds"] = edge_path_inds
             atom_graphs.system_features["amp"] = amp
