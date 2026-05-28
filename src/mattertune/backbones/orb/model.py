@@ -673,7 +673,7 @@ class ORBBackboneModule(
 
                 path_degen_counter = 0
                 for k in range(N_path_abs):
-                    scatterer_mask = abs_Zs == paths_info[struct_i][j]["scatterer_Zs"][k]
+                    scatterer_mask = abs_Zs == paths_info[struct_i][j]["scatterer_Zs"][k].to(device)
                     abs_scatter_edge_inds = abs_edge_inds[scatterer_mask]
                     abs_scatter_Reffs = abs_Reffs[scatterer_mask]
 
