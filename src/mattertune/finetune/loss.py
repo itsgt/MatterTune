@@ -32,6 +32,7 @@ class EXAFSLossConfig(C.Config):
     reduction: Literal["mean", "sum"] = "mean"
     ws: list[float] = [0.9, 0.1, 0.1]
     exp_spectra: torch.Tensor = torch.tensor([0.])
+    avg_paths: bool = False
      
 
 class MAEAtomAveragedLossConfig(C.Config):
@@ -349,21 +350,29 @@ def compute_loss_with_batch(
                     ΔE0 = 5 * torch.tanh(preds_abs[:, 0].mean() - batch.system_features["edge"][i])
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
 
-                    amp_abs = amp_all[abs_path_mask]
-                    pha_abs = pha_all[abs_path_mask]
-                    rep_abs = rep_all[abs_path_mask]
-                    lam_abs = lam_all[abs_path_mask]
                     degen_abs = degen_all[abs_path_mask]
-                    Reff_abs = Reff_all[abs_path_mask]
-
+                    Reff_abs = Reff_all[abs_path_mask] if config.avg_paths else Reff_all[abs_path_mask].repeat_interleave(degen_abs, dim = 0)
+                    amp_abs = amp_all[abs_path_mask] if config.avg_paths else amp_all[abs_path_mask].repeat_interleave(degen_abs, dim = 0)
+                    pha_abs = pha_all[abs_path_mask] if config.avg_paths else pha_all[abs_path_mask].repeat_interleave(degen_abs, dim = 0)
+                    rep_abs = rep_all[abs_path_mask] if config.avg_paths else rep_all[abs_path_mask].repeat_interleave(degen_abs, dim = 0)
+                    lam_abs = lam_all[abs_path_mask] if config.avg_paths else lam_all[abs_path_mask].repeat_interleave(degen_abs, dim = 0)
+                    
                     edge_path_mapping = edge_path_inds[abs_edge_path_mask]
+                    
+                    if config.avg_paths:
+                        segment_ids = torch.repeat_interleave(torch.arange(len(degen_abs), device = prediction.device), degen_abs.int())
+                        c1_pred = torch.zeros(len(degen_abs), device = prediction.device)
+                        c1_pred = c1_pred.scatter_mean(0, segment_ids, edge_preds[:, 1][edge_path_mapping])
+                        c2_pred = torch.zeros(len(degen_abs), device = prediction.device)
+                        c2_pred = c2_pred.scatter_mean(0, segment_ids, edge_preds[:, 2][edge_path_mapping])
+                        c3_pred = torch.zeros(len(degen_abs), device = prediction.device)
+                        c3_pred = c3_pred.scatter_mean(0, segment_ids, edge_preds[:, 3][edge_path_mapping])
+                    else:
+                        c1_pred = edge_preds[:, 1][edge_path_mapping]
+                        c2_pred = edge_preds[:, 2][edge_path_mapping]
+                        c3_pred = edge_preds[:, 3][edge_path_mapping]
 
-                    segment_ids = torch.repeat_interleave(torch.arange(len(degen_abs), device = prediction.device), degen_abs.int())
-                    c1_pred = c1_pred.scatter_mean(0, segment_ids, edge_preds[:, 1][edge_path_mapping])
-                    c2_pred = c2_pred.scatter_mean(0, segment_ids, edge_preds[:, 2][edge_path_mapping])
-                    c3_pred = c3_pred.scatter_mean(0, segment_ids, edge_preds[:, 3][edge_path_mapping])
-
-                    chi_paths = degen_abs.unsqueeze(-1) * calc_chi_batch(q, 
+                    chi_paths = calc_chi_batch(q, 
                         0.15 * torch.tanh(c1_pred), 
                         0.015 * torch.sigmoid(c2_pred), 
                         0.005 * torch.tanh(c3_pred), 
@@ -374,6 +383,8 @@ def compute_loss_with_batch(
                         interp_soft_adaptive(q, k_feff, lam_abs),
                         Reff_abs, 0.0
                     )
+                    if config.avg_paths:
+                        chi_paths = degen_abs.unsqueeze(-1) * chi_paths
                     chi[j] = torch.sum(chi_paths, dim = 0)
                 tot_edge += n_edge
                 tot_path += n_path
