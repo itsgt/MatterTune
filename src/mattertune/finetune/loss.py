@@ -316,16 +316,21 @@ def compute_loss_with_batch(
             exp_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
             tot_edge = 0
             tot_path = 0
+            tot_path_degen = 0
             for i, struct_i_flt in enumerate(label):
                 struct_i = struct_i_flt.int()
                 n_edge = batch.n_edge[i]
                 n_path = batch.system_features["N_paths"][i]
+                n_path_degen = batch.system_features["N_paths_degen"][i]
                 
                 edge_preds = prediction[tot_edge:(tot_edge + n_edge)]
+                edge_path_inds = batch.system_features["edge_path_inds"][tot_path_degen:(tot_path_degen + n_path_degen)]
                 edge_abs_inds = batch.system_features["abs_edge_inds"][tot_edge:(tot_edge + n_edge)]
                 unique_abs_edge, inverse_abs_edge = torch.unique(edge_abs_inds, sorted = True, return_inverse = True)
                 path_abs_inds = batch.system_features["abs_path_inds"][tot_path:(tot_path + n_path)]
                 unique_abs_path, inverse_abs_path = torch.unique(path_abs_inds, sorted = True, return_inverse = True)
+                edge_path_abs_inds = batch.system_features["abs_edge_path_inds"][tot_path_degen:(tot_path_degen + n_path_degen)]
+                unique_abs_edge_path, inverse_abs_edge_path = torch.unique(edge_path_abs_inds, sorted = True, return_inverse = True)
                 
                 amp_all = batch.system_features["amp"][tot_path:(tot_path + n_path)]
                 pha_all = batch.system_features["pha"][tot_path:(tot_path + n_path)]
@@ -338,6 +343,7 @@ def compute_loss_with_batch(
                 for j in range(len(unique_abs_edge)):
                     abs_edge_mask = inverse_abs_edge == j
                     abs_path_mask = inverse_abs_path == j
+                    abs_edge_path_mask = inverse_abs_edge_path == j
 
                     preds_abs = edge_preds[abs_edge_mask]
                     ΔE0 = 5 * torch.tanh(preds_abs[:, 0].mean())
@@ -350,15 +356,17 @@ def compute_loss_with_batch(
                     degen_abs = degen_all[abs_path_mask]
                     Reff_abs = Reff_all[abs_path_mask]
 
+                    edge_path_mapping = edge_path_inds[abs_edge_path_mask]
+
                     segment_ids = torch.repeat_interleave(torch.arange(len(degen_abs), device = prediction.device), degen_abs.int())
-                    c1_pred = torch.zeros(len(degen_abs), dtype = preds_abs[:, 1].dtype, device = prediction.device)
-                    c1_pred = c1_pred.scatter_add(0, segment_ids, preds_abs[:, 1])
+                    c1_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 1].dtype, device = prediction.device)
+                    c1_pred = c1_pred.scatter_add(0, segment_ids, edge_preds[:, 1][edge_path_mapping])
                     c1_pred = c1_pred / degen_abs
-                    c2_pred = torch.zeros(len(degen_abs), dtype = preds_abs[:, 2].dtype, device = prediction.device)
-                    c2_pred = c2_pred.scatter_add(0, segment_ids, preds_abs[:, 2])
+                    c2_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 2].dtype, device = prediction.device)
+                    c2_pred = c2_pred.scatter_add(0, segment_ids, edge_preds[:, 2][edge_path_mapping])
                     c2_pred = c2_pred / degen_abs
-                    c3_pred = torch.zeros(len(degen_abs), dtype = preds_abs[:, 3].dtype, device = prediction.device)
-                    c3_pred = c3_pred.scatter_add(0, segment_ids, preds_abs[:, 3])
+                    c3_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 3].dtype, device = prediction.device)
+                    c3_pred = c3_pred.scatter_add(0, segment_ids, edge_preds[:, 3][edge_path_mapping])
                     c3_pred = c3_pred / degen_abs
 
                     chi_paths = calc_chi_batch(q, 
@@ -375,6 +383,7 @@ def compute_loss_with_batch(
                     chi[j] = torch.sum(chi_paths, dim = 0)
                 tot_edge += n_edge
                 tot_path += n_path
+                tot_path_degen += n_path_degen
             
                 mean_sim_chi = torch.mean(chi, dim = 0) 
                 sim_chis[i] = k3s[sl:sr] * (mean_sim_chi / torch.linalg.norm(mean_sim_chi))

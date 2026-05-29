@@ -634,6 +634,7 @@ class ORBBackboneModule(
                 N_paths += len(paths_info[struct_i][j]["Reffs"])
                 N_paths_degen += paths_info[struct_i][j]["degen"].to(device).int().sum()
             atom_graphs.system_features["N_paths"] = torch.tensor([N_paths])
+            atom_graphs.system_features["N_paths_degen"] = torch.tensor([N_paths_degen])
 
             Reffs = torch.zeros((N_paths), device = device)
             degen = torch.zeros((N_paths), device = device)
@@ -644,6 +645,7 @@ class ORBBackboneModule(
             batch_abs_edge_inds = torch.zeros((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device).int()
             batch_abs_path_inds = torch.zeros((N_paths), device = device).int()
             edge_path_inds = -1 * torch.ones((N_paths_degen), device = device).int()
+            abs_edge_path_inds = -1 * torch.ones((N_paths_degen), device = device).int()
 
             edge_inds = torch.arange(atom_graphs.edge_features["vectors"].size(dim = 0), device = device)
             tot_path = 0
@@ -699,7 +701,7 @@ class ORBBackboneModule(
                     edge_path_inds[(tot_path_degen + path_degen_counter):(
                         tot_path_degen + path_degen_counter + degen[tot_path + k].int())] = abs_scatter_edge_inds[path_inds].int()
                     path_degen_counter += degen[tot_path + k].int()
-
+                abs_edge_path_inds[tot_path_degen:(tot_path_degen + N_path_degen)] = j * torch.ones_like(abs_edge_path_inds[tot_path_degen:(tot_path_degen + N_path_degen)]).int()
                 tot_path += N_path_abs
                 tot_path_degen += N_path_degen
             
@@ -708,6 +710,7 @@ class ORBBackboneModule(
             assert edge_path_dups.numel() == 0, f"Struct {struct_i} Duplicate edge assignments for edges: {edge_vecs[edge_path_dups]}"
 
             atom_graphs.system_features["edge_path_inds"] = edge_path_inds
+            atom_graphs.system_features["abs_edge_path_inds"] = abs_edge_path_inds
             atom_graphs.system_features["amp"] = amp
             atom_graphs.system_features["pha"] = pha
             atom_graphs.system_features["rep"] = rep
