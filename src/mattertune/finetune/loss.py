@@ -349,7 +349,8 @@ def compute_loss_with_batch(
                     abs_edge_path_mask = inverse_abs_edge_path == j
 
                     preds_abs = edge_preds[abs_edge_mask]
-                    ΔE0 = 5 * torch.tanh(preds_abs[:, 0].mean() - batch.system_features["energy_edges"][tot_abs + j])
+                    ΔE0 = -14 + 10 * torch.tanh(preds_abs[:, 0].mean()) - batch.system_features["energy_edges"][tot_abs + j]
+                    assert k2s[sl] - ΔE0 > 0, f'{torch.tanh(preds_abs[:, 0].mean())} {ΔE0}' 
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
 
                     degen_abs = degen_all[abs_path_mask]
