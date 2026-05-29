@@ -346,7 +346,7 @@ def compute_loss_with_batch(
                     abs_edge_path_mask = inverse_abs_edge_path == j
 
                     preds_abs = edge_preds[abs_edge_mask]
-                    ΔE0 = preds_abs[:, 0].mean() - batch.system_features["edge"]
+                    ΔE0 = preds_abs[:, 0].mean() - batch.system_features["edge"][i]
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
 
                     amp_abs = amp_all[abs_path_mask]
