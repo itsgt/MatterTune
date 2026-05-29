@@ -319,6 +319,7 @@ def compute_loss_with_batch(
             tot_edge = 0
             tot_path = 0
             tot_path_degen = 0
+            tot_abs = 0
             for i, struct_i_flt in enumerate(label):
                 struct_i = struct_i_flt.int()
                 n_edge = batch.n_edge[i]
@@ -348,7 +349,7 @@ def compute_loss_with_batch(
                     abs_edge_path_mask = inverse_abs_edge_path == j
 
                     preds_abs = edge_preds[abs_edge_mask]
-                    ΔE0 = 5 * torch.tanh(preds_abs[:, 0].mean() - batch.system_features["edge"][i])
+                    ΔE0 = 5 * torch.tanh(preds_abs[:, 0].mean() - batch.system_features["energy_edges"][tot_abs + j])
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
 
                     degen_abs = degen_all[abs_path_mask]
@@ -390,6 +391,7 @@ def compute_loss_with_batch(
                 tot_edge += n_edge
                 tot_path += n_path
                 tot_path_degen += n_path_degen
+                tot_abs += len(unique_abs_edge)
             
                 mean_sim_chi = kws[sl:sr] * torch.mean(chi, dim = 0) 
                 sim_chis[i] = (mean_sim_chi / torch.linalg.norm(mean_sim_chi))

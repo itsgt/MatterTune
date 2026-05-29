@@ -625,15 +625,18 @@ class ORBBackboneModule(
             struct_i = atoms.info['edge_props'][0]
 
             nk = len(paths_info[0][0]["k_feff"])
+            N_abs = len(paths_info[struct_i])
             atom_graphs.system_features["feff_k"] = paths_info[0][0]["k_feff"].to(device)
-            atom_graphs.system_features["edge"] = paths_info[struct_i][0]["edge"].to(device)
-
+            energy_edges = torch.zeros((N_paths), device = device)
+        
             N_paths = 0
             N_paths_degen = 0
             abs_inds[struct_i] = abs_inds[struct_i].to(device)
             for j, abs_i in enumerate(abs_inds[struct_i]):
                 N_paths += len(paths_info[struct_i][j]["Reffs"])
                 N_paths_degen += paths_info[struct_i][j]["degen"].to(device).int().sum()
+                energy_edges[j] = paths_info[struct_i][j]["edge"].to(device)
+            atom_graphs.system_features["energy_edges"] = energy_edges
             atom_graphs.system_features["N_paths"] = torch.tensor([N_paths])
             atom_graphs.system_features["N_paths_degen"] = torch.tensor([N_paths_degen])
 
