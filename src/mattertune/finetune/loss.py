@@ -351,11 +351,11 @@ def compute_loss_with_batch(
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
 
                     degen_abs = degen_all[abs_path_mask]
-                    Reff_abs = Reff_all[abs_path_mask] if config.avg_paths else Reff_all[abs_path_mask].repeat_interleave(degen_abs, dim = 0)
-                    amp_abs = amp_all[abs_path_mask] if config.avg_paths else amp_all[abs_path_mask].repeat_interleave(degen_abs, dim = 0)
-                    pha_abs = pha_all[abs_path_mask] if config.avg_paths else pha_all[abs_path_mask].repeat_interleave(degen_abs, dim = 0)
-                    rep_abs = rep_all[abs_path_mask] if config.avg_paths else rep_all[abs_path_mask].repeat_interleave(degen_abs, dim = 0)
-                    lam_abs = lam_all[abs_path_mask] if config.avg_paths else lam_all[abs_path_mask].repeat_interleave(degen_abs, dim = 0)
+                    Reff_abs = Reff_all[abs_path_mask] if config.avg_paths else Reff_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
+                    amp_abs = amp_all[abs_path_mask] if config.avg_paths else amp_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
+                    pha_abs = pha_all[abs_path_mask] if config.avg_paths else pha_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
+                    rep_abs = rep_all[abs_path_mask] if config.avg_paths else rep_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
+                    lam_abs = lam_all[abs_path_mask] if config.avg_paths else lam_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
                     
                     edge_path_mapping = edge_path_inds[abs_edge_path_mask]
                     
