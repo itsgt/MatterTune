@@ -626,6 +626,7 @@ class ORBBackboneModule(
 
             nk = len(paths_info[0][0]["k_feff"])
             atom_graphs.system_features["feff_k"] = paths_info[0][0]["k_feff"].to(device)
+            atom_graphs.system_features["edge"] = paths_info[struct_i][0]["edge"].to(device)
 
             N_paths = 0
             N_paths_degen = 0
