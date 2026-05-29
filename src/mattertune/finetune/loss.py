@@ -33,6 +33,7 @@ class EXAFSLossConfig(C.Config):
     ws: list[float] = [0.9, 0.1, 0.1]
     exp_spectra: torch.Tensor = torch.tensor([0.])
     avg_paths: bool = False
+    kw: int = 0
      
 
 class MAEAtomAveragedLossConfig(C.Config):
@@ -308,9 +309,9 @@ def compute_loss_with_batch(
         case EXAFSLossConfig():
             k1s = torch.arange(0.0, 16.00001, 0.05, device = prediction.device)
             k2s = k1s ** 2
-            k3s = k1s ** 3
+            kws = k1s ** config.kw
             sl = 60
-            sr = -10
+            sr = -80
             k_feff = batch.system_features["feff_k"][:(len(batch.system_features["feff_k"]) // len(label))]
 
             sim_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
@@ -390,9 +391,9 @@ def compute_loss_with_batch(
                 tot_path += n_path
                 tot_path_degen += n_path_degen
             
-                mean_sim_chi = k3s[sl:sr] * torch.mean(chi, dim = 0) 
+                mean_sim_chi = kws[sl:sr] * torch.mean(chi, dim = 0) 
                 sim_chis[i] = (mean_sim_chi / torch.linalg.norm(mean_sim_chi))
-                exp_chi = (k3s[sl:sr] * config.exp_spectra[struct_i][sl:sr])
+                exp_chi = (kws[sl:sr] * config.exp_spectra[struct_i][sl:sr])
                 exp_chis[i] = exp_chi / torch.linalg.norm(exp_chi)
             return F.mse_loss(sim_chis, exp_chis, reduction = config.reduction)
 
