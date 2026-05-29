@@ -359,15 +359,9 @@ def compute_loss_with_batch(
                     edge_path_mapping = edge_path_inds[abs_edge_path_mask]
 
                     segment_ids = torch.repeat_interleave(torch.arange(len(degen_abs), device = prediction.device), degen_abs.int())
-                    c1_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 1].dtype, device = prediction.device)
-                    c1_pred = c1_pred.scatter_add(0, segment_ids, edge_preds[:, 1][edge_path_mapping])
-                    c1_pred = c1_pred / degen_abs
-                    c2_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 2].dtype, device = prediction.device)
-                    c2_pred = c2_pred.scatter_add(0, segment_ids, edge_preds[:, 2][edge_path_mapping])
-                    c2_pred = c2_pred / degen_abs
-                    c3_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 3].dtype, device = prediction.device)
-                    c3_pred = c3_pred.scatter_add(0, segment_ids, edge_preds[:, 3][edge_path_mapping])
-                    c3_pred = c3_pred / degen_abs
+                    c1_pred = c1_pred.scatter_mean(0, segment_ids, edge_preds[:, 1][edge_path_mapping])
+                    c2_pred = c2_pred.scatter_mean(0, segment_ids, edge_preds[:, 2][edge_path_mapping])
+                    c3_pred = c3_pred.scatter_mean(0, segment_ids, edge_preds[:, 3][edge_path_mapping])
 
                     chi_paths = degen_abs.unsqueeze(-1) * calc_chi_batch(q, 
                         0.15 * torch.tanh(c1_pred), 
