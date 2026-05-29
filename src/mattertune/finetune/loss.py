@@ -313,7 +313,7 @@ def compute_loss_with_batch(
             sl = 60
             sr = -80
             k_feff = batch.system_features["feff_k"][:(len(batch.system_features["feff_k"]) // len(label))]
-
+            ΔE0s = torch.zeros((batch.system_features["N_abs"].sum()))
             sim_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
             exp_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
             tot_edge = 0
@@ -350,6 +350,7 @@ def compute_loss_with_batch(
 
                     preds_abs = edge_preds[abs_edge_mask]
                     ΔE0 = -14 + 10 * torch.tanh(preds_abs[:, 0].mean()) - batch.system_features["energy_edges"][tot_abs + j]
+                    ΔE0s[tot_abs + j] = ΔE0
                     assert k2s[sl] - ΔE0 > 0, f'{torch.tanh(preds_abs[:, 0].mean())} {ΔE0}' 
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
 
@@ -398,7 +399,7 @@ def compute_loss_with_batch(
                 sim_chis[i] = (mean_sim_chi / torch.linalg.norm(mean_sim_chi))
                 exp_chi = (kws[sl:sr] * config.exp_spectra[struct_i][sl:sr])
                 exp_chis[i] = exp_chi / torch.linalg.norm(exp_chi)
-            return F.mse_loss(sim_chis, exp_chis, reduction = config.reduction)
+            return F.mse_loss(sim_chis, exp_chis, reduction = config.reduction) + torch.clamp((torch.abs(ΔE0s) - 5.0), min = 0.0).sum()
 
         case _:
             assert_never(config)
