@@ -393,7 +393,7 @@ def compute_loss_with_batch(
                 mean_sim_chi = k3s[sl:sr] * torch.mean(chi, dim = 0) 
                 sim_chis[i] = (mean_sim_chi / torch.linalg.norm(mean_sim_chi))
                 exp_chi = (k3s[sl:sr] * config.exp_spectra[struct_i][sl:sr])
-                exp_chis[i] = exp_chi / np.linalg.norm(exp_chi)
+                exp_chis[i] = exp_chi / torch.linalg.norm(exp_chi)
             return F.mse_loss(sim_chis, exp_chis, reduction = config.reduction)
 
         case _:
