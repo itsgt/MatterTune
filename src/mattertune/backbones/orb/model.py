@@ -625,7 +625,7 @@ class ORBBackboneModule(
             struct_i = atoms.info['edge_props'][0]
 
             nk = len(paths_info[0][0]["k_feff"])
-            N_abs = len(paths_info[struct_i]
+            N_abs = len(paths_info[struct_i])
             atom_graphs.system_features["N_paths"] = torch.tensor([N_paths])
             atom_graphs.system_features["feff_k"] = paths_info[0][0]["k_feff"].to(device)
             energy_edges = torch.zeros((N_abs), device = device)
