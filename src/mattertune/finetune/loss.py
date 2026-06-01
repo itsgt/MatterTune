@@ -370,9 +370,9 @@ def compute_loss_with_batch(
                         c3_pred = torch.zeros(len(degen_abs), device = prediction.device)
                         c3_pred = c3_pred.scatter_mean(0, segment_ids, edge_preds[:, 2][edge_path_mapping])
                     else:
-                        c1_pred = edge_preds[:, 1][edge_path_mapping]
-                        c2_pred = edge_preds[:, 2][edge_path_mapping]
-                        c3_pred = edge_preds[:, 3][edge_path_mapping]
+                        c1_pred = edge_preds[:, 0][edge_path_mapping]
+                        c2_pred = edge_preds[:, 1][edge_path_mapping]
+                        c3_pred = edge_preds[:, 2][edge_path_mapping]
 
                     chi_paths = calc_chi_batch(q, 
                         0.15 * torch.tanh(c1_pred), 
