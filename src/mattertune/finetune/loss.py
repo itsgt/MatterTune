@@ -396,11 +396,9 @@ def compute_loss_with_batch(
                 tot_path_degen += n_path_degen
                 tot_abs += len(unique_abs_edge)
             
-                mean_sim_chi = kws[sl:sr] * torch.mean(chi, dim = 0) 
-                sim_chis[i] = (mean_sim_chi / torch.linalg.norm(mean_sim_chi))
-                exp_chi = (kws[sl:sr] * config.exp_spectra[struct_i][sl:sr])
-                exp_chis[i] = exp_chi / torch.linalg.norm(exp_chi)
-            return F.mse_loss(sim_chis, exp_chis, reduction = config.reduction)
+                sim_chis[i] = kws[sl:sr] * torch.mean(chi, dim = 0)
+                exp_chis[i] = (kws[sl:sr] * config.exp_spectra[struct_i][sl:sr])
+            return (1 - F.cosine_similarity(sim_chis, exp_chis, dim = 1)).mean()
 
         case _:
             assert_never(config)
