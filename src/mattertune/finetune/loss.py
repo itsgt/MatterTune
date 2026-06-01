@@ -313,7 +313,6 @@ def compute_loss_with_batch(
             sl = 60
             sr = -80
             k_feff = batch.system_features["feff_k"][:(len(batch.system_features["feff_k"]) // len(label))]
-            ΔE0s = torch.zeros((batch.system_features["N_abs"].sum()))
             sim_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
             exp_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
             tot_edge = 0
@@ -349,8 +348,7 @@ def compute_loss_with_batch(
                     abs_edge_path_mask = inverse_abs_edge_path == j
 
                     preds_abs = edge_preds[abs_edge_mask]
-                    ΔE0 = -14 + 10 * torch.tanh(preds_abs[:, 0].mean()) - batch.system_features["energy_edges"][tot_abs + j]
-                    ΔE0s[tot_abs + j] = ΔE0
+                    ΔE0 = batch.system_features["energy_edges"][tot_abs + j]
                     assert k2s[sl] - ΔE0 > 0, f'{torch.tanh(preds_abs[:, 0].mean())} {ΔE0}' 
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
 
@@ -366,11 +364,11 @@ def compute_loss_with_batch(
                     if config.avg_paths:
                         segment_ids = torch.repeat_interleave(torch.arange(len(degen_abs), device = prediction.device), degen_abs.int())
                         c1_pred = torch.zeros(len(degen_abs), device = prediction.device)
-                        c1_pred = c1_pred.scatter_mean(0, segment_ids, edge_preds[:, 1][edge_path_mapping])
+                        c1_pred = c1_pred.scatter_mean(0, segment_ids, edge_preds[:, 0][edge_path_mapping])
                         c2_pred = torch.zeros(len(degen_abs), device = prediction.device)
-                        c2_pred = c2_pred.scatter_mean(0, segment_ids, edge_preds[:, 2][edge_path_mapping])
+                        c2_pred = c2_pred.scatter_mean(0, segment_ids, edge_preds[:, 1][edge_path_mapping])
                         c3_pred = torch.zeros(len(degen_abs), device = prediction.device)
-                        c3_pred = c3_pred.scatter_mean(0, segment_ids, edge_preds[:, 3][edge_path_mapping])
+                        c3_pred = c3_pred.scatter_mean(0, segment_ids, edge_preds[:, 2][edge_path_mapping])
                     else:
                         c1_pred = edge_preds[:, 1][edge_path_mapping]
                         c2_pred = edge_preds[:, 2][edge_path_mapping]
@@ -399,7 +397,7 @@ def compute_loss_with_batch(
                 sim_chis[i] = (mean_sim_chi / torch.linalg.norm(mean_sim_chi))
                 exp_chi = (kws[sl:sr] * config.exp_spectra[struct_i][sl:sr])
                 exp_chis[i] = exp_chi / torch.linalg.norm(exp_chi)
-            return F.mse_loss(sim_chis, exp_chis, reduction = config.reduction) + 0.01 * torch.clamp((ΔE0s - 8.5), min = 0.0).sum()
+            return F.mse_loss(sim_chis, exp_chis, reduction = config.reduction)
 
         case _:
             assert_never(config)
