@@ -33,6 +33,8 @@ class EXAFSLossConfig(C.Config):
     ws: list[float] = [0.9, 0.1, 0.1]
     exp_spectra: torch.Tensor = torch.tensor([0.])
     avg_paths: bool = False
+    predict_deltar: bool = True
+    predict_third: bool = True
     kw: int = 0
      
 
@@ -363,19 +365,26 @@ def compute_loss_with_batch(
                     
                     if config.avg_paths:
                         segment_ids = torch.repeat_interleave(torch.arange(len(degen_abs), device = prediction.device), degen_abs.int())
-                        c1_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 0].dtype, device = prediction.device)
-                        c1_pred = c1_pred.scatter_add(0, segment_ids, edge_preds[:, 0][edge_path_mapping])
-                        c1_pred = c1_pred / degen_abs
                         c2_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 1].dtype, device = prediction.device)
                         c2_pred = c2_pred.scatter_add(0, segment_ids, edge_preds[:, 1][edge_path_mapping])
                         c2_pred = c2_pred / degen_abs
-                        c3_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 2].dtype, device = prediction.device)
-                        c3_pred = c3_pred.scatter_add(0, segment_ids, edge_preds[:, 2][edge_path_mapping])
-                        c3_pred = c3_pred / degen_abs
+                        if config.predict_deltar:
+                            c1_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 0].dtype, device = prediction.device)
+                            c1_pred = c1_pred.scatter_add(0, segment_ids, edge_preds[:, 0][edge_path_mapping])
+                            c1_pred = c1_pred / degen_abs
+                        else:
+                            c1_pred = torch.zeros_like(c2_pred, device = prediction.device)
+                        
+                        if config.predict_third:
+                            c3_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 2].dtype, device = prediction.device)
+                            c3_pred = c3_pred.scatter_add(0, segment_ids, edge_preds[:, 2][edge_path_mapping])
+                            c3_pred = c3_pred / degen_abs
+                        else:
+                            c3_pred = torch.zeros_like(c2_pred, device = prediction.device)
                     else:
-                        c1_pred = edge_preds[:, 0][edge_path_mapping]
                         c2_pred = edge_preds[:, 1][edge_path_mapping]
-                        c3_pred = edge_preds[:, 2][edge_path_mapping]
+                        c1_pred = edge_preds[:, 0][edge_path_mapping] if config.predict_deltar else torch.zeros_like(c2_pred, device = prediction.device)
+                        c3_pred = edge_preds[:, 2][edge_path_mapping] if config.predict_third else torch.zeros_like(c2_pred, device = prediction.device)
 
                     chi_paths = calc_chi_batch(q, 
                         0.15 * torch.tanh(c1_pred), 
