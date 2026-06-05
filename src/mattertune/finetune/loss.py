@@ -146,6 +146,37 @@ def interp_soft_adaptive(x, xk, yk, beta = 1.0):
 
 ETOK = 0.262465831
 
+# https://github.com/xraypy/xraylarch/blob/ba8a45062a59670d64ab492b29a379265dcec34c/larch/xafs/sigma2_models.py#L93
+def debint_z(t, N = 100):
+    x = torch.linspace(0, 1, N, device = t.device, dtype = t.dtype)  # (N,)
+    x = x.unsqueeze(0)  # (1, N)
+    t = t.unsqueeze(1)  # (B, 1)
+    y = (2.0 / t) * torch.ones_like(x)  # (B, N)
+    xt = x[:, 1:] * t  # (B, N-1)
+    y[:, 1:] = x[:, 1:] * (torch.exp(xt) + 1) / (torch.exp(xt) - 1)
+    return torch.trapz(y, x, dim=1)  # (B,)
+
+def debint(r, t, N = 100):
+    x = torch.linspace(0, 1, N, device = t.device, dtype = t.dtype)  # (N,)
+    x = x.unsqueeze(0)  # (1, N)
+    r = r.unsqueeze(1)  # (B, 1)
+    t = t.unsqueeze(1)  # (B, 1)
+    y = (2.0 / t) * torch.ones_like(x)  # (B, N)
+    xt = x[:, 1:] * t  # (B, N-1)
+    rx = r * x[:, 1:]  # (B, N-1)
+    y[:, 1:] = (x[:, 1:] * torch.sinc(rx / torch.pi) * 
+        (torch.exp(xt) + 1) / (torch.exp(xt) - 1))
+    return torch.trapz(y, x, dim=1)  # (B,)
+
+def sigma2_debye(tx, R, m_a, m_s, rnorman, t):
+    conh = 72.7630804732553 / (t * tx)
+    conr = 4.5693349700844 / rnorman
+    deb_z = debint_z(tx)
+    C_A  = deb_z / m_a
+    C_S  = deb_z / m_s
+    C_AS = debint(conr * R, tx) / torch.sqrt(m_a * m_s)
+    return conh * (C_A + C_S - 2 * C_AS)
+
 # https://github.com/xraypy/xraylarch/blob/6a68e776c3b10625bcda556432f45a4ddb6b18d1/larch/xafs/feffdat.py#L632
 def calc_chi_batch(q, deltar, sigma2, third, fourth, amp, pha, rep, lam, reff, ei):
     q = q.unsqueeze(0)                # (1, Nk)
@@ -341,6 +372,9 @@ def compute_loss_with_batch(
                 rep_all = batch.system_features["rep"][tot_path:(tot_path + n_path)]
                 lam_all = batch.system_features["lam"][tot_path:(tot_path + n_path)]
                 Reff_all = batch.system_features["Reffs"][tot_path:(tot_path + n_path)]
+                m_a_all = batch.system_features["m_a"][tot_path:(tot_path + n_path)]
+                m_s_all = batch.system_features["m_s"][tot_path:(tot_path + n_path)]
+                rnorman_all = batch.system_features["rnorman"][tot_path:(tot_path + n_path)]
                 degen_all = batch.system_features["degen"][tot_path:(tot_path + n_path)]
 
                 chi = torch.zeros((len(unique_abs_edge), len(k1s[sl:sr])), device = prediction.device)
@@ -356,6 +390,9 @@ def compute_loss_with_batch(
 
                     degen_abs = degen_all[abs_path_mask]
                     Reff_abs = Reff_all[abs_path_mask] if config.avg_paths else Reff_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
+                    m_a_abs = m_a_all[abs_path_mask] if config.avg_paths else m_a_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
+                    m_s_abs = m_s_all[abs_path_mask] if config.avg_paths else m_s_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
+                    rnorman_abs = rnorman_all[abs_path_mask] if config.avg_paths else rnorman_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
                     amp_abs = amp_all[abs_path_mask] if config.avg_paths else amp_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
                     pha_abs = pha_all[abs_path_mask] if config.avg_paths else pha_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
                     rep_abs = rep_all[abs_path_mask] if config.avg_paths else rep_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
@@ -386,9 +423,12 @@ def compute_loss_with_batch(
                         c1_pred = edge_preds[:, 0][edge_path_mapping] if config.predict_deltar else torch.zeros_like(c2_pred, device = prediction.device)
                         c3_pred = edge_preds[:, 2][edge_path_mapping] if config.predict_third else torch.zeros_like(c2_pred, device = prediction.device)
 
+                    TD_T = (1 / 3) + 3 * torch.sigmoid(c2_pred) # Debye Temp between 100-1000K at room temp
+                    sigma2 = sigma2_debye(TD_T, Reff_abs, m_a_abs, m_s_abs, rnorman_abs, 300. * torch.ones_like(Reff_abs))
+
                     chi_paths = calc_chi_batch(q, 
                         0.15 * torch.tanh(c1_pred), 
-                        0.015 * torch.sigmoid(c2_pred), 
+                        sigma2, 
                         0.005 * torch.tanh(c3_pred), 
                         torch.zeros_like(c1_pred),
                         interp_soft_adaptive(q, k_feff, amp_abs), 
