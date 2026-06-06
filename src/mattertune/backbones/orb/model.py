@@ -642,6 +642,7 @@ class ORBBackboneModule(
             atom_graphs.system_features["N_paths_degen"] = torch.tensor([N_paths_degen], device = device)
 
             Reffs = torch.zeros((N_paths), device = device)
+            T_Ds = torch.zeros((N_paths), device = device)
             m_a = torch.zeros((N_paths), device = device)
             m_s = torch.zeros((N_paths), device = device)
             rnorman = torch.zeros((N_paths), device = device)
@@ -671,6 +672,7 @@ class ORBBackboneModule(
                 rep[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["rep"].to(device)
                 lam[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["lam"].to(device)
                 Reffs[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["Reffs"].to(device)
+                T_Ds[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["T_Ds"].to(device)
                 m_a[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["m_a"].to(device)
                 m_s[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["m_s"].to(device)
                 rnorman[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["rnorman"].to(device)
@@ -729,6 +731,7 @@ class ORBBackboneModule(
             atom_graphs.system_features["abs_edge_inds"] = batch_abs_edge_inds
             atom_graphs.system_features["abs_path_inds"] = batch_abs_path_inds
             atom_graphs.system_features["Reffs"] = Reffs
+            atom_graphs.system_features["T_Ds"] = T_Ds
             atom_graphs.system_features["m_a"] = m_a
             atom_graphs.system_features["m_s"] = m_s
             atom_graphs.system_features["rnorman"] = rnorman

@@ -372,6 +372,7 @@ def compute_loss_with_batch(
                 rep_all = batch.system_features["rep"][tot_path:(tot_path + n_path)]
                 lam_all = batch.system_features["lam"][tot_path:(tot_path + n_path)]
                 Reff_all = batch.system_features["Reffs"][tot_path:(tot_path + n_path)]
+                T_Ds_all = batch.system_features["T_Ds"][tot_path:(tot_path + n_path)]
                 m_a_all = batch.system_features["m_a"][tot_path:(tot_path + n_path)]
                 m_s_all = batch.system_features["m_s"][tot_path:(tot_path + n_path)]
                 rnorman_all = batch.system_features["rnorman"][tot_path:(tot_path + n_path)]
@@ -390,6 +391,7 @@ def compute_loss_with_batch(
 
                     degen_abs = degen_all[abs_path_mask]
                     Reff_abs = Reff_all[abs_path_mask] if config.avg_paths else Reff_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
+                    T_Ds_abs = T_Ds_all[abs_path_mask] if config.avg_paths else T_Ds_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
                     m_a_abs = m_a_all[abs_path_mask] if config.avg_paths else m_a_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
                     m_s_abs = m_s_all[abs_path_mask] if config.avg_paths else m_s_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
                     rnorman_abs = rnorman_all[abs_path_mask] if config.avg_paths else rnorman_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
@@ -424,7 +426,7 @@ def compute_loss_with_batch(
                         c3_pred = edge_preds[:, 2][edge_path_mapping] if config.predict_third else torch.zeros_like(c2_pred, device = prediction.device)
 
                     TD_T = (1 / 3) + 3 * torch.sigmoid(c2_pred) # Debye Temp between 100-1000K at room temp
-                    sigma2 = sigma2_debye(TD_T, Reff_abs, m_a_abs, m_s_abs, rnorman_abs, 300. * torch.ones_like(Reff_abs))
+                    sigma2 = sigma2_debye(T_Ds_abs, Reff_abs, m_a_abs, m_s_abs, rnorman_abs, 300. * torch.ones_like(Reff_abs))
 
                     chi_paths = calc_chi_batch(q, 
                         0.15 * torch.tanh(c1_pred), 
