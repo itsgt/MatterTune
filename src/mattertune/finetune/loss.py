@@ -426,7 +426,7 @@ def compute_loss_with_batch(
                         c3_pred = edge_preds[:, 2][edge_path_mapping] if config.predict_third else torch.zeros_like(c2_pred, device = prediction.device)
 
                     TD_T = (1 / 3) + 3 * torch.sigmoid(c2_pred) # Debye Temp between 100-1000K at room temp
-                    sigma2 = sigma2_debye(T_Ds_abs, Reff_abs, m_a_abs, m_s_abs, rnorman_abs, 300. * torch.ones_like(Reff_abs))
+                    sigma2 = sigma2_debye(T_Ds_abs / 300, Reff_abs, m_a_abs, m_s_abs, rnorman_abs, 300. * torch.ones_like(Reff_abs))
 
                     chi_paths = calc_chi_batch(q, 
                         0.15 * torch.tanh(c1_pred), 
