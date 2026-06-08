@@ -168,7 +168,7 @@ def debint(r, t, N = 100):
         (torch.exp(xt) + 1) / (torch.exp(xt) - 1))
     return torch.trapz(y, x, dim=1)  # (B,)
 
-def sigma2_debye(tx, R, m_a, m_s, rnorman, t):
+def sigma2_debye_SS(tx, R, m_a, m_s, rnorman, t):
     conh = 72.7630804732553 / (t * tx)
     conr = 4.5693349700844 / rnorman
     deb_z = debint_z(tx)
@@ -176,6 +176,59 @@ def sigma2_debye(tx, R, m_a, m_s, rnorman, t):
     C_S  = deb_z / m_s
     C_AS = debint(conr * R, tx) / torch.sqrt(m_a * m_s)
     return conh * (C_A + C_S - 2 * C_AS)
+
+def sigma2_debye_MS(tx, natoms, pos, atwt, rnorman, t):
+    conh = 72.7630804732553 / (2 * t * tx)
+    conr = 4.5693349700844 / rnorman
+
+    offsets = torch.cumsum(torch.cat([torch.zeros(1, device = natoms.device, 
+        dtype = natoms.dtype), natoms[:-1]]), dim = 0)
+    Ntot = pos.shape[0]
+    path_ids = torch.repeat_interleave(natoms)
+    local_i = torch.arange(Ntot, device=pos.device) - offsets[path_ids]
+    
+    i0 = torch.arange(Ntot, device=pos.device)
+    i1 = offsets[path_ids] + (local_i + 1) % natoms[path_ids]
+    d = pos[i0] - pos[i1]
+    ridotj = torch.sum(d ** 2, dim = 1)
+    ri0j1 = conr * torch.sqrt(ridotj)
+    ridotj /= torch.abs(ridotj)
+    diz = debint_z(tx * torch.ones_like(ri0j1))
+    ci0i1 = debint(ri0j1, tx * torch.ones_like(ri0j1)) / torch.sqrt(atwt[i0] * atwt[i1])
+    sig2_eq_all = sign * (diz / atwt[i0] + diz / atwt[i1] - 2 * ci0i1) / 2
+    sig2_eq = torch.zeros_like(natoms, dtype = pos.dtype, device = pos.device)
+    sig2_eq = sig2_eq.scatter_add(0, path_ids, sig2_eq_all)
+
+    pair_i0 = []
+    pair_j0 = []
+    pair_path_ids = []
+    for b in range(len(natoms)):
+        n = natoms[b]
+        i0_b, j0_b = torch.triu_indices(n, n, offset = 1, device = pos.device)
+        pair_i0.append(i0_b + offsets[b])
+        pair_j0.append(j0_b + offsets[b])
+        pair_path_ids.append(torch.full((i0_b.shape[0],), b, device = pos.device))
+    pair_i0 = torch.cat(pair_i0)
+    pair_j0 = torch.cat(pair_j0)
+    pair_path_ids = torch.cat(pair_path_ids)
+    pair_i1 = offsets[pair_path_ids] + (pair_i0 - offsets[pair_path_ids] + 1) % natoms[pair_path_ids]
+    pair_j1 = offsets[pair_path_ids] + (pair_j0 - offsets[pair_path_ids] + 1) % natoms[pair_path_ids]
+    ri0j0  = torch.linalg.norm(pos[pair_i0] - pos[pair_j0], dim = 1)
+    ri1j1  = torch.linalg.norm(pos[pair_i1] - pos[pair_j1], dim = 1)
+    ri0j1  = torch.linalg.norm(pos[pair_i0] - pos[pair_j1], dim = 1)
+    ri1j0  = torch.linalg.norm(pos[pair_i1] - pos[pair_j0], dim = 1)
+    ri0i1  = torch.linalg.norm(pos[pair_i0] - pos[pair_i1], dim = 1)
+    rj0j1  = torch.linalg.norm(pos[pair_j0] - pos[pair_j1], dim = 1)
+    ridotj = torch.sum((pos[pair_i0] - pos[pair_i1]) * (pos[pair_j0] - pos[pair_j1]), dim = 1)
+    ci0j0 = debint(conr * ri0j0, tx * np.ones_like(ri0j0)) / torch.sqrt(atwt[pair_i0] * atwt[pair_j0])
+    ci1j1 = debint(conr * ri1j1, tx * np.ones_like(ri1j1)) / torch.sqrt(atwt[pair_i1] * atwt[pair_j1])
+    ci0j1 = debint(conr * ri0j1, tx * np.ones_like(ri0j1)) / torch.sqrt(atwt[pair_i0] * atwt[pair_j1])
+    ci1j0 = debint(conr * ri1j0, tx * np.ones_like(ri1j0)) / torch.sqrt(atwt[pair_i1] * atwt[pair_j0])
+    sig2_neq_all = ridotj * (ci0j0 + ci1j1 - ci0j1 - ci1j0) / (ri0i1 * rj0j1)
+    sig2_neq = torch.zeros_like(natoms, dtype = pos.dtype, device = pos.device)
+    sig2_neq = sig2_neq.scatter_add(0, pair_path_ids, sig2_neq_all)
+
+    return conh * (sig2_eq + sig2_neq)
 
 # https://github.com/xraypy/xraylarch/blob/6a68e776c3b10625bcda556432f45a4ddb6b18d1/larch/xafs/feffdat.py#L632
 def calc_chi_batch(q, deltar, sigma2, third, fourth, amp, pha, rep, lam, reff, ei):
@@ -426,9 +479,9 @@ def compute_loss_with_batch(
                         c3_pred = edge_preds[:, 2][edge_path_mapping] if config.predict_third else torch.zeros_like(c2_pred, device = prediction.device)
 
                     TD_T = (1 / 3) + 3 * torch.sigmoid(c2_pred) # Debye Temp between 100-1000K at room temp
-                    sigma2 = sigma2_debye(T_Ds_abs / 300, Reff_abs, m_a_abs, m_s_abs, rnorman_abs, 300. * torch.ones_like(Reff_abs))
+                    sigma2 = sigma2_debye_SS(T_Ds_abs / 300, Reff_abs, m_a_abs, m_s_abs, rnorman_abs, 300. * torch.ones_like(Reff_abs))
 
-                    chi_paths = calc_chi_batch(q, 
+                    chi_paths_SS = calc_chi_batch(q, 
                         0.15 * torch.tanh(c1_pred), 
                         sigma2, 
                         0.005 * torch.tanh(c3_pred), 
@@ -440,8 +493,28 @@ def compute_loss_with_batch(
                         Reff_abs, 0.0
                     )
                     if config.avg_paths:
-                        chi_paths = degen_abs.unsqueeze(-1) * chi_paths
-                    chi[j] = torch.sum(chi_paths, dim = 0)
+                        chi_paths_SS = degen_abs.unsqueeze(-1) * chi_paths_SS
+
+                    sigma2_MS = sigma2_debye_MS(
+                        batch.system_features["T_Ds"][0], 
+                        batch.system_features["nlegs_MS"], 
+                        batch.system_features["pos_MS"], 
+                        batch.system_features["atwt_MS"], 
+                        batch.system_features["rnorman"][0], 
+                        300.)
+
+                    chi_paths_MS = calc_chi_batch(q, 
+                        torch.zeros_like(sigma2_MS), 
+                        sigma2_MS, 
+                        torch.zeros_like(sigma2_MS), 
+                        torch.zeros_like(sigma2_MS),
+                        interp_soft_adaptive(q, k_feff, batch.system_features["amp_MS"]), 
+                        interp_soft_adaptive(q, k_feff, batch.system_features["pha_MS"]), 
+                        interp_soft_adaptive(q, k_feff, batch.system_features["rep_MS"]), 
+                        interp_soft_adaptive(q, k_feff, batch.system_features["lam_MS"]),
+                        batch.system_features["Reff_MS"], 0.0
+                    )
+                    chi[j] = torch.sum(batch.system_features["degen_MS"] * chi_paths_SS, dim = 0)
                 tot_edge += n_edge
                 tot_path += n_path
                 tot_path_degen += n_path_degen
