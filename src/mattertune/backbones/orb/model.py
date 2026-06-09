@@ -644,6 +644,7 @@ class ORBBackboneModule(
             atom_graphs.system_features["N_abs"] = torch.tensor([N_abs], device = device)
             atom_graphs.system_features["N_paths"] = torch.tensor([N_paths], device = device)
             atom_graphs.system_features["N_paths_MS"] = torch.tensor([N_paths_MS], device = device)
+            atom_graphs.system_features["N_paths_leg_MS"] = torch.tensor([N_legs_total_MS], device = device)
             atom_graphs.system_features["N_paths_degen"] = torch.tensor([N_paths_degen], device = device)
 
             Reffs = torch.zeros((N_paths), device = device)
@@ -667,6 +668,7 @@ class ORBBackboneModule(
             atwt_MS = torch.zeros((N_legs_total_MS), device = device)
             batch_abs_edge_inds = torch.zeros((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device).int()
             batch_abs_path_inds = torch.zeros((N_paths), device = device).int()
+            batch_abs_path_inds_ms = torch.zeros((N_paths_MS), device = device).int()
             edge_path_inds = -1 * torch.ones((N_paths_degen), device = device).int()
             abs_edge_path_inds = -1 * torch.ones((N_paths_degen), device = device).int()
 
@@ -712,6 +714,7 @@ class ORBBackboneModule(
 
                 batch_abs_edge_inds[abs_edge_inds] = j * torch.ones_like(abs_edge_inds).int()
                 batch_abs_path_inds[tot_path:(tot_path + N_path_abs)] = j * torch.ones_like(paths_info[struct_i][j]["Reffs"]).int()
+                batch_abs_path_inds_ms[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = j * torch.ones_like(paths_info[struct_i][j]["Reffs_MS"]).int(
 
                 path_degen_counter = 0
                 for k in range(N_path_abs):
@@ -757,6 +760,7 @@ class ORBBackboneModule(
             atom_graphs.system_features["lam"] = lam
             atom_graphs.system_features["abs_edge_inds"] = batch_abs_edge_inds
             atom_graphs.system_features["abs_path_inds"] = batch_abs_path_inds
+            atom_graphs.system_features["abs_path_inds_ms"] = batch_abs_path_inds_ms
             atom_graphs.system_features["Reffs"] = Reffs
             atom_graphs.system_features["T_Ds"] = T_Ds
             atom_graphs.system_features["m_a"] = m_a

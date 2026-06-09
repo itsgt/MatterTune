@@ -414,6 +414,7 @@ def compute_loss_with_batch(
                 n_edge = batch.n_edge[i]
                 n_path = batch.system_features["N_paths"][i]
                 n_path_ms = batch.system_features["N_paths_MS"][i]
+                n_path_leg_ms = batch.system_features["N_paths_leg_MS"][i]
                 n_path_degen = batch.system_features["N_paths_degen"][i]
                 
                 edge_preds = prediction[tot_edge:(tot_edge + n_edge)]
@@ -422,6 +423,8 @@ def compute_loss_with_batch(
                 unique_abs_edge, inverse_abs_edge = torch.unique(edge_abs_inds, sorted = True, return_inverse = True)
                 path_abs_inds = batch.system_features["abs_path_inds"][tot_path:(tot_path + n_path)]
                 unique_abs_path, inverse_abs_path = torch.unique(path_abs_inds, sorted = True, return_inverse = True)
+                path_abs_inds_ms = batch.system_features["abs_path_inds_ms"][tot_path_ms:(tot_path_ms + n_path_ms)]
+                unique_abs_path_ms, inverse_abs_path_ms = torch.unique(path_abs_inds_ms, sorted = True, return_inverse = True)
                 edge_path_abs_inds = batch.system_features["abs_edge_path_inds"][tot_path_degen:(tot_path_degen + n_path_degen)]
                 unique_abs_edge_path, inverse_abs_edge_path = torch.unique(edge_path_abs_inds, sorted = True, return_inverse = True)
                 
@@ -436,18 +439,20 @@ def compute_loss_with_batch(
                 rnorman_all = batch.system_features["rnorman"][tot_path:(tot_path + n_path)]
                 degen_all = batch.system_features["degen"][tot_path:(tot_path + n_path)]
 
-                amp_ms_all = batch.system_features["amp_MS"][tot_path_ms:(tot_path + n_path_ms)]
-                pha_ms_all = batch.system_features["pha_MS"][tot_path_ms:(tot_path + n_path_ms)]
-                rep_ms_all = batch.system_features["rep_MS"][tot_path_ms:(tot_path + n_path_ms)]
-                lam_ms_all = batch.system_features["lam_MS"][tot_path_ms:(tot_path + n_path_ms)]
-                Reff_ms_all = batch.system_features["Reffs_MS"][tot_path_ms:(tot_path + n_path_ms)]
-                nlegs_ms_all = batch.system_features["nlegs_MS"][tot_path_ms:(tot_path + n_path_ms)]
-
+                amp_ms_all = batch.system_features["amp_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
+                pha_ms_all = batch.system_features["pha_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
+                rep_ms_all = batch.system_features["rep_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
+                lam_ms_all = batch.system_features["lam_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
+                Reff_ms_all = batch.system_features["Reffs_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
+                nlegs_ms_all = batch.system_features["nlegs_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
+                pos_ms_all = batch.system_features["pos_MS"][tot_path_legs_ms:(tot_path_legs_ms + n_path_leg_ms), :]
+                atwt_ms_all = batch.system_features["pos_MS"][tot_path_legs_ms:(tot_path_legs_ms + n_path_leg_ms)]
 
                 chi = torch.zeros((len(unique_abs_edge), len(k1s[sl:sr])), device = prediction.device)
                 for j in range(len(unique_abs_edge)):
                     abs_edge_mask = inverse_abs_edge == j
                     abs_path_mask = inverse_abs_path == j
+                    abs_path_mask_ms = inverse_abs_path_ms == j
                     abs_edge_path_mask = inverse_abs_edge_path == j
 
                     preds_abs = edge_preds[abs_edge_mask]
@@ -508,12 +513,19 @@ def compute_loss_with_batch(
                     if config.avg_paths:
                         chi_paths_SS = degen_abs.unsqueeze(-1) * chi_paths_SS
 
+                    nleg_ms_abs = nlegs_ms_all[abs_path_mask_ms].int()
+                    Reff_ms_abs = Reff_ms_all[abs_path_mask_ms]
+                    amp_ms_abs = amp_ms_all[abs_path_mask_ms] 
+                    pha_ms_abs = pha_ms_all[abs_path_mask_ms]
+                    rep_ms_abs = rep_ms_all[abs_path_mask_ms]
+                    lam_ms_abs = lam_ms_all[abs_path_mask_ms]
+
                     sigma2_MS = sigma2_debye_MS(
-                        batch.system_features["T_Ds"][0] , 
-                        batch.system_features["nlegs_MS"].int(), 
+                        batch.system_features["T_Ds"][0] * torch.ones_like(Reff_ms_abs), 
+                        nleg_ms_abs, 
                         batch.system_features["pos_MS"], 
                         batch.system_features["atwt_MS"], 
-                        batch.system_features["rnorman"][0], 
+                        batch.system_features["rnorman"][0] * torch.ones_like(Reff_ms_abs), 
                         300.)
 
                     chi_paths_MS = calc_chi_batch(q, 
@@ -521,17 +533,18 @@ def compute_loss_with_batch(
                         sigma2_MS, 
                         torch.zeros_like(sigma2_MS), 
                         torch.zeros_like(sigma2_MS),
-                        interp_soft_adaptive(q, k_feff, batch.system_features["amp_MS"]), 
-                        interp_soft_adaptive(q, k_feff, batch.system_features["pha_MS"]), 
-                        interp_soft_adaptive(q, k_feff, batch.system_features["rep_MS"]), 
-                        interp_soft_adaptive(q, k_feff, batch.system_features["lam_MS"]),
-                        batch.system_features["Reff_MS"], 0.0
+                        interp_soft_adaptive(q, k_feff, amp_ms_abs), 
+                        interp_soft_adaptive(q, k_feff, pha_ms_abs), 
+                        interp_soft_adaptive(q, k_feff, rep_ms_abs), 
+                        interp_soft_adaptive(q, k_feff, lam_ms_abs),
+                        Reff_ms_abs, 0.0
                     )
                     chi[j] = torch.sum(batch.system_features["degen_MS"] * chi_paths_MS + chi_paths_SS, dim = 0)
                 tot_edge += n_edge
                 tot_path += n_path
                 tot_path_ms += n_path_ms
                 tot_path_degen += n_path_degen
+                tot_path_legs_ms += n_path_leg_ms
                 tot_abs += len(unique_abs_edge)
             
                 sim_chis[i] = kws[sl:sr] * torch.mean(chi, dim = 0)
