@@ -184,10 +184,12 @@ def sigma2_debye_MS(tx, natoms, pos, atwt, rnorman, t):
     offsets = torch.cumsum(torch.cat([torch.zeros(1, device = natoms.device, 
         dtype = natoms.dtype), natoms[:-1]]), dim = 0)
     Ntot = pos.shape[0]
-    path_ids = torch.repeat_interleave(natoms)
-    local_i = torch.arange(Ntot, device=pos.device) - offsets[path_ids]
+    assert Ntot == torch.sum(natoms)
+    path_ids = torch.repeat_interleave(torch.arange(len(natoms), 
+        device = pos.device), natoms)
+    local_i = torch.arange(Ntot, device = pos.device) - offsets[path_ids]
     
-    i0 = torch.arange(Ntot, device=pos.device)
+    i0 = torch.arange(Ntot, device = pos.device)
     i1 = offsets[path_ids] + (local_i + 1) % natoms[path_ids]
     d = pos[i0] - pos[i1]
     ridotj = torch.sum(d ** 2, dim = 1)
