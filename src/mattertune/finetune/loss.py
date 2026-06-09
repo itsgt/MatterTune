@@ -497,7 +497,7 @@ def compute_loss_with_batch(
 
                     sigma2_MS = sigma2_debye_MS(
                         batch.system_features["T_Ds"][0], 
-                        batch.system_features["nlegs_MS"], 
+                        batch.system_features["nlegs_MS"].int(), 
                         batch.system_features["pos_MS"], 
                         batch.system_features["atwt_MS"], 
                         batch.system_features["rnorman"][0], 
@@ -514,7 +514,7 @@ def compute_loss_with_batch(
                         interp_soft_adaptive(q, k_feff, batch.system_features["lam_MS"]),
                         batch.system_features["Reff_MS"], 0.0
                     )
-                    chi[j] = torch.sum(batch.system_features["degen_MS"] * chi_paths_SS, dim = 0)
+                    chi[j] = torch.sum(batch.system_features["degen_MS"] * chi_paths_MS + chi_paths_SS, dim = 0)
                 tot_edge += n_edge
                 tot_path += n_path
                 tot_path_degen += n_path_degen
