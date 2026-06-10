@@ -523,7 +523,7 @@ def compute_loss_with_batch(
                     rep_ms_abs = rep_ms_all[abs_path_mask_ms]
                     lam_ms_abs = lam_ms_all[abs_path_mask_ms]
                     pos_ms_abs = pos_ms_all[abs_edge_path_leg_mask, :]
-                    atwt_ms_abs = atwt_ms_all[abs_edge_path_leg_mask, :]
+                    atwt_ms_abs = atwt_ms_all[abs_edge_path_leg_mask]
 
                     sigma2_MS = sigma2_debye_MS(
                         batch.system_features["T_Ds"][0] * torch.ones_like(Reff_ms_abs), 
