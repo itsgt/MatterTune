@@ -546,7 +546,7 @@ def compute_loss_with_batch(
                         interp_soft_adaptive(q, k_feff, lam_ms_abs),
                         Reff_ms_abs, 0.0
                     )
-                    chi[j] = torch.sum(degen_ms_abs.unsqueeze(-1) * chi_paths_MS + chi_paths_SS, dim = 0)
+                    chi[j] = torch.sum(degen_ms_abs.unsqueeze(-1) * chi_paths_MS, dim = 0) + torch.sum(chi_paths_SS, dim = 0)
                 tot_edge += n_edge
                 tot_path += n_path
                 tot_path_ms += n_path_ms
