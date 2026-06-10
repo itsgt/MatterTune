@@ -671,6 +671,7 @@ class ORBBackboneModule(
             batch_abs_path_inds_ms = torch.zeros((N_paths_MS), device = device).int()
             edge_path_inds = -1 * torch.ones((N_paths_degen), device = device).int()
             abs_edge_path_inds = -1 * torch.ones((N_paths_degen), device = device).int()
+            abs_path_leg_inds = -1 * torch.ones((N_legs_total_MS), device = device).int()
 
             edge_inds = torch.arange(atom_graphs.edge_features["vectors"].size(dim = 0), device = device)
             tot_path = 0
@@ -745,8 +746,11 @@ class ORBBackboneModule(
                         tot_path_degen + path_degen_counter + degen[tot_path + k].int())] = abs_scatter_edge_inds[path_inds].int()
                     path_degen_counter += degen[tot_path + k].int()
                 abs_edge_path_inds[tot_path_degen:(tot_path_degen + N_path_degen)] = j * torch.ones_like(abs_edge_path_inds[tot_path_degen:(tot_path_degen + N_path_degen)]).int()
+                abs_path_leg_inds[tot_path_legs_MS:(tot_path_legs_MS + N_path_legs_abs_MS)] = j * torch.ones_like(paths_info[struct_i][j]["atwt_MS"].to(device))
                 tot_path += N_path_abs
                 tot_path_degen += N_path_degen
+                tot_path_MS += N_path_abs_MS
+                tot_path_legs_MS += tot_path_legs_MS
             
             edge_path_vals, edge_path_counts = torch.unique(edge_path_inds, return_counts=True)
             edge_path_dups = edge_path_vals[edge_path_counts > 1]
@@ -761,6 +765,7 @@ class ORBBackboneModule(
             atom_graphs.system_features["abs_edge_inds"] = batch_abs_edge_inds
             atom_graphs.system_features["abs_path_inds"] = batch_abs_path_inds
             atom_graphs.system_features["abs_path_inds_ms"] = batch_abs_path_inds_ms
+            atom_graphs.system_features["abs_path_leg_inds_ms"] = abs_path_leg_inds
             atom_graphs.system_features["Reffs"] = Reffs
             atom_graphs.system_features["T_Ds"] = T_Ds
             atom_graphs.system_features["m_a"] = m_a

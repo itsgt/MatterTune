@@ -425,6 +425,8 @@ def compute_loss_with_batch(
                 unique_abs_path, inverse_abs_path = torch.unique(path_abs_inds, sorted = True, return_inverse = True)
                 path_abs_inds_ms = batch.system_features["abs_path_inds_ms"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 unique_abs_path_ms, inverse_abs_path_ms = torch.unique(path_abs_inds_ms, sorted = True, return_inverse = True)
+                path_leg_abs_inds_ms = batch.system_features["abs_path_leg_inds_ms"][tot_path_legs_ms:(tot_path_legs_ms + n_path_leg_ms)]
+                unique_abs_path_leg_ms, inverse_abs_path_leg_ms = torch.unique(path_abs_inds_ms, sorted = True, return_inverse = True)
                 edge_path_abs_inds = batch.system_features["abs_edge_path_inds"][tot_path_degen:(tot_path_degen + n_path_degen)]
                 unique_abs_edge_path, inverse_abs_edge_path = torch.unique(edge_path_abs_inds, sorted = True, return_inverse = True)
                 
@@ -454,6 +456,7 @@ def compute_loss_with_batch(
                     abs_path_mask = inverse_abs_path == j
                     abs_path_mask_ms = inverse_abs_path_ms == j
                     abs_edge_path_mask = inverse_abs_edge_path == j
+                    abs_edge_path_leg_mask = inverse_abs_path_leg_ms == j
 
                     preds_abs = edge_preds[abs_edge_mask]
                     ΔE0 = batch.system_features["energy_edges"][tot_abs + j]
@@ -519,12 +522,14 @@ def compute_loss_with_batch(
                     pha_ms_abs = pha_ms_all[abs_path_mask_ms]
                     rep_ms_abs = rep_ms_all[abs_path_mask_ms]
                     lam_ms_abs = lam_ms_all[abs_path_mask_ms]
+                    pos_ms_abs = pos_ms_all[abs_edge_path_leg_mask, :]
+                    atwt_ms_abs = atwt_ms_all[abs_edge_path_leg_mask, :]
 
                     sigma2_MS = sigma2_debye_MS(
                         batch.system_features["T_Ds"][0] * torch.ones_like(Reff_ms_abs), 
                         nleg_ms_abs, 
-                        batch.system_features["pos_MS"], 
-                        batch.system_features["atwt_MS"], 
+                        pos_ms_abs, 
+                        atwt_ms_abs, 
                         batch.system_features["rnorman"][0] * torch.ones_like(Reff_ms_abs), 
                         300.)
 
