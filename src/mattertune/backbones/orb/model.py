@@ -664,6 +664,8 @@ class ORBBackboneModule(
             pha_MS = torch.zeros((N_paths_MS, nk), device = device)
             rep_MS = torch.zeros((N_paths_MS, nk), device = device)
             lam_MS = torch.zeros((N_paths_MS, nk), device = device)
+            T_Ds_MS = torch.zeros((N_paths_MS, nk), device = device)
+            rnorman_MS = torch.zeros((N_paths_MS, nk), device = device)
             pos_MS = torch.zeros((N_legs_total_MS, 3), device = device)
             atwt_MS = torch.zeros((N_legs_total_MS), device = device)
             batch_abs_edge_inds = torch.zeros((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device).int()
@@ -702,6 +704,8 @@ class ORBBackboneModule(
                 pha_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["pha_MS"].to(device)
                 rep_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["rep_MS"].to(device)
                 lam_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["lam_MS"].to(device)
+                T_Ds_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["T_Ds_MS"].to(device)
+                rnorman_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["rnorman_MS"].to(device)
                 Reffs_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["Reffs_MS"].to(device)
                 degen_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["degen_MS"].to(device)
                 nlegs_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["nlegs_MS"].to(device)
@@ -779,6 +783,8 @@ class ORBBackboneModule(
             atom_graphs.system_features["pha_MS"] = pha_MS
             atom_graphs.system_features["rep_MS"] = rep_MS
             atom_graphs.system_features["lam_MS"] = lam_MS
+            atom_graphs.system_features["T_Ds_MS"] = T_Ds_MS
+            atom_graphs.system_features["rnorman_MS"] = rnorman_MS
             atom_graphs.system_features["atwt_MS"] = atwt_MS
             atom_graphs.system_features["pos_MS"] = pos_MS
         return atom_graphs

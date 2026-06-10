@@ -450,6 +450,8 @@ def compute_loss_with_batch(
                 pha_ms_all = batch.system_features["pha_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 rep_ms_all = batch.system_features["rep_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 lam_ms_all = batch.system_features["lam_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
+                T_Ds_ms_all = batch.system_features["T_Ds_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
+                rnorman_ms_all = batch.system_features["rnorman_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 degen_ms_all = batch.system_features["degen_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 Reff_ms_all = batch.system_features["Reffs_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 nlegs_ms_all = batch.system_features["nlegs_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
@@ -525,6 +527,8 @@ def compute_loss_with_batch(
                     nleg_ms_abs = nlegs_ms_all[abs_path_mask_ms].int()
                     degen_ms_abs = degen_ms_all[abs_path_mask_ms]
                     Reff_ms_abs = Reff_ms_all[abs_path_mask_ms]
+                    T_Ds_ms_abs = T_Ds_ms_all[abs_path_mask_ms]
+                    rnorman_ms_abs = rnorman_ms_all[abs_path_mask_ms]
                     amp_ms_abs = amp_ms_all[abs_path_mask_ms] 
                     pha_ms_abs = pha_ms_all[abs_path_mask_ms]
                     rep_ms_abs = rep_ms_all[abs_path_mask_ms]
@@ -533,11 +537,11 @@ def compute_loss_with_batch(
                     atwt_ms_abs = atwt_ms_all[abs_edge_path_leg_mask]
 
                     sigma2_MS = sigma2_debye_MS(
-                        batch.system_features["T_Ds"][0], 
+                        T_Ds_ms_abs[0], 
                         nleg_ms_abs, 
                         pos_ms_abs, 
                         atwt_ms_abs, 
-                        batch.system_features["rnorman"][0], 
+                        rnorman_ms_abs[0], 
                         300.)
 
                     chi_paths_MS = calc_chi_batch(q, 
