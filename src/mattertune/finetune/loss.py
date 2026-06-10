@@ -445,6 +445,7 @@ def compute_loss_with_batch(
                 pha_ms_all = batch.system_features["pha_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 rep_ms_all = batch.system_features["rep_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 lam_ms_all = batch.system_features["lam_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
+                degen_ms_all = batch.system_features["degen_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 Reff_ms_all = batch.system_features["Reffs_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 nlegs_ms_all = batch.system_features["nlegs_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 pos_ms_all = batch.system_features["pos_MS"][tot_path_legs_ms:(tot_path_legs_ms + n_path_leg_ms), :]
@@ -517,6 +518,7 @@ def compute_loss_with_batch(
                         chi_paths_SS = degen_abs.unsqueeze(-1) * chi_paths_SS
 
                     nleg_ms_abs = nlegs_ms_all[abs_path_mask_ms].int()
+                    degen_ms_abs = degen_ms_all[abs_path_mask_ms]
                     Reff_ms_abs = Reff_ms_all[abs_path_mask_ms]
                     amp_ms_abs = amp_ms_all[abs_path_mask_ms] 
                     pha_ms_abs = pha_ms_all[abs_path_mask_ms]
@@ -544,7 +546,7 @@ def compute_loss_with_batch(
                         interp_soft_adaptive(q, k_feff, lam_ms_abs),
                         Reff_ms_abs, 0.0
                     )
-                    chi[j] = torch.sum(batch.system_features["degen_MS"] * chi_paths_MS + chi_paths_SS, dim = 0)
+                    chi[j] = torch.sum(degen_ms_abs * chi_paths_MS + chi_paths_SS, dim = 0)
                 tot_edge += n_edge
                 tot_path += n_path
                 tot_path_ms += n_path_ms
