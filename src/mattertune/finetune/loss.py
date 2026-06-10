@@ -197,7 +197,7 @@ def sigma2_debye_MS(tx, natoms, pos, atwt, rnorman, t):
     ridotj /= torch.abs(ridotj)
     diz = debint_z(tx * torch.ones_like(ri0j1))
     ci0i1 = debint(ri0j1, tx * torch.ones_like(ri0j1)) / torch.sqrt(atwt[i0] * atwt[i1])
-    sig2_eq_all = sign * (diz / atwt[i0] + diz / atwt[i1] - 2 * ci0i1) / 2
+    sig2_eq_all = ridotj * (diz / atwt[i0] + diz / atwt[i1] - 2 * ci0i1) / 2
     sig2_eq = torch.zeros_like(natoms, dtype = pos.dtype, device = pos.device)
     sig2_eq = sig2_eq.scatter_add(0, path_ids, sig2_eq_all)
 
