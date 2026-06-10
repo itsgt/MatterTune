@@ -169,7 +169,7 @@ def debint(r, t, N = 100):
     rx = r * x[:, 1:]  # (B, N-1)
     exp_xt = torch.exp(torch.clamp(xt, max=80))
     coth_xt_2 = 1.0 + 2.0 / (exp_xt - 1.0 + 1e-12)
-    y[:, 1:] = (x[:, 1:] * torch.sinc(rx / torch.pi) * coth_xt_2
+    y[:, 1:] = x[:, 1:] * torch.sinc(rx / torch.pi) * coth_xt_2
     assert ~torch.any(torch.isnan(y)), f'r: {r}\n t: {t}\n y: {y}'
     return torch.trapz(y, x, dim=1)  # (B,)
 
