@@ -750,7 +750,7 @@ class ORBBackboneModule(
                 tot_path += N_path_abs
                 tot_path_degen += N_path_degen
                 tot_path_MS += N_path_abs_MS
-                tot_path_legs_MS += tot_path_legs_MS
+                tot_path_legs_MS += N_path_legs_abs_MS
             
             edge_path_vals, edge_path_counts = torch.unique(edge_path_inds, return_counts=True)
             edge_path_dups = edge_path_vals[edge_path_counts > 1]
