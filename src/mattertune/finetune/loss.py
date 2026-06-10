@@ -528,11 +528,11 @@ def compute_loss_with_batch(
                     atwt_ms_abs = atwt_ms_all[abs_edge_path_leg_mask]
 
                     sigma2_MS = sigma2_debye_MS(
-                        batch.system_features["T_Ds"][0] * torch.ones_like(Reff_ms_abs), 
+                        batch.system_features["T_Ds"][0], 
                         nleg_ms_abs, 
                         pos_ms_abs, 
                         atwt_ms_abs, 
-                        batch.system_features["rnorman"][0] * torch.ones_like(Reff_ms_abs), 
+                        batch.system_features["rnorman"][0], 
                         300.)
 
                     chi_paths_MS = calc_chi_batch(q, 
