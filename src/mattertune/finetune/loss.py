@@ -426,7 +426,7 @@ def compute_loss_with_batch(
                 path_abs_inds_ms = batch.system_features["abs_path_inds_ms"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 unique_abs_path_ms, inverse_abs_path_ms = torch.unique(path_abs_inds_ms, sorted = True, return_inverse = True)
                 path_leg_abs_inds_ms = batch.system_features["abs_path_leg_inds_ms"][tot_path_legs_ms:(tot_path_legs_ms + n_path_leg_ms)]
-                unique_abs_path_leg_ms, inverse_abs_path_leg_ms = torch.unique(path_abs_inds_ms, sorted = True, return_inverse = True)
+                unique_abs_path_leg_ms, inverse_abs_path_leg_ms = torch.unique(path_leg_abs_inds_ms, sorted = True, return_inverse = True)
                 edge_path_abs_inds = batch.system_features["abs_edge_path_inds"][tot_path_degen:(tot_path_degen + n_path_degen)]
                 unique_abs_edge_path, inverse_abs_edge_path = torch.unique(edge_path_abs_inds, sorted = True, return_inverse = True)
                 
@@ -448,7 +448,7 @@ def compute_loss_with_batch(
                 Reff_ms_all = batch.system_features["Reffs_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 nlegs_ms_all = batch.system_features["nlegs_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
                 pos_ms_all = batch.system_features["pos_MS"][tot_path_legs_ms:(tot_path_legs_ms + n_path_leg_ms), :]
-                atwt_ms_all = batch.system_features["pos_MS"][tot_path_legs_ms:(tot_path_legs_ms + n_path_leg_ms)]
+                atwt_ms_all = batch.system_features["atwt_MS"][tot_path_legs_ms:(tot_path_legs_ms + n_path_leg_ms)]
 
                 chi = torch.zeros((len(unique_abs_edge), len(k1s[sl:sr])), device = prediction.device)
                 for j in range(len(unique_abs_edge)):
