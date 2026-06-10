@@ -153,7 +153,9 @@ def debint_z(t, N = 100):
     t = t.unsqueeze(1)  # (B, 1)
     y = (2.0 / t) * torch.ones_like(x)  # (B, N)
     xt = x[:, 1:] * t  # (B, N-1)
-    y[:, 1:] = x[:, 1:] * (torch.exp(xt) + 1) / (torch.exp(xt) - 1)
+    exp_xt = torch.exp(torch.clamp(xt, max=80))
+    coth_xt_2 = 1.0 + 2.0 / (exp_xt - 1.0 + 1e-12)
+    y[:, 1:] = x[:, 1:] * coth_xt_2
     assert ~torch.any(torch.isnan(y)), f't: {t}\n y: {y}'
     return torch.trapz(y, x, dim=1)  # (B,)
 
@@ -165,8 +167,9 @@ def debint(r, t, N = 100):
     y = (2.0 / t) * torch.ones_like(x)  # (B, N)
     xt = x[:, 1:] * t  # (B, N-1)
     rx = r * x[:, 1:]  # (B, N-1)
-    y[:, 1:] = (x[:, 1:] * torch.sinc(rx / torch.pi) * 
-        (torch.exp(xt) + 1) / (torch.exp(xt) - 1))
+    exp_xt = torch.exp(torch.clamp(xt, max=80))
+    coth_xt_2 = 1.0 + 2.0 / (exp_xt - 1.0 + 1e-12)
+    y[:, 1:] = (x[:, 1:] * torch.sinc(rx / torch.pi) * coth_xt_2
     assert ~torch.any(torch.isnan(y)), f'r: {r}\n t: {t}\n y: {y}'
     return torch.trapz(y, x, dim=1)  # (B,)
 
