@@ -34,6 +34,8 @@ class EXAFSLossConfig(C.Config):
     exp_spectra: torch.Tensor = torch.tensor([0.])
     avg_paths: bool = False
     predict_deltar: bool = True
+    predict_sigma2: bool = True
+    predict_sigma2_ms: bool = True
     predict_third: bool = True
     kw: int = 0
      
@@ -507,8 +509,8 @@ def compute_loss_with_batch(
                         c1_pred = edge_preds[:, 0][edge_path_mapping] if config.predict_deltar else torch.zeros_like(c2_pred, device = prediction.device)
                         c3_pred = edge_preds[:, 2][edge_path_mapping] if config.predict_third else torch.zeros_like(c2_pred, device = prediction.device)
 
-                    TD_T = (1 / 3) + 3 * torch.sigmoid(c2_pred) # Debye Temp between 100-1000K at room temp
-                    sigma2 = sigma2_debye_SS(T_Ds_abs / 300, Reff_abs, m_a_abs, m_s_abs, rnorman_abs, 300. * torch.ones_like(Reff_abs))
+                    debye_ratios = (1 / 3) + 3 * torch.sigmoid(c2_pred) if config.predict_sigma2 else T_Ds_abs / 300 # Debye Temp between 100-1000K at room temp
+                    sigma2 = sigma2_debye_SS(debye_ratios, Reff_abs, m_a_abs, m_s_abs, rnorman_abs, 300. * torch.ones_like(Reff_abs))
 
                     chi_paths_SS = calc_chi_batch(q, 
                         0.15 * torch.tanh(c1_pred), 
@@ -536,8 +538,9 @@ def compute_loss_with_batch(
                     pos_ms_abs = pos_ms_all[abs_edge_path_leg_mask, :]
                     atwt_ms_abs = atwt_ms_all[abs_edge_path_leg_mask]
 
+                    ms_debye_ratio = (1 / 3) + 3 * torch.sigmoid(torch.mean(edge_preds[:, 4][edge_path_mapping])) if config.predict_sigma2_ms else T_Ds_ms_abs[0] / 300
                     sigma2_MS = sigma2_debye_MS(
-                        T_Ds_ms_abs[0] / 300, 
+                        ms_debye_ratio, 
                         nleg_ms_abs, 
                         pos_ms_abs, 
                         atwt_ms_abs, 
