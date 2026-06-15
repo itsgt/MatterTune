@@ -538,7 +538,7 @@ def compute_loss_with_batch(
                     pos_ms_abs = pos_ms_all[abs_edge_path_leg_mask, :]
                     atwt_ms_abs = atwt_ms_all[abs_edge_path_leg_mask]
 
-                    ms_debye_ratio = (1 / 3) + 3 * torch.sigmoid(torch.mean(edge_preds[:, 4][edge_path_mapping])) if config.predict_sigma2_ms else T_Ds_ms_abs[0] / 300
+                    ms_debye_ratio = (1 / 3) + 3 * torch.sigmoid(torch.mean(edge_preds[:, 3][edge_path_mapping])) if config.predict_sigma2_ms else T_Ds_ms_abs[0] / 300
                     sigma2_MS = sigma2_debye_MS(
                         ms_debye_ratio, 
                         nleg_ms_abs, 
