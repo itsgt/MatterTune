@@ -33,6 +33,7 @@ class EXAFSLossConfig(C.Config):
     ws: list[float] = [0.9, 0.1, 0.1]
     exp_spectra: torch.Tensor = torch.tensor([0.])
     avg_paths: bool = False
+    avg_sigma2: bool = False
     predict_deltar: bool = True
     predict_sigma2: bool = True
     predict_sigma2_ms: bool = True
@@ -511,6 +512,8 @@ def compute_loss_with_batch(
 
                     debye_ratios = (1 / 3) + 3 * torch.sigmoid(c2_pred) if config.predict_sigma2 else T_Ds_abs / 300 # Debye Temp between 100-1000K at room temp
                     sigma2 = sigma2_debye_SS(debye_ratios, Reff_abs, m_a_abs, m_s_abs, rnorman_abs, 300. * torch.ones_like(Reff_abs))
+                    if config.avg_sigma2:
+                        sigma2 = torch.mean(sigma2) * torch.ones_like(sigma2)
 
                     chi_paths_SS = calc_chi_batch(q, 
                         0.15 * torch.tanh(c1_pred), 
