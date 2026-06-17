@@ -34,6 +34,7 @@ class EXAFSLossConfig(C.Config):
     exp_spectra: torch.Tensor = torch.tensor([0.])
     avg_paths: bool = False
     avg_sigma2: bool = False
+    predict_deltae0: bool = True
     predict_deltar: bool = True
     predict_sigma2: bool = True
     predict_sigma2_ms: bool = True
@@ -470,7 +471,10 @@ def compute_loss_with_batch(
                     abs_edge_path_leg_mask = inverse_abs_path_leg_ms == j
 
                     preds_abs = edge_preds[abs_edge_mask]
-                    ΔE0 = ETOK * batch.system_features["energy_edges"][tot_abs + j]
+                    if config.predict_deltae0:
+                        ΔE0 = ETOK * 40 * (torch.sigmoid(torch.mean(edge_preds[:, 4][edge_path_mapping])) - 0.5)
+                    else:
+                        ΔE0 = ETOK * batch.system_features["energy_edges"][tot_abs + j]
                     assert k2s[sl] - ΔE0 > 0, f'{torch.tanh(preds_abs[:, 0].mean())} {ΔE0}' 
                     q = torch.sqrt(k2s[sl:sr] - ΔE0)
 
@@ -505,10 +509,18 @@ def compute_loss_with_batch(
                             c3_pred = c3_pred / degen_abs
                         else:
                             c3_pred = torch.zeros_like(c2_pred, device = prediction.device)
+
+                        if config.predict_fourth:
+                            c4_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 5].dtype, device = prediction.device)
+                            c4_pred = c4_pred.scatter_add(0, segment_ids, edge_preds[:, 5][edge_path_mapping])
+                            c4_pred = c4_pred / degen_abs
+                        else:
+                            c4_pred = torch.zeros_like(c2_pred, device = prediction.device)
                     else:
                         c2_pred = edge_preds[:, 1][edge_path_mapping]
                         c1_pred = edge_preds[:, 0][edge_path_mapping] if config.predict_deltar else torch.zeros_like(c2_pred, device = prediction.device)
                         c3_pred = edge_preds[:, 2][edge_path_mapping] if config.predict_third else torch.zeros_like(c2_pred, device = prediction.device)
+                        c4_pred = edge_preds[:, 5][edge_path_mapping] if config.predict_fourth else torch.zeros_like(c2_pred, device = prediction.device)
 
                     debye_ratios = (1 / 3) + 3 * torch.sigmoid(c2_pred) if config.predict_sigma2 else T_Ds_abs / 300 # Debye Temp between 100-1000K at room temp
                     sigma2 = sigma2_debye_SS(debye_ratios, Reff_abs, m_a_abs, m_s_abs, rnorman_abs, 300. * torch.ones_like(Reff_abs))
@@ -519,7 +531,7 @@ def compute_loss_with_batch(
                         0.15 * torch.tanh(c1_pred), 
                         sigma2, 
                         0.005 * torch.tanh(c3_pred), 
-                        torch.zeros_like(c1_pred),
+                        0.0001 * torch.tanh(c4_pred),
                         interp_soft_adaptive(q, k_feff, amp_abs), 
                         interp_soft_adaptive(q, k_feff, pha_abs), 
                         interp_soft_adaptive(q, k_feff, rep_abs), 
