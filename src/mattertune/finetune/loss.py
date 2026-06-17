@@ -470,8 +470,9 @@ def compute_loss_with_batch(
                     abs_path_mask_ms = inverse_abs_path_ms == j
                     abs_edge_path_mask = inverse_abs_edge_path == j
                     abs_edge_path_leg_mask = inverse_abs_path_leg_ms == j
-
+                    edge_path_mapping = edge_path_inds[abs_edge_path_mask]
                     preds_abs = edge_preds[abs_edge_mask]
+
                     if config.predict_deltae0:
                         ΔE0 = ETOK * 40 * (torch.sigmoid(torch.mean(edge_preds[:, 4][edge_path_mapping])) - 0.5)
                     else:
@@ -489,8 +490,6 @@ def compute_loss_with_batch(
                     pha_abs = pha_all[abs_path_mask] if config.avg_paths else pha_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
                     rep_abs = rep_all[abs_path_mask] if config.avg_paths else rep_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
                     lam_abs = lam_all[abs_path_mask] if config.avg_paths else lam_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
-                    
-                    edge_path_mapping = edge_path_inds[abs_edge_path_mask]
                     
                     if config.avg_paths:
                         segment_ids = torch.repeat_interleave(torch.arange(len(degen_abs), device = prediction.device), degen_abs.int())
