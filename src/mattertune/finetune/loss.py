@@ -39,6 +39,7 @@ class EXAFSLossConfig(C.Config):
     predict_sigma2: bool = True
     predict_sigma2_ms: bool = True
     predict_third: bool = True
+    predict_fourth: bool = True
     kw: int = 0
      
 
