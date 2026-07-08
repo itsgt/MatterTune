@@ -647,10 +647,10 @@ class ORBBackboneModule(
                         edge_match[tot_path + path_i] = edge_vec_ids[senders == abs_i][torch.argmin(path_diffs)]
                 tot_path += len(paths_info[struct_i][j]["Reffs"])
             
-            deltar = torch.cat([(torch.tensor(paths_info[struct_i][j]["deltar"]), dtype=torch.float32) for j in range(len(abs_inds[struct_i]))])
-            sigma2 = torch.cat([(torch.tensor(paths_info[struct_i][j]["sigma2"]), dtype=torch.float32) for j in range(len(abs_inds[struct_i]))])
-            third =  torch.cat([(torch.tensor(paths_info[struct_i][j]["third"]),  dtype=torch.float32) for j in range(len(abs_inds[struct_i]))])
-            fourth = torch.cat([(torch.tensor(paths_info[struct_i][j]["fourth"],  dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
+            deltar = torch.cat([(torch.tensor(paths_info[struct_i][j]["deltar"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
+            sigma2 = torch.cat([(torch.tensor(paths_info[struct_i][j]["sigma2"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
+            third =  torch.cat([(torch.tensor(paths_info[struct_i][j]["third"],  dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
+            fourth = torch.cat([(torch.tensor(paths_info[struct_i][j]["fourth"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
 
             print(f'Kept {(100 * len(edge_match[match_failed == 0]) / len(edge_match)):.2f}% of paths for struct {struct_i}')
 
