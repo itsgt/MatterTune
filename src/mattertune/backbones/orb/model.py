@@ -638,7 +638,7 @@ class ORBBackboneModule(
                 for path_i in range(len(paths_info[struct_i][j]["Reffs"])):
                     path_diffs = torch.linalg.norm(edge_vecs[senders == abs_i] - 
                         paths_info[struct_i][j]["path_vecs"][path_i], axis = 1)
-                    assert path_diffs.min() < 0.01, f'Path min is {path_diffs.min()} for j of {j}'
+                    assert path_diffs.min() < 0.01, f'Path min is {path_diffs.min()} for j of {j} of structure {struct_i}'
                     edge_match[tot_path + path_i] = edge_vec_ids[senders == abs_i][torch.argmin(path_diffs)]
                 tot_path += len(paths_info[struct_i][j]["Reffs"])
             
