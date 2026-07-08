@@ -625,6 +625,7 @@ class ORBBackboneModule(
             edge_vecs = atom_graphs.edge_features["vectors"]
             edge_vec_ids = torch.arange(len(edge_vecs))        
             struct_i = atoms.info['edge_props'][0]
+            print('Producing structure {struct_i}')
             senders = atom_graphs.senders
             abs_inds[struct_i] = abs_inds[struct_i].to(device)
 
