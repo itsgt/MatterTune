@@ -634,13 +634,17 @@ class ORBBackboneModule(
                 N_paths += len(paths_info[struct_i][j]["Reffs"])
 
             edge_match = torch.zeros((N_paths), dtype = torch.int64, device = device)
+            match_failed = torch.zeros((N_paths), dtype = torch.int64, device = device)
             tot_path = 0
             for j, abs_i in enumerate(abs_inds[struct_i]):
                 for path_i in range(len(paths_info[struct_i][j]["Reffs"])):
                     path_diffs = torch.linalg.norm(edge_vecs[senders == abs_i] - 
                         paths_info[struct_i][j]["path_vecs"][path_i], axis = 1)
-                    assert path_diffs.min() < 0.01, f'Path min is {path_diffs.min()} for j of {j} of structure {struct_i}'
-                    edge_match[tot_path + path_i] = edge_vec_ids[senders == abs_i][torch.argmin(path_diffs)]
+                    if path_diffs.min() > 0.01:
+                        match_failed[tot_path + path_i] = 1
+                    #assert path_diffs.min() < 0.01, f'Path min is {path_diffs.min()} for j of {j} of structure {struct_i}'
+                    else:
+                        edge_match[tot_path + path_i] = edge_vec_ids[senders == abs_i][torch.argmin(path_diffs)]
                 tot_path += len(paths_info[struct_i][j]["Reffs"])
             
             deltar = torch.cat([(torch.tensor(paths_info[struct_i][j]["deltar"])) for j in range(len(abs_inds[struct_i]))])
@@ -648,10 +652,13 @@ class ORBBackboneModule(
             third =  torch.cat([(torch.tensor(paths_info[struct_i][j]["third"])) for j in range(len(abs_inds[struct_i]))])
             fourth = torch.cat([(torch.tensor(paths_info[struct_i][j]["fourth"])) for j in range(len(abs_inds[struct_i]))])
 
-            atom_graphs.system_features["edge_match"] = edge_match
-            atom_graphs.system_features["deltar"] = deltar
-            atom_graphs.system_features["third" ] = third
-            atom_graphs.system_features["fourth"] = fourth
+            print(f'Kept {(100 * len(edge_match[match_failed == 0]) / len(edge_match)):.2f}% of paths for struct {struct_i}')
+
+            atom_graphs.system_features["edge_match"] = edge_match[match_failed == 0]
+            atom_graphs.system_features["deltar"] = deltar[match_failed == 0]
+            atom_graphs.system_features["sigma2" ] = sigma2[match_failed == 0]
+            atom_graphs.system_features["third" ] = third[match_failed == 0]
+            atom_graphs.system_features["fourth"] = fourth[match_failed == 0]
         return atom_graphs
 
     @override
