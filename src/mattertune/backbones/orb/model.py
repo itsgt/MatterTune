@@ -622,7 +622,13 @@ class ORBBackboneModule(
 
         if paths_info is not None:
             device = atom_graphs.edge_features["vectors"].device
+            edge_vecs = atom_graphs.edge_features["vectors"]            
             struct_i = atoms.info['edge_props'][0]
+            senders = atom_graphs.senders
+            abs_inds[struct_i] = abs_inds[struct_i].to(device)
+            for j, abs_i in enumerate(abs_inds[struct_i]):
+                for path_i in range(len(paths_info[struct_i][j]["Reffs"])):
+                    
 
             nk = len(paths_info[0][0]["k_feff"])
             N_abs = len(paths_info[struct_i])
