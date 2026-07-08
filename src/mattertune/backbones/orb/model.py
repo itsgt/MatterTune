@@ -632,7 +632,7 @@ class ORBBackboneModule(
             for j, abs_i in enumerate(abs_inds[struct_i]):
                 N_paths += len(paths_info[struct_i][j]["Reffs"])
 
-            edge_match = torch.zeros((len(paths_info[struct_i][j]["Reffs"])), dtype = torch.int64, device = device)
+            edge_match = torch.zeros((N_paths), dtype = torch.int64, device = device)
             tot_path = 0
             for j, abs_i in enumerate(abs_inds[struct_i]):
                 for path_i in range(len(paths_info[struct_i][j]["Reffs"])):
