@@ -625,7 +625,6 @@ class ORBBackboneModule(
             edge_vecs = atom_graphs.edge_features["vectors"]
             edge_vec_ids = torch.arange(len(edge_vecs))        
             struct_i = atoms.info['edge_props'][0]
-            print(f'Producing structure {struct_i}')
             senders = atom_graphs.senders
             abs_inds[struct_i] = abs_inds[struct_i].to(device)
 
@@ -652,7 +651,7 @@ class ORBBackboneModule(
             third =  torch.cat([(torch.tensor(paths_info[struct_i][j]["third"],  dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
             fourth = torch.cat([(torch.tensor(paths_info[struct_i][j]["fourth"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
 
-            print(f'Kept {(100 * len(edge_match[match_failed == 0]) / len(edge_match)):.2f}% of paths for struct {struct_i}')
+            assert len(edge_match[match_failed == 0]) / len(edge_match) > 0.95, f'Only kept {(100 * len(edge_match[match_failed == 0]) / len(edge_match)):.2f}% of paths for struct {struct_i}'
 
             atom_graphs.system_features["edge_match"] = edge_match[match_failed == 0]
             atom_graphs.system_features["deltar"] = deltar[match_failed == 0]
