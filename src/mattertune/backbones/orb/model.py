@@ -642,10 +642,10 @@ class ORBBackboneModule(
                     edge_match[tot_path + path_i] = edge_vec_ids[senders == abs_i][torch.argmin(path_diffs)]
                 tot_path += len(paths_info[struct_i][j]["Reffs"])
             
-            deltar = [torch.cat((torch.tensor(paths_info[struct_i][j]["deltar"]))) for j in range(len(abs_inds[struct_i]))]
-            sigma2 = [torch.cat((torch.tensor(paths_info[struct_i][j]["sigma2"]))) for j in range(len(abs_inds[struct_i]))]
-            third =  [torch.cat((torch.tensor(paths_info[struct_i][j]["third"]))) for j in range(len(abs_inds[struct_i]))]
-            fourth = [torch.cat((torch.tensor(paths_info[struct_i][j]["fourth"]))) for j in range(len(abs_inds[struct_i]))]
+            deltar = torch.cat([(torch.tensor(paths_info[struct_i][j]["deltar"])) for j in range(len(abs_inds[struct_i]))])
+            sigma2 = torch.cat([(torch.tensor(paths_info[struct_i][j]["sigma2"])) for j in range(len(abs_inds[struct_i]))])
+            third =  torch.cat([(torch.tensor(paths_info[struct_i][j]["third"])) for j in range(len(abs_inds[struct_i]))])
+            fourth = torch.cat([(torch.tensor(paths_info[struct_i][j]["fourth"])) for j in range(len(abs_inds[struct_i]))])
 
             atom_graphs.system_features["edge_match"] = edge_match
             atom_graphs.system_features["deltar"] = deltar
