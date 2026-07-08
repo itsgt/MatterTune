@@ -30,17 +30,6 @@ class MAEMaskedLossConfig(C.Config):
 class EXAFSLossConfig(C.Config):
     name: Literal["exafs"] = "exafs"
     reduction: Literal["mean", "sum"] = "mean"
-    ws: list[float] = [0.9, 0.1, 0.1]
-    exp_spectra: torch.Tensor = torch.tensor([0.])
-    avg_paths: bool = False
-    avg_sigma2: bool = False
-    predict_deltae0: bool = True
-    predict_deltar: bool = True
-    predict_sigma2: bool = True
-    predict_sigma2_ms: bool = True
-    predict_third: bool = True
-    predict_fourth: bool = True
-    kw: int = 0
      
 class MAEAtomAveragedLossConfig(C.Config):
     name: Literal["mae_atom_avg"] = "mae_atom_avg"
