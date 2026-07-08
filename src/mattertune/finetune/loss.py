@@ -405,9 +405,9 @@ def compute_loss_with_batch(
     match config:
         case EXAFSLossConfig():
             edge_match = batch.system_features["edge_match"].int()
-            return  F.mse_loss(prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction
+            return  (F.mse_loss(prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction
                 ) + F.mse_loss(prediction[edge_match, 1], batch.system_features["sigma2"], reduction=config.reduction
                 ) + F.mse_loss(prediction[edge_match, 2], batch.system_features["third"],  reduction=config.reduction
-                ) + F.mse_loss(prediction[edge_match, 3], batch.system_features["fourth"], reduction=config.reduction)
+                ) + F.mse_loss(prediction[edge_match, 3], batch.system_features["fourth"], reduction=config.reduction)).float()
         case _:
             assert_never(config)
