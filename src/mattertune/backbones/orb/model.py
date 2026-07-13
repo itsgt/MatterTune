@@ -625,7 +625,7 @@ class ORBBackboneModule(
             edge_vecs = atom_graphs.edge_features["vectors"]
             edge_vec_ids = torch.arange(len(edge_vecs))        
             struct_i = atoms.info['edge_props'][0]
-            senders = atom_graphs.senders
+            senders = atom_graphs.recievers
             abs_inds[struct_i] = abs_inds[struct_i].to(device)
 
             N_paths = 0
@@ -637,7 +637,7 @@ class ORBBackboneModule(
             tot_path = 0
             for j, abs_i in enumerate(abs_inds[struct_i]):
                 for path_i in range(len(paths_info[struct_i][j]["Reffs"])):
-                    path_diffs = torch.linalg.norm(edge_vecs[senders == abs_i] + 
+                    path_diffs = torch.linalg.norm(edge_vecs[senders == abs_i] - 
                         paths_info[struct_i][j]["path_vecs"][path_i], axis = 1)
                     if path_diffs.min() > 0.01:
                         match_failed[tot_path + path_i] = 1
