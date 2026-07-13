@@ -30,6 +30,7 @@ class MAEMaskedLossConfig(C.Config):
 class EXAFSLossConfig(C.Config):
     name: Literal["exafs"] = "exafs"
     reduction: Literal["mean", "sum"] = "mean"
+    deltaR_only: bool = False
     offset_deltaR: float = 0.0
     offset_sigma2: float = 0.0
     offset_third:  float = 0.0
@@ -274,9 +275,12 @@ def compute_loss_with_batch(
     match config:
         case EXAFSLossConfig():
             edge_match = batch.system_features["edge_match"].int()
-            return  ((1 / config.scale_deltaR ** 2) * F.mse_loss(config.offset_deltaR + config.scale_deltaR * prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction
-                ) + (1 / config.scale_sigma2 ** 2) * F.mse_loss(config.offset_sigma2 + config.scale_sigma2 * prediction[edge_match, 1], batch.system_features["sigma2"], reduction=config.reduction
-                ) + (1 / config.scale_third ** 2) * F.mse_loss(config.offset_third + config.scale_third * prediction[edge_match, 2], batch.system_features["third"],  reduction=config.reduction
-                ) + (1 / config.scale_fourth ** 2) * F.mse_loss(config.offset_fourth + config.scale_fourth * prediction[edge_match, 3], batch.system_features["fourth"], reduction=config.reduction))
+            if config.deltaR_only:
+                return F.mse_loss(config.offset_deltaR + config.scale_deltaR * prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction)
+            else:
+                return  ((1 / config.scale_deltaR ** 2) * F.mse_loss(config.offset_deltaR + config.scale_deltaR * prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction
+                    ) + (1 / config.scale_sigma2 ** 2) * F.mse_loss(config.offset_sigma2 + config.scale_sigma2 * prediction[edge_match, 1], batch.system_features["sigma2"], reduction=config.reduction
+                    ) + (1 / config.scale_third ** 2) * F.mse_loss(config.offset_third + config.scale_third * prediction[edge_match, 2], batch.system_features["third"],  reduction=config.reduction
+                    ) + (1 / config.scale_fourth ** 2) * F.mse_loss(config.offset_fourth + config.scale_fourth * prediction[edge_match, 3], batch.system_features["fourth"], reduction=config.reduction))
         case _:
             assert_never(config)
