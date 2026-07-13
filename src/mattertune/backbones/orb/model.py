@@ -625,7 +625,7 @@ class ORBBackboneModule(
             edge_vecs = atom_graphs.edge_features["vectors"]
             edge_vec_ids = torch.arange(len(edge_vecs))        
             struct_i = atoms.info['edge_props'][0]
-            senders = atom_graphs.recievers
+            senders = atom_graphs.receivers
             abs_inds[struct_i] = abs_inds[struct_i].to(device)
 
             N_paths = 0
