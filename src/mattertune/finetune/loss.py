@@ -402,9 +402,9 @@ def compute_loss_with_batch(
     match config:
         case EXAFSLossConfig():
             edge_match = batch.system_features["edge_match"].int()
-            return  (F.mse_loss(offset_deltaR + scale_deltaR * prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction
-                ) + F.mse_loss(offset_sigma2 + scale_sigma2 * prediction[edge_match, 1], batch.system_features["sigma2"], reduction=config.reduction
-                ) + F.mse_loss(offset_third + scale_third * prediction[edge_match, 2], batch.system_features["third"],  reduction=config.reduction
-                ) + F.mse_loss(offset_fourth + scale_fourth * prediction[edge_match, 3], batch.system_features["fourth"], reduction=config.reduction))
+            return  (F.mse_loss(config.offset_deltaR + config.scale_deltaR * prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction
+                ) + F.mse_loss(config.offset_sigma2 + config.scale_sigma2 * prediction[edge_match, 1], batch.system_features["sigma2"], reduction=config.reduction
+                ) + F.mse_loss(config.offset_third + config.scale_third * prediction[edge_match, 2], batch.system_features["third"],  reduction=config.reduction
+                ) + F.mse_loss(config.offset_fourth + config.scale_fourth * prediction[edge_match, 3], batch.system_features["fourth"], reduction=config.reduction))
         case _:
             assert_never(config)
