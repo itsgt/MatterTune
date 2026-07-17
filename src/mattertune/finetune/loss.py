@@ -275,6 +275,14 @@ def compute_loss_with_batch(
     match config:
         case EXAFSLossConfig():
             edge_match = batch.system_features["edge_match"].int()
+            N_edges = batch.system_features["N_edges"].int()
+            _, edge_match_id_mapped = torch.unique(
+                batch.system_features["edge_match_id"].int(),
+                return_inverse = True,
+                sorted = False,
+            )
+            edge_offsets = torch.cumsum(N_edges) - N_edges
+            edge_match = edge_match + edge_offsets[edge_match_id_mapped]
             if config.deltaR_only:
                 return F.mse_loss(config.offset_deltaR + config.scale_deltaR * prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction)
             else:
