@@ -623,7 +623,8 @@ class ORBBackboneModule(
         if paths_info is not None:
             device = atom_graphs.edge_features["vectors"].device
             edge_vecs = atom_graphs.edge_features["vectors"]
-            edge_vec_ids = torch.arange(len(edge_vecs))        
+            N_edges = len(edge_vecs)
+            edge_vec_ids = torch.arange(N_edges)        
             struct_i = atoms.info['edge_props'][0]
             senders = atom_graphs.senders
             abs_inds[struct_i] = abs_inds[struct_i].to(device)
@@ -658,6 +659,8 @@ class ORBBackboneModule(
             atom_graphs.system_features["sigma2" ] = sigma2[match_failed == 0]
             atom_graphs.system_features["third" ] = third[match_failed == 0]
             atom_graphs.system_features["fourth"] = fourth[match_failed == 0]
+            atom_graphs.system_features["N_edges"] = torch.tensor([N_edges], device = device)
+            atomm_graphs.system_features["edge_match_id"] = struct_i * torch.ones_like(edge_match[match_failed == 0])
         return atom_graphs
 
     @override
