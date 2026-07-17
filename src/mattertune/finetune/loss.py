@@ -281,7 +281,7 @@ def compute_loss_with_batch(
                 return_inverse = True,
                 sorted = False,
             )
-            edge_offsets = torch.cumsum(N_edges) - N_edges
+            edge_offsets = torch.cumsum(N_edges, dim = 0) - N_edges
             edge_match = edge_match + edge_offsets[edge_match_id_mapped]
             if config.deltaR_only:
                 return F.mse_loss(config.offset_deltaR + config.scale_deltaR * prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction)
