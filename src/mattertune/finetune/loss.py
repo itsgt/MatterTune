@@ -31,6 +31,7 @@ class EXAFSLossConfig(C.Config):
     name: Literal["exafs"] = "exafs"
     reduction: Literal["mean", "sum"] = "mean"
     deltaR_only: bool = False
+    sigma2_only: bool = False
     offset_deltaR: float = 0.0
     offset_sigma2: float = 0.0
     offset_third:  float = 0.0
