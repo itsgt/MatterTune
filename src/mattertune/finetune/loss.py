@@ -288,6 +288,8 @@ def compute_loss_with_batch(
 
             if config.deltaR_only:
                 return F.mse_loss(config.offset_deltaR + config.scale_deltaR * prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction)
+            if config.sigma2_only:
+                return F.mse_loss(config.offset_sigma2 + config.scale_sigma2 * prediction[edge_match, 1], batch.system_features["sigma2"], reduction=config.reduction)
             else:
                 return  ((1 / config.scale_deltaR ** 2) * F.mse_loss(config.offset_deltaR + config.scale_deltaR * prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction
                     ) + (1 / config.scale_sigma2 ** 2) * F.mse_loss(config.offset_sigma2 + config.scale_sigma2 * prediction[edge_match, 1], batch.system_features["sigma2"], reduction=config.reduction)
