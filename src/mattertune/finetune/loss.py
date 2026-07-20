@@ -283,6 +283,10 @@ def compute_loss_with_batch(
             )
             edge_offsets = torch.cumsum(N_edges, dim = 0) - N_edges
             edge_match = edge_match + edge_offsets[edge_match_id_mapped]
+
+            assert torch.linalg.norm(batch.edge_features["vectors"][edge_match] - 
+                batch.system_features["edge_vec_check"], axis = 1).min() < 0.02
+
             if config.deltaR_only:
                 return F.mse_loss(config.offset_deltaR + config.scale_deltaR * prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction)
             else:
