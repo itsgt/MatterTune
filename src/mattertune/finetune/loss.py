@@ -284,8 +284,7 @@ def compute_loss_with_batch(
 
             errs = torch.linalg.norm(batch.edge_features["vectors"][edge_match] - 
                 batch.system_features["edge_vec_check"], axis = 1)
-
-            assert errs.max() < 0.02, f'{N_edges.shape} {edge_offsets.shape} {edge_match.shape} {edge_match_id_mapped.shape}'
+            assert errs.max() < 0.02
 
             if config.deltaR_only:
                 return F.mse_loss(config.offset_deltaR + config.scale_deltaR * prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction)
