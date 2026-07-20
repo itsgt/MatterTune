@@ -662,6 +662,7 @@ class ORBBackboneModule(
             atom_graphs.system_features["sigma2" ] = sigma2[match_failed == 0]
             atom_graphs.system_features["third" ] = third[match_failed == 0]
             atom_graphs.system_features["fourth"] = fourth[match_failed == 0]
+            atom_graphs.system_features["struct_i"] = torch.tensor([struct_i], device = device)
             atom_graphs.system_features["N_edges"] = torch.tensor([N_edges], device = device)
             atom_graphs.system_features["edge_match_id"] = struct_i * torch.ones_like(edge_match[match_failed == 0])
         return atom_graphs

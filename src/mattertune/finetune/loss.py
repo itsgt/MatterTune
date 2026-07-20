@@ -276,11 +276,9 @@ def compute_loss_with_batch(
         case EXAFSLossConfig():
             edge_match = batch.system_features["edge_match"].int()
             N_edges = batch.system_features["N_edges"].int()
-            _, edge_match_id_mapped = torch.unique(
-                batch.system_features["edge_match_id"].int(),
-                return_inverse = True,
-                sorted = False,
-            )
+            struct_is = batch.system_features["struct_i"].int()
+            edge_match_id = batch.system_features["edge_match_id"].int()
+            edge_match_id_mapped = (edge_match_id[:, None] == struct_is[None, :]).nonzero()[:, 1]
             edge_offsets = torch.cumsum(N_edges, dim = 0) - N_edges
             edge_match = edge_match + edge_offsets[edge_match_id_mapped]
 
