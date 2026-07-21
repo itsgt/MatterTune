@@ -394,75 +394,14 @@ def compute_loss_with_batch(
 ) -> torch.Tensor:
     match config:
         case EXAFSLossConfig():
-            total_loss = 0
+            edge_path_inds = batch.system_features["edge_path_inds"].int()
+            N_edges = batch.system_features["N_edges"].int()
+            struct_is = batch.system_features["struct_i"].int()
+            edge_match_id = batch.system_features["edge_match_id"].int()
+            edge_match_id_mapped = (edge_match_id[:, None] == struct_is[None, :]).nonzero()[:, 1]
+            edge_offsets = torch.cumsum(N_edges, dim = 0) - N_edges
+            edge_match = edge_path_inds + edge_offsets[edge_match_id_mapped]
 
-            tot_edge = 0
-            tot_path = 0
-            tot_path_degen = 0
-            tot_abs = 0
-            for i, struct_i_flt in enumerate(label):
-                struct_i = struct_i_flt.int()
-                n_edge = batch.n_edge[i]
-                n_path = batch.system_features["N_paths"][i]
-                n_path_degen = batch.system_features["N_paths_degen"][i]
-                
-                edge_preds = prediction[tot_edge:(tot_edge + n_edge)]
-                edge_path_inds = batch.system_features["edge_path_inds"][tot_path_degen:(tot_path_degen + n_path_degen)]
-                edge_abs_inds = batch.system_features["abs_edge_inds"][tot_edge:(tot_edge + n_edge)]
-                unique_abs_edge, inverse_abs_edge = torch.unique(edge_abs_inds, sorted = True, return_inverse = True)
-                path_abs_inds = batch.system_features["abs_path_inds"][tot_path:(tot_path + n_path)]
-                unique_abs_path, inverse_abs_path = torch.unique(path_abs_inds, sorted = True, return_inverse = True)
-                edge_path_abs_inds = batch.system_features["abs_edge_path_inds"][tot_path_degen:(tot_path_degen + n_path_degen)]
-                unique_abs_edge_path, inverse_abs_edge_path = torch.unique(edge_path_abs_inds, sorted = True, return_inverse = True)
-                
-                array_info_all = batch.system_features["array_info"][tot_path:(tot_path + n_path)]
-                Reff_all = batch.system_features["Reffs"][tot_path:(tot_path + n_path)]
-                m_a_all = batch.system_features["m_a"][tot_path:(tot_path + n_path)]
-                m_s_all = batch.system_features["m_s"][tot_path:(tot_path + n_path)]
-                rnorman_all = batch.system_features["rnorman"][tot_path:(tot_path + n_path)]
-                degen_all = batch.system_features["degen"][tot_path:(tot_path + n_path)]
-
-                structure_loss = 0
-                for j in range(len(unique_abs_edge)):
-                    abs_edge_mask = inverse_abs_edge == j
-                    abs_path_mask = inverse_abs_path == j
-                    abs_edge_path_mask = inverse_abs_edge_path == j
-                    edge_path_mapping = edge_path_inds[abs_edge_path_mask]
-                    preds_abs = edge_preds[abs_edge_mask]
-
-                    degen_abs = degen_all[abs_path_mask]
-                    Reff_abs = Reff_all[abs_path_mask] if config.avg_paths else Reff_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
-                    m_a_abs = m_a_all[abs_path_mask] if config.avg_paths else m_a_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
-                    m_s_abs = m_s_all[abs_path_mask] if config.avg_paths else m_s_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
-                    rnorman_abs = rnorman_all[abs_path_mask] if config.avg_paths else rnorman_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
-                    array_info_abs = array_info_all[abs_path_mask] if config.avg_paths else array_info_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
-                    
-                    if config.avg_paths:
-                        segment_ids = torch.repeat_interleave(torch.arange(len(degen_abs), device = prediction.device), degen_abs.int())
-                        pred_array_info = torch.zeros(
-                            (len(degen_abs), edge_preds.shape[1]),
-                            dtype=edge_preds.dtype,
-                            device=edge_preds.device,
-                        )
-
-                        pred_array_info.scatter_add_(
-                            0,
-                            segment_ids[:, None].expand(-1, edge_preds.shape[1]),
-                            edge_preds[edge_path_mapping]
-                        )
-
-                        pred_array_info /= degen_abs[:, None]
-                    else:
-                        pred_array_info = edge_preds[edge_path_mapping]
-
-                    structure_loss = structure_loss + F.mse_loss(pred_array_info, array_info_abs, reduction = "mean")
-                total_loss = total_loss + structure_loss / len(unique_abs_edge)
-                tot_edge += n_edge
-                tot_path += n_path
-                tot_path_degen += n_path_degen
-                tot_abs += len(unique_abs_edge)
-            
-            return total_loss / len(label)
-
+            return F.mse_loss(prediction[edge_match], batch.system_features["array_info"], reduction = config.reduction)
         case _:
             assert_never(config)
