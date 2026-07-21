@@ -642,7 +642,7 @@ class ORBBackboneModule(
             batch_abs_edge_inds = torch.zeros((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device).int()
             batch_abs_path_inds = torch.zeros((N_paths), device = device).int()
             edge_path_inds = -1 * torch.ones((N_paths_degen), device = device).int()
-            array_info = torch.zeros((N_paths_degen, 10), device = device)
+            array_info = torch.zeros((N_paths_degen, paths_info[struct_i][0]["array_info"].size(dim = 1)), device = device)
 
             edge_inds = torch.arange(atom_graphs.edge_features["vectors"].size(dim = 0), device = device)
             tot_path = 0
