@@ -30,18 +30,7 @@ class MAEMaskedLossConfig(C.Config):
 class EXAFSLossConfig(C.Config):
     name: Literal["exafs"] = "exafs"
     reduction: Literal["mean", "sum"] = "mean"
-    ws: list[float] = [0.9, 0.1, 0.1]
-    exp_spectra: torch.Tensor = torch.tensor([0.])
     avg_paths: bool = False
-    avg_sigma2: bool = False
-    predict_deltae0: bool = True
-    predict_deltar: bool = True
-    predict_sigma2: bool = True
-    predict_sigma2_ms: bool = True
-    predict_third: bool = True
-    predict_fourth: bool = True
-    kw: int = 0
-     
 
 class MAEAtomAveragedLossConfig(C.Config):
     name: Literal["mae_atom_avg"] = "mae_atom_avg"
@@ -405,26 +394,16 @@ def compute_loss_with_batch(
 ) -> torch.Tensor:
     match config:
         case EXAFSLossConfig():
-            k1s = torch.arange(0.0, 16.00001, 0.05, device = prediction.device)
-            k2s = k1s ** 2
-            kws = k1s ** config.kw
-            sl = 60
-            sr = -80
-            k_feff = batch.system_features["feff_k"][:(len(batch.system_features["feff_k"]) // len(label))]
-            sim_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
-            exp_chis = torch.zeros((len(label), len(k1s[sl:sr])), device = prediction.device)
+            total_loss = 0
+
             tot_edge = 0
             tot_path = 0
-            tot_path_ms = 0
-            tot_path_legs_ms = 0
             tot_path_degen = 0
             tot_abs = 0
             for i, struct_i_flt in enumerate(label):
                 struct_i = struct_i_flt.int()
                 n_edge = batch.n_edge[i]
                 n_path = batch.system_features["N_paths"][i]
-                n_path_ms = batch.system_features["N_paths_MS"][i]
-                n_path_leg_ms = batch.system_features["N_paths_leg_MS"][i]
                 n_path_degen = batch.system_features["N_paths_degen"][i]
                 
                 edge_preds = prediction[tot_edge:(tot_edge + n_edge)]
@@ -433,157 +412,57 @@ def compute_loss_with_batch(
                 unique_abs_edge, inverse_abs_edge = torch.unique(edge_abs_inds, sorted = True, return_inverse = True)
                 path_abs_inds = batch.system_features["abs_path_inds"][tot_path:(tot_path + n_path)]
                 unique_abs_path, inverse_abs_path = torch.unique(path_abs_inds, sorted = True, return_inverse = True)
-                path_abs_inds_ms = batch.system_features["abs_path_inds_ms"][tot_path_ms:(tot_path_ms + n_path_ms)]
-                unique_abs_path_ms, inverse_abs_path_ms = torch.unique(path_abs_inds_ms, sorted = True, return_inverse = True)
-                path_leg_abs_inds_ms = batch.system_features["abs_path_leg_inds_ms"][tot_path_legs_ms:(tot_path_legs_ms + n_path_leg_ms)]
-                unique_abs_path_leg_ms, inverse_abs_path_leg_ms = torch.unique(path_leg_abs_inds_ms, sorted = True, return_inverse = True)
                 edge_path_abs_inds = batch.system_features["abs_edge_path_inds"][tot_path_degen:(tot_path_degen + n_path_degen)]
                 unique_abs_edge_path, inverse_abs_edge_path = torch.unique(edge_path_abs_inds, sorted = True, return_inverse = True)
                 
-                amp_all = batch.system_features["amp"][tot_path:(tot_path + n_path)]
-                pha_all = batch.system_features["pha"][tot_path:(tot_path + n_path)]
-                rep_all = batch.system_features["rep"][tot_path:(tot_path + n_path)]
-                lam_all = batch.system_features["lam"][tot_path:(tot_path + n_path)]
+                array_info_all = batch.system_features["array_info"][tot_path:(tot_path + n_path)]
                 Reff_all = batch.system_features["Reffs"][tot_path:(tot_path + n_path)]
-                T_Ds_all = batch.system_features["T_Ds"][tot_path:(tot_path + n_path)]
                 m_a_all = batch.system_features["m_a"][tot_path:(tot_path + n_path)]
                 m_s_all = batch.system_features["m_s"][tot_path:(tot_path + n_path)]
                 rnorman_all = batch.system_features["rnorman"][tot_path:(tot_path + n_path)]
                 degen_all = batch.system_features["degen"][tot_path:(tot_path + n_path)]
 
-                amp_ms_all = batch.system_features["amp_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
-                pha_ms_all = batch.system_features["pha_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
-                rep_ms_all = batch.system_features["rep_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
-                lam_ms_all = batch.system_features["lam_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
-                T_Ds_ms_all = batch.system_features["T_Ds_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
-                rnorman_ms_all = batch.system_features["rnorman_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
-                degen_ms_all = batch.system_features["degen_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
-                Reff_ms_all = batch.system_features["Reffs_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
-                nlegs_ms_all = batch.system_features["nlegs_MS"][tot_path_ms:(tot_path_ms + n_path_ms)]
-                pos_ms_all = batch.system_features["pos_MS"][tot_path_legs_ms:(tot_path_legs_ms + n_path_leg_ms), :]
-                atwt_ms_all = batch.system_features["atwt_MS"][tot_path_legs_ms:(tot_path_legs_ms + n_path_leg_ms)]
-
-                chi = torch.zeros((len(unique_abs_edge), len(k1s[sl:sr])), device = prediction.device)
+                structure_loss = 0
                 for j in range(len(unique_abs_edge)):
                     abs_edge_mask = inverse_abs_edge == j
                     abs_path_mask = inverse_abs_path == j
-                    abs_path_mask_ms = inverse_abs_path_ms == j
                     abs_edge_path_mask = inverse_abs_edge_path == j
-                    abs_edge_path_leg_mask = inverse_abs_path_leg_ms == j
                     edge_path_mapping = edge_path_inds[abs_edge_path_mask]
                     preds_abs = edge_preds[abs_edge_mask]
 
-                    if config.predict_deltae0:
-                        ΔE0 = ETOK * 40 * (torch.sigmoid(torch.mean(edge_preds[:, 4][edge_path_mapping])) - 0.5)
-                    else:
-                        ΔE0 = ETOK * batch.system_features["energy_edges"][tot_abs + j]
-                    assert k2s[sl] - ΔE0 > 0, f'{torch.tanh(preds_abs[:, 0].mean())} {ΔE0}' 
-                    q = torch.sqrt(k2s[sl:sr] - ΔE0)
-
                     degen_abs = degen_all[abs_path_mask]
                     Reff_abs = Reff_all[abs_path_mask] if config.avg_paths else Reff_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
-                    T_Ds_abs = T_Ds_all[abs_path_mask] if config.avg_paths else T_Ds_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
                     m_a_abs = m_a_all[abs_path_mask] if config.avg_paths else m_a_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
                     m_s_abs = m_s_all[abs_path_mask] if config.avg_paths else m_s_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
                     rnorman_abs = rnorman_all[abs_path_mask] if config.avg_paths else rnorman_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
-                    amp_abs = amp_all[abs_path_mask] if config.avg_paths else amp_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
-                    pha_abs = pha_all[abs_path_mask] if config.avg_paths else pha_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
-                    rep_abs = rep_all[abs_path_mask] if config.avg_paths else rep_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
-                    lam_abs = lam_all[abs_path_mask] if config.avg_paths else lam_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
+                    array_info_abs = array_info_all[abs_path_mask] if config.avg_paths else array_info_all[abs_path_mask].repeat_interleave(degen_abs.int(), dim = 0)
                     
                     if config.avg_paths:
                         segment_ids = torch.repeat_interleave(torch.arange(len(degen_abs), device = prediction.device), degen_abs.int())
-                        c2_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 1].dtype, device = prediction.device)
-                        c2_pred = c2_pred.scatter_add(0, segment_ids, edge_preds[:, 1][edge_path_mapping])
-                        c2_pred = c2_pred / degen_abs
-                        if config.predict_deltar:
-                            c1_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 0].dtype, device = prediction.device)
-                            c1_pred = c1_pred.scatter_add(0, segment_ids, edge_preds[:, 0][edge_path_mapping])
-                            c1_pred = c1_pred / degen_abs
-                        else:
-                            c1_pred = torch.zeros_like(c2_pred, device = prediction.device)
-                        
-                        if config.predict_third:
-                            c3_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 2].dtype, device = prediction.device)
-                            c3_pred = c3_pred.scatter_add(0, segment_ids, edge_preds[:, 2][edge_path_mapping])
-                            c3_pred = c3_pred / degen_abs
-                        else:
-                            c3_pred = torch.zeros_like(c2_pred, device = prediction.device)
+                        pred_array_info = torch.zeros(
+                            (len(degen_abs), edge_preds.shape[1]),
+                            dtype=edge_preds.dtype,
+                            device=edge_preds.device,
+                        )
 
-                        if config.predict_fourth:
-                            c4_pred = torch.zeros(len(degen_abs), dtype = edge_preds[:, 5].dtype, device = prediction.device)
-                            c4_pred = c4_pred.scatter_add(0, segment_ids, edge_preds[:, 5][edge_path_mapping])
-                            c4_pred = c4_pred / degen_abs
-                        else:
-                            c4_pred = torch.zeros_like(c2_pred, device = prediction.device)
+                        pred_array_info.scatter_add_(
+                            0,
+                            segment_ids[:, None].expand(-1, edge_preds.shape[1]),
+                            edge_preds[edge_path_mapping]
+                        )
+
+                        pred_array_info /= degen_abs[:, None]
                     else:
-                        c2_pred = edge_preds[:, 1][edge_path_mapping]
-                        c1_pred = edge_preds[:, 0][edge_path_mapping] if config.predict_deltar else torch.zeros_like(c2_pred, device = prediction.device)
-                        c3_pred = edge_preds[:, 2][edge_path_mapping] if config.predict_third else torch.zeros_like(c2_pred, device = prediction.device)
-                        c4_pred = edge_preds[:, 5][edge_path_mapping] if config.predict_fourth else torch.zeros_like(c2_pred, device = prediction.device)
+                        pred_array_info = edge_preds[edge_path_mapping]
 
-                    debye_ratios = (1 / 3) + 3 * torch.sigmoid(c2_pred) if config.predict_sigma2 else T_Ds_abs / 300 # Debye Temp between 100-1000K at room temp
-                    sigma2 = sigma2_debye_SS(debye_ratios, Reff_abs, m_a_abs, m_s_abs, rnorman_abs, 300. * torch.ones_like(Reff_abs))
-                    if config.avg_sigma2:
-                        sigma2 = torch.mean(sigma2) * torch.ones_like(sigma2)
-
-                    chi_paths_SS = calc_chi_batch(q, 
-                        0.15 * torch.tanh(c1_pred), 
-                        sigma2, 
-                        0.005 * torch.tanh(c3_pred), 
-                        0.0001 * torch.tanh(c4_pred),
-                        interp_soft_adaptive(q, k_feff, amp_abs), 
-                        interp_soft_adaptive(q, k_feff, pha_abs), 
-                        interp_soft_adaptive(q, k_feff, rep_abs), 
-                        interp_soft_adaptive(q, k_feff, lam_abs),
-                        Reff_abs, 0.0
-                    )
-                    if config.avg_paths:
-                        chi_paths_SS = degen_abs.unsqueeze(-1) * chi_paths_SS
-
-                    nleg_ms_abs = nlegs_ms_all[abs_path_mask_ms].int()
-                    degen_ms_abs = degen_ms_all[abs_path_mask_ms]
-                    Reff_ms_abs = Reff_ms_all[abs_path_mask_ms]
-                    T_Ds_ms_abs = T_Ds_ms_all[abs_path_mask_ms]
-                    rnorman_ms_abs = rnorman_ms_all[abs_path_mask_ms]
-                    amp_ms_abs = amp_ms_all[abs_path_mask_ms] 
-                    pha_ms_abs = pha_ms_all[abs_path_mask_ms]
-                    rep_ms_abs = rep_ms_all[abs_path_mask_ms]
-                    lam_ms_abs = lam_ms_all[abs_path_mask_ms]
-                    pos_ms_abs = pos_ms_all[abs_edge_path_leg_mask, :]
-                    atwt_ms_abs = atwt_ms_all[abs_edge_path_leg_mask]
-
-                    ms_debye_ratio = (1 / 3) + 3 * torch.sigmoid(torch.mean(edge_preds[:, 3][edge_path_mapping])) if config.predict_sigma2_ms else T_Ds_ms_abs[0] / 300
-                    sigma2_MS = sigma2_debye_MS(
-                        ms_debye_ratio, 
-                        nleg_ms_abs, 
-                        pos_ms_abs, 
-                        atwt_ms_abs, 
-                        rnorman_ms_abs[0], 
-                        300.)
-
-                    chi_paths_MS = calc_chi_batch(q, 
-                        torch.zeros_like(sigma2_MS), 
-                        sigma2_MS, 
-                        torch.zeros_like(sigma2_MS), 
-                        torch.zeros_like(sigma2_MS),
-                        interp_soft_adaptive(q, k_feff, amp_ms_abs), 
-                        interp_soft_adaptive(q, k_feff, pha_ms_abs), 
-                        interp_soft_adaptive(q, k_feff, rep_ms_abs), 
-                        interp_soft_adaptive(q, k_feff, lam_ms_abs),
-                        Reff_ms_abs, 0.0
-                    )
-                    chi[j] = torch.sum(degen_ms_abs.unsqueeze(-1) * chi_paths_MS, dim = 0) + torch.sum(chi_paths_SS, dim = 0)
+                    structure_loss = structure_loss + F.mse_loss(pred_array_info, array_info_abs, reduction = "mean")
+                total_loss = total_loss + structure_loss / len(unique_abs_edge)
                 tot_edge += n_edge
                 tot_path += n_path
-                tot_path_ms += n_path_ms
                 tot_path_degen += n_path_degen
-                tot_path_legs_ms += n_path_leg_ms
                 tot_abs += len(unique_abs_edge)
             
-                sim_chis[i] = kws[sl:sr] * torch.mean(chi, dim = 0)
-                exp_chis[i] = (kws[sl:sr] * config.exp_spectra[struct_i][sl:sr])
-            return (1 - F.cosine_similarity(sim_chis, exp_chis, dim = 1)).mean()
+            return total_loss / len(label)
 
         case _:
             assert_never(config)

@@ -623,63 +623,31 @@ class ORBBackboneModule(
         if paths_info is not None:
             device = atom_graphs.edge_features["vectors"].device
             struct_i = atoms.info['edge_props'][0]
-
-            nk = len(paths_info[0][0]["k_feff"])
             N_abs = len(paths_info[struct_i])
-            atom_graphs.system_features["feff_k"] = paths_info[0][0]["k_feff"].to(device)
-            energy_edges = torch.zeros((N_abs), device = device)
-        
             N_paths = 0
             N_paths_degen = 0
-            N_paths_MS = 0
-            N_legs_total_MS = 0
             abs_inds[struct_i] = abs_inds[struct_i].to(device)
             for j, abs_i in enumerate(abs_inds[struct_i]):
                 N_paths += len(paths_info[struct_i][j]["Reffs"])
-                N_paths_MS += len(paths_info[struct_i][j]["Reffs_MS"])
-                N_legs_total_MS += torch.sum(paths_info[struct_i][j]["nlegs_MS"])
                 N_paths_degen += paths_info[struct_i][j]["degen"].to(device).int().sum()
-                energy_edges[j] = paths_info[struct_i][j]["edge"].to(device)
-            atom_graphs.system_features["energy_edges"] = energy_edges
             atom_graphs.system_features["N_abs"] = torch.tensor([N_abs], device = device)
             atom_graphs.system_features["N_paths"] = torch.tensor([N_paths], device = device)
-            atom_graphs.system_features["N_paths_MS"] = torch.tensor([N_paths_MS], device = device)
-            atom_graphs.system_features["N_paths_leg_MS"] = torch.tensor([N_legs_total_MS], device = device)
             atom_graphs.system_features["N_paths_degen"] = torch.tensor([N_paths_degen], device = device)
 
             Reffs = torch.zeros((N_paths), device = device)
-            Reffs_MS = torch.zeros((N_paths_MS), device = device)
-            T_Ds = torch.zeros((N_paths), device = device)
             m_a = torch.zeros((N_paths), device = device)
             m_s = torch.zeros((N_paths), device = device)
             rnorman = torch.zeros((N_paths), device = device)
             degen = torch.zeros((N_paths), device = device)
-            amp = torch.zeros((N_paths, nk), device = device)
-            pha = torch.zeros((N_paths, nk), device = device)
-            rep = torch.zeros((N_paths, nk), device = device)
-            lam = torch.zeros((N_paths, nk), device = device)
-            nlegs_MS = torch.zeros((N_paths_MS), device = device)
-            degen_MS = torch.zeros((N_paths_MS), device = device)
-            amp_MS = torch.zeros((N_paths_MS, nk), device = device)
-            pha_MS = torch.zeros((N_paths_MS, nk), device = device)
-            rep_MS = torch.zeros((N_paths_MS, nk), device = device)
-            lam_MS = torch.zeros((N_paths_MS, nk), device = device)
-            T_Ds_MS = torch.zeros((N_paths_MS), device = device)
-            rnorman_MS = torch.zeros((N_paths_MS), device = device)
-            pos_MS = torch.zeros((N_legs_total_MS, 3), device = device)
-            atwt_MS = torch.zeros((N_legs_total_MS), device = device)
+            array_info = torch.zeros((N_paths, 10), device = device)
             batch_abs_edge_inds = torch.zeros((atom_graphs.edge_features["vectors"].size(dim = 0)), device = device).int()
             batch_abs_path_inds = torch.zeros((N_paths), device = device).int()
-            batch_abs_path_inds_ms = torch.zeros((N_paths_MS), device = device).int()
             edge_path_inds = -1 * torch.ones((N_paths_degen), device = device).int()
             abs_edge_path_inds = -1 * torch.ones((N_paths_degen), device = device).int()
-            abs_path_leg_inds = -1 * torch.ones((N_legs_total_MS), device = device).int()
 
             edge_inds = torch.arange(atom_graphs.edge_features["vectors"].size(dim = 0), device = device)
             tot_path = 0
             tot_path_degen = 0
-            tot_path_MS = 0
-            tot_path_legs_MS = 0
             edge_vecs = atom_graphs.edge_features["vectors"]
             edge_Reffs = torch.linalg.norm(edge_vecs, dim = 1)
             receivers = atom_graphs.receivers
@@ -688,29 +656,12 @@ class ORBBackboneModule(
             for j, abs_i in enumerate(abs_inds[struct_i]):
                 N_path_abs = len(paths_info[struct_i][j]["Reffs"])
                 N_path_degen = paths_info[struct_i][j]["degen"].sum().int()
-                N_path_abs_MS = len(paths_info[struct_i][j]["Reffs_MS"])
-                N_path_legs_abs_MS = torch.sum(paths_info[struct_i][j]["nlegs_MS"])
-                amp[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["amp"].to(device)
-                pha[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["pha"].to(device)
-                rep[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["rep"].to(device)
-                lam[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["lam"].to(device)
                 Reffs[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["Reffs"].to(device)
-                T_Ds[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["T_Ds"].to(device)
                 m_a[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["m_a"].to(device)
                 m_s[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["m_s"].to(device)
                 rnorman[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["rnorman"].to(device)
                 degen[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["degen"].to(device)
-                amp_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["amp_MS"].to(device)
-                pha_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["pha_MS"].to(device)
-                rep_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["rep_MS"].to(device)
-                lam_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["lam_MS"].to(device)
-                T_Ds_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["T_Ds_MS"].to(device)
-                rnorman_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["rnorman_MS"].to(device)
-                Reffs_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["Reffs_MS"].to(device)
-                degen_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["degen_MS"].to(device)
-                nlegs_MS[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = paths_info[struct_i][j]["nlegs_MS"].to(device)
-                atwt_MS[tot_path_legs_MS:(tot_path_legs_MS + N_path_legs_abs_MS)] = paths_info[struct_i][j]["atwt_MS"].to(device)
-                pos_MS[tot_path_legs_MS:(tot_path_legs_MS + N_path_legs_abs_MS), :] = paths_info[struct_i][j]["pos_MS"].to(device)
+                array_info[tot_path:(tot_path + N_path_abs)] = paths_info[struct_i][j]["array_info"].to(device)
 
                 abs_mask = senders == abs_i
                 abs_edge_inds = edge_inds[abs_mask]
@@ -719,7 +670,6 @@ class ORBBackboneModule(
 
                 batch_abs_edge_inds[abs_edge_inds] = j * torch.ones_like(abs_edge_inds).int()
                 batch_abs_path_inds[tot_path:(tot_path + N_path_abs)] = j * torch.ones_like(paths_info[struct_i][j]["Reffs"]).int()
-                batch_abs_path_inds_ms[tot_path_MS:(tot_path_MS + N_path_abs_MS)] = j * torch.ones_like(paths_info[struct_i][j]["Reffs_MS"]).int()
 
                 path_degen_counter = 0
                 for k in range(N_path_abs):
@@ -750,11 +700,8 @@ class ORBBackboneModule(
                         tot_path_degen + path_degen_counter + degen[tot_path + k].int())] = abs_scatter_edge_inds[path_inds].int()
                     path_degen_counter += degen[tot_path + k].int()
                 abs_edge_path_inds[tot_path_degen:(tot_path_degen + N_path_degen)] = j * torch.ones_like(abs_edge_path_inds[tot_path_degen:(tot_path_degen + N_path_degen)]).int()
-                abs_path_leg_inds[tot_path_legs_MS:(tot_path_legs_MS + N_path_legs_abs_MS)] = j * torch.ones_like(paths_info[struct_i][j]["atwt_MS"].to(device))
                 tot_path += N_path_abs
                 tot_path_degen += N_path_degen
-                tot_path_MS += N_path_abs_MS
-                tot_path_legs_MS += N_path_legs_abs_MS
             
             edge_path_vals, edge_path_counts = torch.unique(edge_path_inds, return_counts=True)
             edge_path_dups = edge_path_vals[edge_path_counts > 1]
@@ -762,31 +709,14 @@ class ORBBackboneModule(
 
             atom_graphs.system_features["edge_path_inds"] = edge_path_inds
             atom_graphs.system_features["abs_edge_path_inds"] = abs_edge_path_inds
-            atom_graphs.system_features["amp"] = amp
-            atom_graphs.system_features["pha"] = pha
-            atom_graphs.system_features["rep"] = rep
-            atom_graphs.system_features["lam"] = lam
             atom_graphs.system_features["abs_edge_inds"] = batch_abs_edge_inds
             atom_graphs.system_features["abs_path_inds"] = batch_abs_path_inds
-            atom_graphs.system_features["abs_path_inds_ms"] = batch_abs_path_inds_ms
-            atom_graphs.system_features["abs_path_leg_inds_ms"] = abs_path_leg_inds
             atom_graphs.system_features["Reffs"] = Reffs
-            atom_graphs.system_features["T_Ds"] = T_Ds
             atom_graphs.system_features["m_a"] = m_a
             atom_graphs.system_features["m_s"] = m_s
             atom_graphs.system_features["rnorman"] = rnorman
             atom_graphs.system_features["degen"] = degen
-            atom_graphs.system_features["Reffs_MS"] = Reffs_MS
-            atom_graphs.system_features["nlegs_MS"] = nlegs_MS
-            atom_graphs.system_features["degen_MS"] = degen_MS
-            atom_graphs.system_features["amp_MS"] = amp_MS
-            atom_graphs.system_features["pha_MS"] = pha_MS
-            atom_graphs.system_features["rep_MS"] = rep_MS
-            atom_graphs.system_features["lam_MS"] = lam_MS
-            atom_graphs.system_features["T_Ds_MS"] = T_Ds_MS
-            atom_graphs.system_features["rnorman_MS"] = rnorman_MS
-            atom_graphs.system_features["atwt_MS"] = atwt_MS
-            atom_graphs.system_features["pos_MS"] = pos_MS
+            atom_graphs.system_features["array_info"] = array_info
         return atom_graphs
 
     @override
