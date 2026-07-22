@@ -75,7 +75,7 @@ class EdgeEnergyHead(EnergyHead):
                      batch.system_features["edge_m_s"],
                      batch.system_features["edge_m_a"]]), 0, 1)
         
-        pred = self.mlp(direct_features)#torch.cat([edge_features, sender_features, receiver_features, direct_features], dim = 1))
+        pred = self.mlp(edge_features)#torch.cat([edge_features, sender_features, receiver_features, direct_features], dim = 1))
         return pred.squeeze(-1)
 
     def predict(
@@ -273,12 +273,12 @@ class ORBBackboneModule(
                     raise NotImplementedError
                 else:
                     head = EdgeEnergyHead(
-                        latent_dim=3,
+                        latent_dim=256#*3 + 3,
                         num_mlp_layers=num_layers,
                         mlp_hidden_dim=hidden_dim,
                     )
                     head.mlp = build_mlp(
-                        input_size=3,
+                        input_size=256#*3 + 3,
                         hidden_layer_sizes=[hidden_dim] * num_layers,
                         output_size=prop.size,
                         activation='silu',
