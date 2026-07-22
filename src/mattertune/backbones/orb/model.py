@@ -252,7 +252,7 @@ class ORBBackboneModule(
                         hidden_layer_sizes=[hidden_dim] * num_layers,
                         output_size=prop.size,
                         activation='silu',
-                        dropout=None,
+                        dropout=prop.additional_head_settings['dropout_rate'],
                         checkpoint=None,
                     )
                 
