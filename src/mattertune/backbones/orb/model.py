@@ -273,12 +273,12 @@ class ORBBackboneModule(
                     raise NotImplementedError
                 else:
                     head = EdgeEnergyHead(
-                        latent_dim=256#*3 + 3,
+                        latent_dim=256,#*3 + 3,
                         num_mlp_layers=num_layers,
                         mlp_hidden_dim=hidden_dim,
                     )
                     head.mlp = build_mlp(
-                        input_size=256#*3 + 3,
+                        input_size=256,#*3 + 3,
                         hidden_layer_sizes=[hidden_dim] * num_layers,
                         output_size=prop.size,
                         activation='silu',
