@@ -66,17 +66,21 @@ class EdgeEnergyHead(EnergyHead):
             activation = activation, reference_energy = reference_energy)
 
     def forward(
-        self, edge_features: torch.Tensor, batch: base.AtomGraphs
+        self, edge_features: torch.Tensor, node_features: torch.Tensor, batch: base.AtomGraphs
     ) -> torch.Tensor:
         """Forward pass (without inverse transformation)."""
-        pred = self.mlp(edge_features)
+        sender_features = node_features[batch.senders]
+        receiver_features = node_features[batch.receivers]
+        pred = self.mlp(torch.cat([edge_features, sender_features, receiver_features], dim = 1))
         return pred.squeeze(-1)
 
     def predict(
-        self, edge_features: torch.Tensor, batch: base.AtomGraphs
+        self, edge_features: torch.Tensor, node_features: torch.Tensor, batch: base.AtomGraphs
     ) -> torch.Tensor:
         """Predict energy."""
-        pred = self.mlp(edge_features)
+        sender_features = node_features[batch.senders]
+        receiver_features = node_features[batch.receivers]
+        pred = self.mlp(torch.cat([edge_features, sender_features, receiver_features], dim = 1))
         return pred.squeeze(-1)
 
 class ORBSystemConfig(C.Config):
@@ -265,12 +269,12 @@ class ORBBackboneModule(
                     raise NotImplementedError
                 else:
                     head = EdgeEnergyHead(
-                        latent_dim=256,
+                        latent_dim=256*3,
                         num_mlp_layers=num_layers,
                         mlp_hidden_dim=hidden_dim,
                     )
                     head.mlp = build_mlp(
-                        input_size=256,
+                        input_size=256*3,
                         hidden_layer_sizes=[hidden_dim] * num_layers,
                         output_size=prop.size,
                         activation='silu',
@@ -416,7 +420,7 @@ class ORBBackboneModule(
             )
             if head is not None:
                 if isinstance(head, EdgeEnergyHead):
-                    res = head(edge_features, batch)
+                    res = head(edge_features, node_features, batch)
                     if isinstance(res, torch.Tensor):
                         predicted_properties[name] = res
                     elif isinstance(res, dict):
