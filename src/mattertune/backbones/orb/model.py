@@ -75,7 +75,7 @@ class EdgeEnergyHead(EnergyHead):
                      batch.system_features["edge_m_s"],
                      batch.system_features["edge_m_a"]]), 0, 1)
         
-        pred = self.mlp(node_features)#torch.cat([edge_features, sender_features, receiver_features, direct_features], dim = 1))
+        pred = torch.cat([sender_features, receiver_features], dim = 1)#torch.cat([edge_features, sender_features, receiver_features, direct_features], dim = 1))
         return pred.squeeze(-1)
 
     def predict(
