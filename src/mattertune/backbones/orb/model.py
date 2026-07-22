@@ -662,7 +662,7 @@ class ORBBackboneModule(
             senders = atom_graphs.senders
             scatterer_Zs = atom_graphs.node_features["atomic_numbers"][receivers]
 
-            edge_Reffs = torch.zeros((N_edges), device = device)
+            edge_Reffs_feat = torch.zeros((N_edges), device = device)
             edge_m_s = torch.zeros((N_edges), device = device)
             edge_m_a = torch.zeros((N_edges), device = device)
             for j, abs_i in enumerate(abs_inds[struct_i]):
@@ -711,7 +711,7 @@ class ORBBackboneModule(
                         tot_path_degen + path_degen_counter + n_degen)] = paths_info[struct_i][j]["array_info"][k].to(
                         device).expand(n_degen, -1)
                     
-                    edge_Reffs[abs_scatter_edge_inds[path_inds].int()] += Reffs[tot_path + k]
+                    edge_Reffs_feat[abs_scatter_edge_inds[path_inds].int()] += Reffs[tot_path + k]
                     edge_m_s[abs_scatter_edge_inds[path_inds].int()]   +=  m_s[tot_path + k]
                     edge_m_a[abs_scatter_edge_inds[path_inds].int()]   +=  m_a[tot_path + k]
 
@@ -727,7 +727,7 @@ class ORBBackboneModule(
             atom_graphs.system_features["Reffs"] = Reffs
             atom_graphs.system_features["m_a"] = m_a
             atom_graphs.system_features["m_s"] = m_s
-            atom_graphs.system_features["edge_Reffs"] = edge_Reffs
+            atom_graphs.system_features["edge_Reffs"] = edge_Reffs_feat
             atom_graphs.system_features["edge_m_s"] = edge_m_s
             atom_graphs.system_features["edge_m_a"] = edge_m_a
             atom_graphs.system_features["rnorman"] = rnorman
