@@ -294,7 +294,7 @@ def compute_loss_with_batch(
             else:
                 return  ((1 / config.scale_deltaR ** 2) * F.mse_loss(config.offset_deltaR + config.scale_deltaR * prediction[edge_match, 0], batch.system_features["deltar"], reduction=config.reduction
                     ) + (1 / config.scale_sigma2 ** 2) * F.mse_loss(config.offset_sigma2 + config.scale_sigma2 * prediction[edge_match, 1], batch.system_features["sigma2"], reduction=config.reduction)
-                    )# + (1 / config.scale_third ** 2) * F.mse_loss(config.offset_third + config.scale_third * prediction[edge_match, 2], batch.system_features["third"],  reduction=config.reduction
-                    #) + (1 / config.scale_fourth ** 2) * F.mse_loss(config.offset_fourth + config.scale_fourth * prediction[edge_match, 3], batch.system_features["fourth"], reduction=config.reduction))
+                    ) + (1 / config.scale_third ** 2) * F.mse_loss(config.offset_third + config.scale_third * prediction[edge_match, 2], batch.system_features["third"],  reduction=config.reduction
+                    ) + (1 / config.scale_fourth ** 2) * F.mse_loss(config.offset_fourth + config.scale_fourth * prediction[edge_match, 3], batch.system_features["fourth"], reduction=config.reduction))
         case _:
             assert_never(config)
