@@ -42,16 +42,10 @@ class NodeEnergyHead(EnergyHead):
             activation = activation, reference_energy = reference_energy)
 
     def forward(
-        self, edge_features: torch.Tensor, node_features: torch.Tensor, batch: base.AtomGraphs
+        self, node_features: torch.Tensor, batch: base.AtomGraphs
     ) -> torch.Tensor:
         """Forward pass (without inverse transformation)."""
-        sender_features = node_features[batch.senders]
-        receiver_features = node_features[batch.receivers]
-        #direct_features = torch.transpose(torch.stack([batch.system_features["edge_Reffs"], 
-        #             batch.system_features["edge_m_s"],
-        #             batch.system_features["edge_m_a"]]), 0, 1)
-        
-        pred = self.mlp(torch.cat([edge_features, sender_features, receiver_features], dim = 1))
+        pred = self.mlp(node_features)
         return pred.squeeze(-1)
 
     def predict(
@@ -72,10 +66,16 @@ class EdgeEnergyHead(EnergyHead):
             activation = activation, reference_energy = reference_energy)
 
     def forward(
-        self, edge_features: torch.Tensor, batch: base.AtomGraphs
+        self, edge_features: torch.Tensor, node_features: torch.Tensor, batch: base.AtomGraphs
     ) -> torch.Tensor:
         """Forward pass (without inverse transformation)."""
-        pred = self.mlp(edge_features)
+        sender_features = node_features[batch.senders]
+        receiver_features = node_features[batch.receivers]
+        #direct_features = torch.transpose(torch.stack([batch.system_features["edge_Reffs"], 
+        #             batch.system_features["edge_m_s"],
+        #             batch.system_features["edge_m_a"]]), 0, 1)
+        
+        pred = self.mlp(torch.cat([edge_features, sender_features, receiver_features], dim = 1))
         return pred.squeeze(-1)
 
     def predict(
@@ -176,7 +176,7 @@ class ORBBackboneModule(
                     return pretrained_model.graph_head
                 else:
                     return EnergyHead(
-                        latent_dim=256,
+                        latent_dim=256*3,
                         num_mlp_layers=1,
                         mlp_hidden_dim=256,
                         reference_energy="vasp-shifted",
