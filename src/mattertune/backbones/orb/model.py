@@ -176,7 +176,7 @@ class ORBBackboneModule(
                     return pretrained_model.graph_head
                 else:
                     return EnergyHead(
-                        latent_dim=256*3,
+                        latent_dim=256,
                         num_mlp_layers=1,
                         mlp_hidden_dim=256,
                         reference_energy="vasp-shifted",
@@ -271,12 +271,12 @@ class ORBBackboneModule(
                     raise NotImplementedError
                 else:
                     head = EdgeEnergyHead(
-                        latent_dim=256,
+                        latent_dim=256*3,
                         num_mlp_layers=num_layers,
                         mlp_hidden_dim=hidden_dim,
                     )
                     head.mlp = build_mlp(
-                        input_size=256,
+                        input_size=256*3,
                         hidden_layer_sizes=[hidden_dim] * num_layers,
                         output_size=prop.size,
                         activation='silu',
