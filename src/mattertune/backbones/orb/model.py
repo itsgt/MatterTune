@@ -422,7 +422,7 @@ class ORBBackboneModule(
             )
             if head is not None:
                 if isinstance(head, EdgeEnergyHead):
-                    res = head(edge_features, batch)
+                    res = head(edge_features, node_features, batch)
                     if isinstance(res, torch.Tensor):
                         predicted_properties[name] = res
                     elif isinstance(res, dict):
