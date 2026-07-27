@@ -42,10 +42,16 @@ class NodeEnergyHead(EnergyHead):
             activation = activation, reference_energy = reference_energy)
 
     def forward(
-        self, node_features: torch.Tensor, batch: base.AtomGraphs
+        self, edge_features: torch.Tensor, node_features: torch.Tensor, batch: base.AtomGraphs
     ) -> torch.Tensor:
         """Forward pass (without inverse transformation)."""
-        pred = self.mlp(node_features)
+        sender_features = node_features[batch.senders]
+        receiver_features = node_features[batch.receivers]
+        #direct_features = torch.transpose(torch.stack([batch.system_features["edge_Reffs"], 
+        #             batch.system_features["edge_m_s"],
+        #             batch.system_features["edge_m_a"]]), 0, 1)
+        
+        pred = self.mlp(torch.cat([edge_features, sender_features, receiver_features], dim = 1))
         return pred.squeeze(-1)
 
     def predict(
