@@ -633,15 +633,12 @@ class ORBBackboneModule(
             edge_vec_ids = torch.arange(N_edges)        
             struct_i = atoms.info['edge_props'][0]
             senders = atom_graphs.senders
-            N_atoms_prim = len(paths_info[struct_i])
-            sc_sf = int(atom_graphs.n_node.item() / N_atoms_prim)
+            N_atoms = len(paths_info[struct_i])
 
             N_paths = 0
-            for site_i in range(N_atoms_prim):
+            for site_i in range(N_atoms):
                 N_paths += len(paths_info[struct_i][site_i]["Reffs"])
-            N_paths *= sc_sf
 
-            avg_debye_t = torch.zeros((N_atoms_prim), dtype = torch.float32, device = device)
             edge_match = torch.zeros((N_paths), dtype = torch.int64, device = device)
             edge_vec_check = torch.zeros((N_paths, 3), device = device)
             match_failed = torch.zeros((N_paths), dtype = torch.int64, device = device)
@@ -654,29 +651,27 @@ class ORBBackboneModule(
             Reffs =  torch.zeros((N_paths), dtype = torch.float32, device = device)
             m_s =    torch.zeros((N_paths), dtype = torch.float32, device = device)
             m_a =    torch.zeros((N_paths), dtype = torch.float32, device = device)
-            for sc_i in range(sc_sf):
-                for site_i in range(N_atoms_prim):
-                    avg_debye_t[site_i] = paths_info[struct_i][site_i]["mean_td"]
-                    site_edge_filter = senders == (site_i * sc_sf + sc_i)
-                    for path_i in range(len(paths_info[struct_i][site_i]["Reffs"])):
-                        filtered_edge_vecs = edge_vecs[site_edge_filter]
-                        path_diffs = torch.linalg.norm(filtered_edge_vecs - 
-                            paths_info[struct_i][site_i]["path_vecs"][path_i], axis = 1)
-                        if path_diffs.min() > 0.01:
-                            match_failed[path_counter] = 1
-                        #assert path_diffs.min() < 0.01, f'Path min is {path_diffs.min()} for j of {j} of structure {struct_i}'
-                        else:
-                            edge_vec_check[path_counter, :] = paths_info[struct_i][site_i]["path_vecs"][path_i]
-                            edge_match[path_counter] = edge_vec_ids[site_edge_filter][torch.argmin(path_diffs)]
-                        deltar[path_counter] = paths_info[struct_i][site_i]["deltar"][path_i]
-                        sigma2[path_counter] = paths_info[struct_i][site_i]["sigma2"][path_i]
-                        raw_sigma2[path_counter] = paths_info[struct_i][site_i]["raw_sigma2"][path_i]
-                        third[path_counter] = paths_info[struct_i][site_i]["third"][path_i]
-                        fourth[path_counter] = paths_info[struct_i][site_i]["fourth"][path_i]
-                        Reffs[path_counter] = paths_info[struct_i][site_i]["Reffs"][path_i]
-                        m_s[path_counter] = paths_info[struct_i][site_i]["m_s"][path_i]
-                        m_a[path_counter] = paths_info[struct_i][site_i]["m_a"][path_i]
-                        path_counter += 1
+            for site_i in range(N_atoms):
+                site_edge_filter = senders == site_i
+                for path_i in range(len(paths_info[struct_i][site_i]["Reffs"])):
+                    filtered_edge_vecs = edge_vecs[site_edge_filter]
+                    path_diffs = torch.linalg.norm(filtered_edge_vecs - 
+                        paths_info[struct_i][site_i]["path_vecs"][path_i], axis = 1)
+                    if path_diffs.min() > 0.01:
+                        match_failed[path_counter] = 1
+                    #assert path_diffs.min() < 0.01, f'Path min is {path_diffs.min()} for j of {j} of structure {struct_i}'
+                    else:
+                        edge_vec_check[path_counter, :] = paths_info[struct_i][site_i]["path_vecs"][path_i]
+                        edge_match[path_counter] = edge_vec_ids[site_edge_filter][torch.argmin(path_diffs)]
+                    deltar[path_counter] = paths_info[struct_i][site_i]["deltar"][path_i]
+                    sigma2[path_counter] = paths_info[struct_i][site_i]["sigma2"][path_i]
+                    raw_sigma2[path_counter] = paths_info[struct_i][site_i]["raw_sigma2"][path_i]
+                    third[path_counter] = paths_info[struct_i][site_i]["third"][path_i]
+                    fourth[path_counter] = paths_info[struct_i][site_i]["fourth"][path_i]
+                    Reffs[path_counter] = paths_info[struct_i][site_i]["Reffs"][path_i]
+                    m_s[path_counter] = paths_info[struct_i][site_i]["m_s"][path_i]
+                    m_a[path_counter] = paths_info[struct_i][site_i]["m_a"][path_i]
+                    path_counter += 1
             
             rnorman = torch.tensor(paths_info[struct_i][0]["rnorman"], dtype=torch.float32)
             assert len(edge_match[match_failed == 0]) / len(edge_match) > 0.95, f'Only kept {(100 * len(edge_match[match_failed == 0]) / len(edge_match)):.2f}% of paths for struct {struct_i}'
@@ -691,7 +686,6 @@ class ORBBackboneModule(
             atom_graphs.system_features["Reffs"] = Reffs[match_failed == 0]
             atom_graphs.system_features["m_s"] = m_s[match_failed == 0]
             atom_graphs.system_features["m_a"] = m_a[match_failed == 0]
-            atom_graphs.system_features["avg_debye_t"] = avg_debye_t
             atom_graphs.system_features["rnorman"] = rnorman * torch.ones_like(Reffs[match_failed == 0])
             atom_graphs.system_features["struct_i"] = torch.tensor([struct_i], device = device)
             atom_graphs.system_features["N_edges"] = torch.tensor([N_edges], device = device)
