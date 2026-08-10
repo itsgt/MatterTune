@@ -660,8 +660,8 @@ class ORBBackboneModule(
             third =  torch.cat([(torch.tensor(paths_info[struct_i][j]["third"],  dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
             fourth = torch.cat([(torch.tensor(paths_info[struct_i][j]["fourth"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
             Reffs = torch.cat([(torch.tensor(paths_info[struct_i][j]["Reffs"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
-            m_s = torch.cat([(torch.tensor(paths_info[struct_i][j]["m_s"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
-            m_a = torch.cat([(torch.tensor(paths_info[struct_i][j]["m_a"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
+            #m_s = torch.cat([(torch.tensor(paths_info[struct_i][j]["m_s"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
+            #m_a = torch.cat([(torch.tensor(paths_info[struct_i][j]["m_a"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
             rnorman = torch.tensor(paths_info[struct_i][0]["rnorman"], dtype=torch.float32)
 
             assert len(edge_match[match_failed == 0]) / len(edge_match) > 0.95, f'Only kept {(100 * len(edge_match[match_failed == 0]) / len(edge_match)):.2f}% of paths for struct {struct_i}'
@@ -673,8 +673,8 @@ class ORBBackboneModule(
             atom_graphs.system_features["third"] = third[match_failed == 0]
             atom_graphs.system_features["fourth"] = fourth[match_failed == 0]
             atom_graphs.system_features["Reffs"] = Reffs[match_failed == 0]
-            atom_graphs.system_features["m_s"] = m_s[match_failed == 0]
-            atom_graphs.system_features["m_a"] = m_a[match_failed == 0]
+            #atom_graphs.system_features["m_s"] = m_s[match_failed == 0]
+            #atom_graphs.system_features["m_a"] = m_a[match_failed == 0]
             atom_graphs.system_features["rnorman"] = rnorman * torch.ones_like(Reffs[match_failed == 0])
             atom_graphs.system_features["struct_i"] = torch.tensor([struct_i], device = device)
             atom_graphs.system_features["N_edges"] = torch.tensor([N_edges], device = device)
