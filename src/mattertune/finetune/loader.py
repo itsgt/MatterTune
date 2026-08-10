@@ -76,7 +76,7 @@ def create_dataloader(
         if paths_info is None:
             data = lightning_module.atoms_to_data(ase_data, has_labels)
         else:
-            data = lightning_module.atoms_to_data(ase_data, has_labels, paths_info = paths_info, abs_inds = abs_inds) 
+            data = lightning_module.atoms_to_data(ase_data, has_labels, paths_info = paths_info) 
         data = lightning_module.cpu_data_transform(data)
         return data
 
