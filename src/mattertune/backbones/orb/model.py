@@ -530,7 +530,7 @@ class ORBBackboneModule(
         return labels
 
     @override
-    def atoms_to_data(self, atoms, has_labels, paths_info = None, abs_inds = None):
+    def atoms_to_data(self, atoms, has_labels, paths_info = None):
         with optional_import_error_message("orb_models"):
             from orb_models.forcefield import atomic_system  # type: ignore[reportMissingImports] # noqa
             from orb_models.forcefield.featurization_utilities import _integer_lattice, find_minimal_supercell_translations  # type: ignore[reportMissingImports] # noqa
@@ -633,48 +633,61 @@ class ORBBackboneModule(
             edge_vec_ids = torch.arange(N_edges)        
             struct_i = atoms.info['edge_props'][0]
             senders = atom_graphs.senders
-            abs_inds[struct_i] = abs_inds[struct_i].to(device)
+            N_atoms_prim = len(paths_info[struct_i])
+            sc_sf = int(atom_graphs.n_node.item() / N_atoms_prim)
 
             N_paths = 0
-            for j, abs_i in enumerate(abs_inds[struct_i]):
-                N_paths += len(paths_info[struct_i][j]["Reffs"])
+            for site_i in range(N_atoms_prim):
+                N_paths += len(paths_info[struct_i][site_i]["Reffs"])
+            N_paths *= sc_sf
 
             edge_match = torch.zeros((N_paths), dtype = torch.int64, device = device)
             edge_vec_check = torch.zeros((N_paths, 3), device = device)
             match_failed = torch.zeros((N_paths), dtype = torch.int64, device = device)
-            tot_path = 0
-            for j, abs_i in enumerate(abs_inds[struct_i]):
-                for path_i in range(len(paths_info[struct_i][j]["Reffs"])):
-                    path_diffs = torch.linalg.norm(edge_vecs[senders == abs_i] - 
-                        paths_info[struct_i][j]["path_vecs"][path_i], axis = 1)
-                    if path_diffs.min() > 0.01:
-                        match_failed[tot_path + path_i] = 1
-                    #assert path_diffs.min() < 0.01, f'Path min is {path_diffs.min()} for j of {j} of structure {struct_i}'
-                    else:
-                        edge_vec_check[tot_path + path_i, :] = paths_info[struct_i][j]["path_vecs"][path_i]
-                        edge_match[tot_path + path_i] = edge_vec_ids[senders == abs_i][torch.argmin(path_diffs)]
-                tot_path += len(paths_info[struct_i][j]["Reffs"])
+            path_counter = 0
+            deltar = torch.zeros((N_paths), dtype = torch.float32, device = device)
+            sigma2 = torch.zeros((N_paths), dtype = torch.float32, device = device)
+            raw_sigma2 = torch.zeros((N_paths), dtype = torch.float32, device = device)
+            third =  torch.zeros((N_paths), dtype = torch.float32, device = device)
+            fourth = torch.zeros((N_paths), dtype = torch.float32, device = device)
+            Reffs =  torch.zeros((N_paths), dtype = torch.float32, device = device)
+            m_s =    torch.zeros((N_paths), dtype = torch.float32, device = device)
+            m_a =    torch.zeros((N_paths), dtype = torch.float32, device = device)
+            for sc_i in range(sc_sf):
+                for site_i in range(N_atoms_prim):
+                    for path_i in range(len(paths_info[struct_i][site_i]["Reffs"])):
+                        filtered_edge_vecs = edge_vecs[senders == (site_i * sc_sf + sc_i)]
+                        path_diffs = torch.linalg.norm(filtered_edge_vecs - 
+                            paths_info[struct_i][site_i]["path_vecs"][path_i], axis = 1)
+                        if path_diffs.min() > 0.01:
+                            match_failed[path_counter] = 1
+                        #assert path_diffs.min() < 0.01, f'Path min is {path_diffs.min()} for j of {j} of structure {struct_i}'
+                        else:
+                            edge_vec_check[path_counter, :] = paths_info[struct_i][site_i]["path_vecs"][path_i]
+                            edge_match[path_counter] = filtered_edge_vecs[torch.argmin(path_diffs)]
+                        deltar[path_counter] = paths_info[struct_i][site_i]["deltar"][path_i]
+                        sigma2[path_counter] = paths_info[struct_i][site_i]["sigma2"][path_i]
+                        raw_sigma2[path_counter] = paths_info[struct_i][site_i]["raw_sigma2"][path_i]
+                        third[path_counter] = paths_info[struct_i][site_i]["third"][path_i]
+                        fourth[path_counter] = paths_info[struct_i][site_i]["fourth"][path_i]
+                        Reffs[path_counter] = paths_info[struct_i][site_i]["Reffs"][path_i]
+                        m_s[path_counter] = paths_info[struct_i][site_i]["m_s"][path_i]
+                        m_a[path_counter] = paths_info[struct_i][site_i]["m_a"][path_i]
+                        path_counter += 1
             
-            deltar = torch.cat([(torch.tensor(paths_info[struct_i][j]["deltar"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
-            sigma2 = torch.cat([(torch.tensor(paths_info[struct_i][j]["sigma2"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
-            third =  torch.cat([(torch.tensor(paths_info[struct_i][j]["third"],  dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
-            fourth = torch.cat([(torch.tensor(paths_info[struct_i][j]["fourth"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
-            Reffs = torch.cat([(torch.tensor(paths_info[struct_i][j]["Reffs"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
-            #m_s = torch.cat([(torch.tensor(paths_info[struct_i][j]["m_s"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
-            #m_a = torch.cat([(torch.tensor(paths_info[struct_i][j]["m_a"], dtype=torch.float32)) for j in range(len(abs_inds[struct_i]))])
             rnorman = torch.tensor(paths_info[struct_i][0]["rnorman"], dtype=torch.float32)
-
             assert len(edge_match[match_failed == 0]) / len(edge_match) > 0.95, f'Only kept {(100 * len(edge_match[match_failed == 0]) / len(edge_match)):.2f}% of paths for struct {struct_i}'
 
             atom_graphs.system_features["edge_match"] = edge_match[match_failed == 0]
             atom_graphs.system_features["edge_vec_check"] = edge_vec_check[match_failed == 0]
             atom_graphs.system_features["deltar"] = deltar[match_failed == 0]
             atom_graphs.system_features["sigma2"] = sigma2[match_failed == 0]
+            atom_graphs.system_features["raw_sigma2"] = raw_sigma2[match_failed == 0]
             atom_graphs.system_features["third"] = third[match_failed == 0]
             atom_graphs.system_features["fourth"] = fourth[match_failed == 0]
             atom_graphs.system_features["Reffs"] = Reffs[match_failed == 0]
-            #atom_graphs.system_features["m_s"] = m_s[match_failed == 0]
-            #atom_graphs.system_features["m_a"] = m_a[match_failed == 0]
+            atom_graphs.system_features["m_s"] = m_s[match_failed == 0]
+            atom_graphs.system_features["m_a"] = m_a[match_failed == 0]
             atom_graphs.system_features["rnorman"] = rnorman * torch.ones_like(Reffs[match_failed == 0])
             atom_graphs.system_features["struct_i"] = torch.tensor([struct_i], device = device)
             atom_graphs.system_features["N_edges"] = torch.tensor([N_edges], device = device)
