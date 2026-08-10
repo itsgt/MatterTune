@@ -71,11 +71,11 @@ class EdgeEnergyHead(EnergyHead):
         """Forward pass (without inverse transformation)."""
         sender_features = node_features[batch.senders]
         receiver_features = node_features[batch.receivers]
-        #direct_features = torch.transpose(torch.stack([batch.system_features["edge_Reffs"], 
-        #             batch.system_features["edge_m_s"],
-        #             batch.system_features["edge_m_a"]]), 0, 1)
+        direct_features = torch.transpose(torch.stack([batch.system_features["edge_Reffs"], 
+                     batch.system_features["edge_m_s"],
+                     batch.system_features["edge_m_a"]]), 0, 1)
         
-        pred = self.mlp(torch.cat([edge_features, sender_features, receiver_features], dim = 1))
+        pred = self.mlp(torch.cat([edge_features, sender_features, receiver_features, direct_features], dim = 1))
         return pred.squeeze(-1)
 
     def predict(
@@ -271,12 +271,12 @@ class ORBBackboneModule(
                     raise NotImplementedError
                 else:
                     head = EdgeEnergyHead(
-                        latent_dim=256*3,
+                        latent_dim=256*3+3,
                         num_mlp_layers=num_layers,
                         mlp_hidden_dim=hidden_dim,
                     )
                     head.mlp = build_mlp(
-                        input_size=256*3,
+                        input_size=256*3+3,
                         hidden_layer_sizes=[hidden_dim] * num_layers,
                         output_size=prop.size,
                         activation='silu',
@@ -651,6 +651,11 @@ class ORBBackboneModule(
             Reffs =  torch.zeros((N_paths), dtype = torch.float32, device = device)
             m_s =    torch.zeros((N_paths), dtype = torch.float32, device = device)
             m_a =    torch.zeros((N_paths), dtype = torch.float32, device = device)
+            
+            edge_Reffs = torch.zeros((N_edges), dtype = torch.float32, device = device)
+            edge_m_a = torch.zeros((N_edges), dtype = torch.float32, device = device)
+            edge_m_s = torch.zeros((N_edges), dtype = torch.float32, device = device)
+
             for site_i in range(N_atoms):
                 site_edge_filter = senders == site_i
                 for path_i in range(len(paths_info[struct_i][site_i]["Reffs"])):
@@ -662,7 +667,11 @@ class ORBBackboneModule(
                     #assert path_diffs.min() < 0.01, f'Path min is {path_diffs.min()} for j of {j} of structure {struct_i}'
                     else:
                         edge_vec_check[path_counter, :] = paths_info[struct_i][site_i]["path_vecs"][path_i]
-                        edge_match[path_counter] = edge_vec_ids[site_edge_filter][torch.argmin(path_diffs)]
+                        edge_match_id = edge_vec_ids[site_edge_filter][torch.argmin(path_diffs)]
+                        edge_match[path_counter] = edge_match_id
+                        edge_Reffs[edge_match_id] = paths_info[struct_i][site_i]["Reffs"][path_i]
+                        edge_m_s[edge_match_id] = paths_info[struct_i][site_i]["m_s"][path_i]
+                        edge_m_a[edge_match_id] = paths_info[struct_i][site_i]["m_a"][path_i]
                     deltar[path_counter] = paths_info[struct_i][site_i]["deltar"][path_i]
                     sigma2[path_counter] = paths_info[struct_i][site_i]["sigma2"][path_i]
                     raw_sigma2[path_counter] = paths_info[struct_i][site_i]["raw_sigma2"][path_i]
@@ -688,6 +697,9 @@ class ORBBackboneModule(
             atom_graphs.system_features["m_a"] = m_a[match_failed == 0]
             atom_graphs.system_features["rnorman"] = rnorman * torch.ones_like(Reffs[match_failed == 0])
             atom_graphs.system_features["struct_i"] = torch.tensor([struct_i], device = device)
+            atom_graphs.system_features["Reffs"] = edge_Reffs
+            atom_graphs.system_features["m_s"] = edge_m_s
+            atom_graphs.system_features["m_a"] = edge_m_a
             atom_graphs.system_features["N_edges"] = torch.tensor([N_edges], device = device)
             atom_graphs.system_features["edge_match_id"] = struct_i * torch.ones_like(edge_match[match_failed == 0])
         return atom_graphs
