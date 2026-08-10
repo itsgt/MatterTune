@@ -697,9 +697,9 @@ class ORBBackboneModule(
             atom_graphs.system_features["m_a"] = m_a[match_failed == 0]
             atom_graphs.system_features["rnorman"] = rnorman * torch.ones_like(Reffs[match_failed == 0])
             atom_graphs.system_features["struct_i"] = torch.tensor([struct_i], device = device)
-            atom_graphs.system_features["Reffs"] = edge_Reffs
-            atom_graphs.system_features["m_s"] = edge_m_s
-            atom_graphs.system_features["m_a"] = edge_m_a
+            atom_graphs.system_features["edge_Reffs"] = edge_Reffs
+            atom_graphs.system_features["edge_m_s"] = edge_m_s
+            atom_graphs.system_features["edge_m_a"] = edge_m_a
             atom_graphs.system_features["N_edges"] = torch.tensor([N_edges], device = device)
             atom_graphs.system_features["edge_match_id"] = struct_i * torch.ones_like(edge_match[match_failed == 0])
         return atom_graphs
