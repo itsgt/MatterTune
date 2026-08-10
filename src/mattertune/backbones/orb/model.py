@@ -655,8 +655,9 @@ class ORBBackboneModule(
             m_a =    torch.zeros((N_paths), dtype = torch.float32, device = device)
             for sc_i in range(sc_sf):
                 for site_i in range(N_atoms_prim):
+                    site_edge_filter = senders == (site_i * sc_sf + sc_i)
                     for path_i in range(len(paths_info[struct_i][site_i]["Reffs"])):
-                        filtered_edge_vecs = edge_vecs[senders == (site_i * sc_sf + sc_i)]
+                        filtered_edge_vecs = edge_vecs[site_edge_filter]
                         path_diffs = torch.linalg.norm(filtered_edge_vecs - 
                             paths_info[struct_i][site_i]["path_vecs"][path_i], axis = 1)
                         if path_diffs.min() > 0.01:
@@ -664,7 +665,7 @@ class ORBBackboneModule(
                         #assert path_diffs.min() < 0.01, f'Path min is {path_diffs.min()} for j of {j} of structure {struct_i}'
                         else:
                             edge_vec_check[path_counter, :] = paths_info[struct_i][site_i]["path_vecs"][path_i]
-                            edge_match[path_counter] = filtered_edge_vecs[torch.argmin(path_diffs)]
+                            edge_match[path_counter] = edge_vec_ids[site_edge_filter][torch.argmin(path_diffs)]
                         deltar[path_counter] = paths_info[struct_i][site_i]["deltar"][path_i]
                         sigma2[path_counter] = paths_info[struct_i][site_i]["sigma2"][path_i]
                         raw_sigma2[path_counter] = paths_info[struct_i][site_i]["raw_sigma2"][path_i]
