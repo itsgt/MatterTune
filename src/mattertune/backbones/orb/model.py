@@ -655,6 +655,7 @@ class ORBBackboneModule(
             edge_Reffs = torch.zeros((N_edges), dtype = torch.float32, device = device)
             edge_m_a = torch.zeros((N_edges), dtype = torch.float32, device = device)
             edge_m_s = torch.zeros((N_edges), dtype = torch.float32, device = device)
+            edge_senders = torch.zeros((N_edges), dtype = torch.float32, device = device)
 
             for site_i in range(N_atoms):
                 site_edge_filter = senders == site_i
@@ -672,6 +673,7 @@ class ORBBackboneModule(
                         edge_Reffs[edge_match_id] = paths_info[struct_i][site_i]["Reffs"][path_i]
                         edge_m_s[edge_match_id] = paths_info[struct_i][site_i]["m_s"][path_i]
                         edge_m_a[edge_match_id] = paths_info[struct_i][site_i]["m_a"][path_i]
+                        edge_senders[edge_match_id] = site_i
                     deltar[path_counter] = paths_info[struct_i][site_i]["deltar"][path_i]
                     sigma2[path_counter] = paths_info[struct_i][site_i]["sigma2"][path_i]
                     raw_sigma2[path_counter] = paths_info[struct_i][site_i]["raw_sigma2"][path_i]
@@ -700,6 +702,7 @@ class ORBBackboneModule(
             atom_graphs.system_features["edge_Reffs"] = edge_Reffs
             atom_graphs.system_features["edge_m_s"] = edge_m_s
             atom_graphs.system_features["edge_m_a"] = edge_m_a
+            atom_graphs.system_features["edge_senders"] = edge_senders
             atom_graphs.system_features["N_edges"] = torch.tensor([N_edges], device = device)
             atom_graphs.system_features["edge_match_id"] = struct_i * torch.ones_like(edge_match[match_failed == 0])
         return atom_graphs
