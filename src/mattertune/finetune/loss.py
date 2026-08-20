@@ -402,8 +402,9 @@ def compute_loss_with_batch(
             edge_match_id_mapped = (edge_match_id[:, None] == struct_is[None, :]).nonzero()[:, 1]
             edge_offsets = torch.cumsum(N_edges, dim = 0) - N_edges
             edge_match = edge_path_inds + edge_offsets[edge_match_id_mapped]
+            w = torch.tensor(config.weights, device = prediction.device)
 
-            return F.mse_loss(prediction[edge_match] * torch.tensor(config.weights), 
-                              batch.system_features["array_info"] * torch.tensor(config.weights), reduction = config.reduction)
+            return F.mse_loss(prediction[edge_match] * w, 
+                              batch.system_features["array_info"] * w, reduction = config.reduction)
         case _:
             assert_never(config)
