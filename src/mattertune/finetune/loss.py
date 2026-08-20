@@ -31,6 +31,7 @@ class EXAFSLossConfig(C.Config):
     name: Literal["exafs"] = "exafs"
     reduction: Literal["mean", "sum"] = "mean"
     avg_paths: bool = False
+    weights: list[float] = [0.0]
 
 class MAEAtomAveragedLossConfig(C.Config):
     name: Literal["mae_atom_avg"] = "mae_atom_avg"
@@ -402,6 +403,7 @@ def compute_loss_with_batch(
             edge_offsets = torch.cumsum(N_edges, dim = 0) - N_edges
             edge_match = edge_path_inds + edge_offsets[edge_match_id_mapped]
 
-            return F.mse_loss(prediction[edge_match], batch.system_features["array_info"], reduction = config.reduction)
+            return F.mse_loss(prediction[edge_match] * torch.tensor(config.weights), 
+                              batch.system_features["array_info"] * torch.tensor(config.weights), reduction = config.reduction)
         case _:
             assert_never(config)
