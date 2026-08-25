@@ -26,6 +26,7 @@ class MAEMaskedLossConfig(C.Config):
     natoms: int = 80
     mask: torch.Tensor = torch.tensor([True for _ in range(10)], 
         dtype = torch.bool)
+    weights: list[float] = []
 
 class EXAFSLossConfig(C.Config):
     name: Literal["exafs"] = "exafs"
@@ -297,9 +298,15 @@ def compute_loss(
             return F.l1_loss(prediction, label, reduction=config.reduction)
 
         case MAEMaskedLossConfig():
-            mask = config.mask.repeat(int(prediction.shape[0] / config.natoms))
-            return F.l1_loss(prediction[mask, :], label[mask, :], 
-                reduction=config.reduction)
+            if len(config.weights) > 0:
+                w = torch.tensor(config.weights, device = prediction.device)
+                mask = config.mask.repeat(int(prediction.shape[0] / config.natoms))
+                return F.l1_loss(prediction[mask, :] * w, label[mask, :] * w, 
+                    reduction=config.reduction)
+            else:
+                mask = config.mask.repeat(int(prediction.shape[0] / config.natoms))
+                return F.l1_loss(prediction[mask, :], label[mask, :], 
+                    reduction=config.reduction)
         
         case MAEAtomAveragedLossConfig():
             unique_labels, counts = torch.unique_consecutive(
