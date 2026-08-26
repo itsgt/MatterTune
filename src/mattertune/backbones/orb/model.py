@@ -233,6 +233,7 @@ class ORBBackboneModule(
                             name=prop.name,
                             dim=1,
                             domain="real",
+                            row_to_property_fn = lambda row, dataset: get_property_from_row(f'info.{prop.name}', row),
                         ),
                     )
             case props.AtomInvariantVectorPropertyConfig():
